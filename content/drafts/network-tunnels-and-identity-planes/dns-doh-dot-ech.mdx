@@ -1,0 +1,167 @@
+---
+title: DNS, DoH, DoT, ECH
+chapter: Network Tunnels and Identity Planes
+chapterSlug: network-tunnels-and-identity-planes
+articleSlug: dns-doh-dot-ech
+status: draft
+difficulty: intermediate
+wordCountTarget: 6800
+visualKey: trust-layer-stack
+branch: content/c04-a04-dns-doh-dot-ech
+readerQuestion: DoH, DoT, ECH를 쓰면 도메인 접속 의도는 누구에게서 숨겨지고 어디에는 여전히 남는가?
+zktlsBridge: zkTLS origin proof는 DNS 응답이나 SNI 관찰이 아니라 TLS certificate, authority, transcript, response record의 결합에서 나온다.
+references:
+  - https://datatracker.ietf.org/doc/html/rfc8484
+  - https://datatracker.ietf.org/doc/html/rfc7858
+  - https://www.rfc-editor.org/rfc/rfc8310
+  - https://datatracker.ietf.org/doc/html/rfc9460
+  - https://datatracker.ietf.org/doc/html/rfc9848
+  - https://www.rfc-editor.org/info/rfc9849
+  - https://www.rfc-editor.org/info/rfc9230
+  - https://www.rfc-editor.org/info/rfc7626
+---
+
+# DNS, DoH, DoT, ECH
+
+## Reader Question
+
+DNS를 암호화하면 내가 접속하는 사이트가 숨겨지는가? ECH를 켜면 SNI가 숨겨지니 목적지가 완전히 감춰지는가? 답은 "관찰자별로 다르다"다. DNS, DoH, DoT, ECH는 같은 privacy 문제를 풀지 않는다. DNS는 이름을 주소와 서비스 metadata로 해석하는 plane이다. DoT와 DoH는 client와 recursive resolver 사이의 DNS transport를 보호한다. ECH는 TLS ClientHello 안의 민감한 정보를 서버 public key로 암호화해 local network 관찰자가 SNI 같은 값을 직접 보지 못하게 한다.
+
+하지만 resolver는 여전히 질의를 볼 수 있다. authoritative DNS 구간은 별도 문제다. 접속 IP, timing, packet size, certificate behavior, 작은 anonymity set은 여전히 origin 추론에 쓰일 수 있다. 따라서 reader question은 "숨겨졌는가"가 아니라 "어느 plane에서 어느 observer에게 무엇이 숨겨졌는가"다.
+
+## Why It Matters
+
+RFC 8484는 DNS query와 response를 HTTPS exchange로 매핑하는 DoH를 정의한다. RFC 7858은 DNS over TLS가 DNS 질의의 도청과 on-path 변조 기회를 줄인다고 설명한다. RFC 8310은 DoT/DTLS usage profile과 authentication profile을 다룬다. RFC 9460은 SVCB와 HTTPS resource record를 정의해 service binding과 connection parameter를 DNS로 전달할 수 있게 한다. RFC 9848은 ECHConfig를 SVCB/HTTPS RR로 전달하는 bootstrap을 정의하고, RFC 9849는 TLS Encrypted Client Hello를 정의한다. RFC 7626은 DNS privacy issue를 분석한다.
+
+이 문서들이 함께 보여주는 것은 DNS privacy가 한 장치로 끝나지 않는다는 점이다. DoH를 브라우저에서 켜도 OS resolver를 쓰는 CLI와 다른 앱은 평문 DNS를 보낼 수 있다. DoT를 쓰면 local network observer는 QNAME을 보지 못할 수 있지만 recursive resolver는 질의를 처리한다. ECH는 ClientHelloInner를 보호하지만, DNS가 평문이면 접속 이름은 이미 노출될 수 있다. DNS와 TLS privacy는 서로 보완하지만 서로를 대체하지 않는다.
+
+zkTLS에서는 더 조심해야 한다. DNS answer는 연결 후보를 제공할 뿐 서버 응답의 provenance가 아니다. `example.com`이 어떤 IP로 해석되었다는 사실은 "이 HTTP response가 example.com의 TLS server에서 왔다"는 증명이 아니다.
+
+## Core Model
+
+세 plane으로 나누면 혼란이 줄어든다.
+
+```txt
+Resolution plane
+  QNAME -> RRSet / SVCB / HTTPS
+
+Resolver transport privacy
+  clear DNS, DoT, DoH, ODoH
+
+TLS client privacy
+  ClientHelloOuter / ClientHelloInner / ECH
+```
+
+Resolution plane에서는 이름과 record가 오간다. `A`, `AAAA`, `HTTPS`, `SVCB` record는 모두 접속 전에 client가 알아야 할 정보다. Resolver transport privacy는 그 DNS message가 client와 resolver 사이에서 평문인지 TLS인지 HTTPS인지 결정한다. TLS client privacy는 connection 시점의 ClientHello에 담긴 SNI, ALPN, supported parameters 같은 값 중 무엇을 숨길지 다룬다.
+
+Observer별 visibility는 다음처럼 정리할 수 있다.
+
+| Observer | 평문 DNS | DoT/DoH | ECH |
+|---|---|---|---|
+| Local network | QNAME, resolver, timing | resolver endpoint, timing | SNI 감소, IP/timing 남음 |
+| Recursive resolver | QNAME과 response | QNAME과 response | TLS ClientHello는 보지 않음 |
+| Authoritative DNS | 질의된 zone 관련 정보 | 변함 없음 | 변함 없음 |
+| TLS server | 자신의 connection | 변함 없음 | ECH decrypt 후 inner name 처리 |
+| IP observer | destination IP | destination IP | destination IP와 traffic pattern |
+
+이 표의 핵심은 resolver trust다. DoH/DoT는 local observer에게 DNS 내용을 숨길 수 있지만, resolver가 더 강한 trust boundary가 된다. ODoH 같은 구조는 client IP와 query 내용을 분리하려는 시도지만, 모든 환경에서 기본 모델이라고 가정하면 안 된다.
+
+## Protocol or System Artifact
+
+DNS와 ECH artifact는 다음처럼 연결된다.
+
+```txt
+DNS query:
+  QNAME = example.com
+  QTYPE = HTTPS
+
+HTTPS RR:
+  priority = 1
+  target = .
+  params = alpn=h3,h2 ech=ECHConfigList
+
+TLS:
+  ClientHelloOuter
+    public_name
+    ech extension
+  ClientHelloInner
+    real SNI
+    ALPN
+    sensitive extensions
+```
+
+DoH artifact는 DNS wire-format message를 HTTPS request/response payload로 운반한다. DoT artifact는 DNS protocol을 TLS connection 위에서 운반한다. 둘 다 recursive resolver와의 channel을 보호하지만, DNS answer가 악의적이거나 resolver가 잘못된 정보를 준다면 client는 여전히 TLS certificate verification으로 origin identity를 검증해야 한다.
+
+ECH bootstrap artifact에서 `ech` parameter는 접속 전에 client가 서버의 ECH public configuration을 얻는 수단이다. 이 값과 실제 TLS endpoint 설정이 어긋나면 fallback, retry, 연결 실패가 발생할 수 있다. ECH는 DNS와 TLS가 같이 맞아야 배포된다.
+
+## Failure Mode
+
+첫 번째 실패는 "encrypted DNS = end-to-end privacy"라고 말하는 것이다. DoH/DoT는 client와 recursive resolver 사이를 보호한다. resolver는 질의를 본다. resolver 운영자, resolver policy, logging, jurisdiction은 threat model에 들어간다.
+
+두 번째 실패는 application별 DNS split이다. 브라우저는 DoH를 쓰지만 OS, package manager, CLI, mobile app은 평문 DNS를 쓸 수 있다. 사용자는 "내 DNS가 암호화되었다"고 생각하지만 실제로는 일부 flow만 암호화된다. enterprise 환경에서는 split-horizon DNS와 captive portal이 DoH와 충돌할 수 있다.
+
+세 번째 실패는 ECH만 켜고 DNS를 평문으로 두는 것이다. local observer가 ClientHello SNI를 못 보더라도 바로 직전에 `secret.example` DNS query를 보았다면 privacy gain은 제한된다. 반대로 DNS가 encrypted여도 destination IP가 single-tenant라면 IP만으로 origin을 추론할 수 있다.
+
+네 번째 실패는 SVCB/HTTPS RR과 실제 service config mismatch다. DNS는 h3와 ECHConfig를 광고하지만 서버가 해당 ALPN이나 ECH key를 제대로 지원하지 않으면 fallback이 발생한다. fallback path가 privacy를 약화하거나 장애를 만들 수 있다.
+
+다섯 번째 실패는 DNS answer를 provenance로 쓰는 것이다. DNSSEC 또는 trusted resolver가 있다 해도 그것은 name resolution에 대한 보장이다. HTTP response가 그 origin server에서 왔다는 증명은 TLS handshake, certificate, application data binding에서 온다.
+
+## Minimal Lab or Trace
+
+다음 trace는 각 plane을 나누어 본다.
+
+```bash
+dig example.com A
+dig example.com HTTPS
+kdig +tls @1.1.1.1 example.com A
+curl --doh-url https://cloudflare-dns.com/dns-query https://example.com -v
+```
+
+Wireshark에서는 평문 DNS가 보이는지, DoT가 TCP 853/TLS로 보이는지, DoH가 HTTPS stream으로 보이는지 확인한다. ECH 실험은 지원 client와 test domain이 필요하다. 관찰 포인트는 ClientHello에 server_name extension이 보이는지, HTTPS RR에 `ech` parameter가 있는지, ECH 실패 시 fallback이 어떻게 나타나는지다.
+
+worksheet:
+
+| 실험 | 보이는 값 | 해석 |
+|---|---|---|
+| 평문 `dig` | QNAME | local observer가 이름을 봄 |
+| DoT | resolver IP, TLS | DNS 내용은 TLS 안쪽 |
+| DoH | resolver HTTPS endpoint | DNS가 web traffic처럼 보임 |
+| HTTPS RR | alpn, ech param | 연결 parameter discovery |
+| ECH | ClientHelloOuter | inner SNI 보호, IP/timing 남음 |
+
+## zkTLS Bridge
+
+zkTLS proof에서 DNS는 보조 evidence일 수 있지만 origin proof의 중심은 아니다. verifier가 원하는 것은 "이 response가 `https://example.com`의 TLS session에서 왔다"는 claim이다. 이 claim은 certificate identity, handshake transcript, HTTP authority, record payload, response parsing에 의해 성립한다. DNS answer는 그 connection을 시작하게 한 resolution context일 뿐이다.
+
+ECH가 있는 환경에서는 외부 관찰자가 SNI를 볼 수 없으므로 proof system은 어떤 authority를 공개할지 명시해야 한다. privacy를 위해 network observer에게는 숨겼지만 verifier에게는 `example.com` identity evidence를 공개할 수 있다. 이 공개는 certificate chain 또는 transcript-derived statement로 해야지, "DNS가 그렇게 말했다"로 끝나면 안 된다.
+
+DoH/DoT도 마찬가지다. resolver trust boundary가 proof에 포함되어야 하는 use case라면 resolver endpoint, resolution time, HTTPS RR digest를 별도 provenance로 둘 수 있다. 하지만 response authenticity claim과 resolution privacy claim은 다른 claim이다.
+
+## Verification Checklist
+
+- DoH와 DoT가 보호하는 구간을 client-to-resolver로 한정했는가?
+- recursive resolver가 질의 내용을 볼 수 있다는 점을 명시했는가?
+- ECH가 SNI/ALPN 등 ClientHelloInner를 숨기지만 DNS/IP/anonymity set 한계가 있음을 설명했는가?
+- SVCB/HTTPS RR과 ECHConfig 전달 관계를 RFC 9460/9848 기준으로 확인했는가?
+- DNS answer와 TLS origin proof를 혼동하지 않았는가?
+- zkTLS proof가 authority와 certificate/transcript evidence를 어떻게 공개하는지 언급했는가?
+
+## Visual Artifact Brief
+
+- Artifact key: dns-encrypted-resolution-ech-map
+- Purpose: DNS, DoH/DoT, SVCB/HTTPS, ECH가 각각 숨기는 정보와 남기는 정보를 observer별로 분리한다.
+- Layout: Client, recursive resolver, authoritative DNS, TLS endpoint를 좌우로 배치하고 아래에 local network, resolver, IP observer visibility matrix를 둔다.
+- Labels: QNAME, resolver trust, HTTPS RR, ECHConfigList, ClientHelloOuter, ClientHelloInner, SNI, ALPN, anonymity set.
+- Motion idea: 평문 DNS에서 DoH/DoT, ECH 순으로 mask가 적용되며 visible field가 줄어든다.
+- Reduced-motion state: 정적 4열 visibility matrix와 artifact callout.
+
+## References
+
+- https://datatracker.ietf.org/doc/html/rfc8484
+- https://datatracker.ietf.org/doc/html/rfc7858
+- https://www.rfc-editor.org/rfc/rfc8310
+- https://datatracker.ietf.org/doc/html/rfc9460
+- https://datatracker.ietf.org/doc/html/rfc9848
+- https://www.rfc-editor.org/info/rfc9849
+- https://www.rfc-editor.org/info/rfc9230
+- https://www.rfc-editor.org/info/rfc7626

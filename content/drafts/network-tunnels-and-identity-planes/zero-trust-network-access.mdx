@@ -1,0 +1,189 @@
+---
+title: Zero Trust Network Access
+chapter: Network Tunnels and Identity Planes
+chapterSlug: network-tunnels-and-identity-planes
+articleSlug: zero-trust-network-access
+status: draft
+difficulty: intermediate
+wordCountTarget: 6800
+visualKey: trust-boundary-map
+branch: content/c04-a05-zero-trust-network-access
+readerQuestion: ZTNA는 VPN을 더 세게 만든 것인가, 아니면 네트워크 위치 신뢰를 리소스별 접근 결정으로 바꾼 것인가?
+zktlsBridge: zkTLS proof는 서버 응답을 증명하지만, ZTNA 환경에서는 어떤 subject/device/resource policy 아래 접근했는지 별도 evidence가 필요할 수 있다.
+references:
+  - https://csrc.nist.gov/pubs/sp/800/207/final
+  - https://doi.org/10.6028/NIST.SP.800-207
+  - https://csrc.nist.gov/pubs/sp/800/207/a/final
+  - https://doi.org/10.6028/NIST.SP.800-207A
+  - https://www.nccoe.nist.gov/projects/implementing-zero-trust-architecture
+  - https://www.cisa.gov/resources-tools/resources/zero-trust-maturity-model
+---
+
+# Zero Trust Network Access
+
+## Reader Question
+
+ZTNA는 VPN을 더 세게 만든 제품명인가? 더 정확히는 "네트워크에 들어간다"는 모델을 "리소스별 접근 결정을 받는다"는 모델로 바꾸는 deployment pattern이다. 전통적 VPN은 사용자가 인증되면 특정 private network route를 제공한다. ZTNA는 subject, device, resource, action, context, telemetry를 바탕으로 접근 결정을 계산하고, policy enforcement point가 특정 application이나 resource session만 허용하도록 설계한다.
+
+질문은 "사용자가 내부망에 들어왔는가"가 아니라 "이 subject가 이 device와 이 context에서 이 resource의 이 operation을 수행해도 되는가"다. 이 질문이 바뀌어야 lateral movement와 broad network trust를 줄일 수 있다.
+
+## Why It Matters
+
+NIST SP 800-207은 Zero Trust Architecture를 abstract하게 정의하고, network location이나 asset ownership만으로 implicit trust를 부여하지 않는 방향을 제시한다. 접근 요청은 resource session이 생성되기 전에 subject와 device에 대한 authentication과 authorization을 거쳐야 한다. NIST SP 800-207A는 cloud-native, multi-location 환경에서 granular application-level policies를 실현하는 모델을 다룬다. CISA Zero Trust Maturity Model은 조직이 maturity를 평가하고 전환 계획을 세우는 참고 모델이다.
+
+ZTNA를 "VPN 대체제"로만 보면 중요한 점을 놓친다. VPN은 broad route를 제공할 수 있고, route를 받은 뒤의 내부 service 접근은 별도 통제에 의존한다. ZTNA는 application 또는 resource 단위로 policy를 적용하려 한다. 물론 제품 구현은 다양하다. 어떤 ZTNA는 reverse proxy처럼 동작하고, 어떤 것은 connector와 gateway를 사용하며, 어떤 것은 service mesh나 identity-aware proxy와 결합된다. 그래서 ZTNA는 단일 IETF 프로토콜명이 아니라 architecture pattern으로 다뤄야 한다.
+
+zkTLS와의 연결은 access context다. 어떤 내부 application 응답을 증명할 때 verifier는 단순히 "응답이 왔다"뿐 아니라 "어떤 접근 정책 아래 허용된 session에서 왔다"를 알고 싶을 수 있다. 이것은 TLS response proof와 별개의 policy evidence다.
+
+## Core Model
+
+ZTNA를 세 plane으로 나눠 기억한다.
+
+```txt
+control plane
+  identity provider
+  device posture source
+  policy engine
+  policy administrator
+
+enforcement plane
+  gateway
+  connector
+  proxy
+  policy enforcement point
+
+data plane
+  subject traffic
+  resource session
+  application response
+```
+
+Policy Engine은 접근 결정을 계산한다. Policy Administrator는 session 설정이나 종료를 지시한다. Policy Enforcement Point는 subject와 resource 사이에서 traffic을 허용하거나 차단한다. NIST 모델에서 이 구성 요소들은 논리적 역할이며, 실제 제품에서는 gateway, reverse proxy, sidecar, agent, controller로 구현될 수 있다.
+
+접근 결정의 입력은 다양하다.
+
+| 입력 | 예시 | 실패하면 생기는 문제 |
+|---|---|---|
+| Subject | user, group, credential strength | 계정 탈취 또는 과권한 |
+| Device | posture, patch, ownership | 관리되지 않은 장치 접근 |
+| Resource | app, data sensitivity, operation | resource별 least privilege 실패 |
+| Context | location, time, risk, session | 조건 변화 미반영 |
+| Telemetry | logs, SIEM, behavior | 지속적 평가 실패 |
+
+핵심은 single login이 아니라 per-request 또는 per-session evaluation이다. 모든 요청을 매 packet마다 완벽히 재인증한다는 뜻은 아니지만, policy가 session lifetime, risk change, posture change, resource sensitivity에 반응할 수 있어야 한다.
+
+## Protocol or System Artifact
+
+ZTNA decision log artifact는 다음처럼 생겨야 한다.
+
+```json
+{
+  "subject": "user:alice@example.com",
+  "device": "device:managed-laptop-17",
+  "resource": "app:payroll",
+  "action": "GET /api/paystub",
+  "context": {
+    "network": "untrusted",
+    "devicePosture": "compliant",
+    "credential": "phishing-resistant MFA"
+  },
+  "policyId": "payroll-read-v4",
+  "decision": "allow",
+  "enforcedBy": "ztna-gateway-3",
+  "timestamp": "2026-07-03T10:00:00+09:00"
+}
+```
+
+VPN artifact와 비교하면 차이가 보인다.
+
+```txt
+VPN:
+  authenticated user
+    -> route 10.0.0.0/8
+
+ZTNA:
+  subject/device/context
+    -> policy decision
+    -> app session
+```
+
+ZTNA에서 중요한 것은 route가 아니라 resource identity와 policy decision이다. connector나 gateway는 private app을 public internet에 직접 노출하지 않고 broker 역할을 할 수 있다. 하지만 gateway를 우회하는 direct path가 남아 있으면 policy enforcement가 깨진다. 따라서 network rule도 여전히 필요하다. Zero Trust는 network를 버리는 것이 아니라 network location만으로 신뢰하지 않는 것이다.
+
+## Failure Mode
+
+첫 번째 실패는 ZTNA를 VPN처럼 운영하는 것이다. 사용자에게 broad private CIDR route를 주고 "ZTNA"라고 부르면 lateral movement surface는 그대로 남는다. application별 resource identity와 policy enforcement가 없다면 이름만 바뀐 VPN이다.
+
+두 번째 실패는 최초 로그인만 강하게 하는 것이다. 사용자가 phishing-resistant MFA로 로그인했더라도 device posture가 non-compliant로 바뀌거나 risk signal이 올라가면 session을 재평가해야 한다. long-lived token과 stale posture cache는 Zero Trust 원칙을 약하게 만든다.
+
+세 번째 실패는 PEP bypass다. 내부 DNS, direct IP, legacy VPN, service account credential, admin port가 gateway를 우회하면 policy engine이 아무리 정교해도 data plane은 보호되지 않는다. ZTNA rollout에서는 "허용 경로"보다 "우회 경로 제거"가 더 어렵다.
+
+네 번째 실패는 device posture를 절대 신뢰하는 것이다. posture agent가 꺼졌거나 오래된 signal을 보내거나 attacker가 compliant처럼 보이게 만들 수 있다. posture는 decision input이지 단독 보장 아니다. telemetry와 attestation, freshness가 필요하다.
+
+다섯 번째 실패는 fail-open 설계다. IdP, policy engine, connector가 장애일 때 업무 연속성을 위해 전체 접근을 허용하면 architecture의 기본 가정이 깨진다. 어떤 resource는 fail-closed, 어떤 resource는 degraded read-only 같은 정책이 필요하다.
+
+여섯 번째 실패는 audit 부족이다. 나중에 "누가 어떤 device로 어떤 resource에 어떤 action을 했는가"를 재구성할 수 없으면 ZTNA는 security control이 아니라 black box proxy가 된다.
+
+## Minimal Lab or Trace
+
+lab은 같은 내부 app을 VPN 방식과 ZTNA 방식으로 비교한다.
+
+```txt
+VPN trace:
+  login
+  route table gains 10.0.0.0/8
+  user can scan multiple internal hosts
+
+ZTNA trace:
+  login
+  policy decision for app:payroll
+  gateway opens only payroll session
+  direct private IP access blocked
+```
+
+확인해야 할 로그 필드는 `subject`, `device`, `resource`, `action`, `decision`, `policy_id`, `enforcement_point`, `timestamp`다. device posture를 compliant에서 non-compliant로 바꾸었을 때 새 session이 차단되는지, 기존 session이 재평가되는지 확인한다. direct path를 열어 두고 gateway 없이 app에 접근할 수 있는지도 테스트한다.
+
+worksheet:
+
+| 테스트 | 기대 결과 | 의미 |
+|---|---|---|
+| broad route 확인 | 없음 또는 최소화 | VPN식 access 방지 |
+| app별 policy | 허용 app만 접근 | resource-specific access |
+| posture change | deny 또는 reauth | continuous evaluation |
+| gateway bypass | 실패 | PEP coverage |
+| decision log | 재구성 가능 | auditability |
+
+## zkTLS Bridge
+
+zkTLS proof는 data-plane response를 증명한다. ZTNA는 access decision context를 만든다. 내부 application에서 받은 response를 외부 verifier에게 증명할 때, verifier가 정말로 궁금한 것은 두 가지일 수 있다. 첫째, 이 response가 특정 app에서 왔는가. 둘째, 이 response가 정당한 subject/device/resource policy 아래 허용된 session에서 왔는가.
+
+첫 번째는 TLS 또는 mesh identity와 transcript binding으로 다룬다. 두 번째는 policy decision receipt, gateway log, device posture evidence, subject credential evidence가 필요하다. 이 둘을 섞으면 privacy 문제가 생긴다. 사용자는 paystub amount만 증명하고 싶을 수 있는데, device name, internal app hostname, enterprise policy ID를 모두 공개하면 과도한 disclosure가 된다.
+
+따라서 zkTLS + ZTNA 설계는 access-policy evidence를 selective disclosure 대상으로 봐야 한다. 예를 들어 "policy category: payroll-read allowed"만 공개하고 구체적 device serial과 internal IP는 숨길 수 있다. 이 구조는 Zero Trust의 least privilege를 proof disclosure에도 적용하는 방식이다.
+
+## Verification Checklist
+
+- ZTNA를 단일 표준 프로토콜이 아니라 Zero Trust Architecture 구현 pattern으로 설명했는가?
+- network location에 의한 implicit trust 제거를 중심 원칙으로 삼았는가?
+- Policy Engine, Policy Administrator, Policy Enforcement Point를 구분했는가?
+- broad VPN route와 resource-specific access decision을 비교했는가?
+- subject, device, resource, context, telemetry가 decision input임을 설명했는가?
+- PEP bypass, stale posture, fail-open, audit 부족을 실패 모드로 다뤘는가?
+- zkTLS response proof와 ZTNA policy evidence를 분리했는가?
+
+## Visual Artifact Brief
+
+- Artifact key: ztna-control-data-policy-plane
+- Purpose: VPN의 network route 모델과 ZTNA의 policy decision 모델을 대비한다.
+- Layout: 좌측은 User -> VPN -> broad subnet, 우측은 User/Device -> Policy Engine -> PEP/Gateway -> specific app으로 나란히 배치한다.
+- Labels: subject, device posture, policy engine, policy administrator, PEP, resource, session, telemetry, deny by default.
+- Motion idea: VPN은 subnet 전체가 켜지고, ZTNA는 승인된 application tile 하나만 켜진다.
+- Reduced-motion state: 좌우 비교 다이어그램과 decision log callout.
+
+## References
+
+- [NIST SP 800-207](https://csrc.nist.gov/pubs/sp/800/207/final)
+- [NIST SP 800-207 DOI](https://doi.org/10.6028/NIST.SP.800-207)
+- [NIST SP 800-207A](https://csrc.nist.gov/pubs/sp/800/207/a/final)
+- [NIST SP 800-207A DOI](https://doi.org/10.6028/NIST.SP.800-207A)
+- [NIST NCCoE ZTA practice guide](https://www.nccoe.nist.gov/projects/implementing-zero-trust-architecture)
+- [CISA Zero Trust Maturity Model](https://www.cisa.gov/resources-tools/resources/zero-trust-maturity-model)

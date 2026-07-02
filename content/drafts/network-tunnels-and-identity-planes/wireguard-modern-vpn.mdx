@@ -1,0 +1,171 @@
+---
+title: WireGuard와 modern VPN
+chapter: Network Tunnels and Identity Planes
+chapterSlug: network-tunnels-and-identity-planes
+articleSlug: wireguard-modern-vpn
+status: draft
+difficulty: intermediate
+wordCountTarget: 6600
+visualKey: tunnel-encapsulation-stack
+branch: content/c04-a03-wireguard-modern-vpn
+readerQuestion: WireGuard는 어떤 점에서 modern VPN이고, public key와 AllowedIPs는 왜 routing model의 중심인가?
+zktlsBridge: WireGuard는 private network path provenance를 줄 수 있지만, zkTLS origin proof는 여전히 TLS server identity와 transcript에서 나온다.
+references:
+  - https://www.wireguard.com/
+  - https://www.wireguard.com/protocol/
+  - https://www.wireguard.com/papers/wireguard.pdf
+  - https://www.wireguard.com/quickstart/
+  - https://www.wireguard.com/known-limitations/
+  - https://www.wireguard.com/formal-verification/
+  - https://noiseprotocol.org/noise.html
+  - https://datatracker.ietf.org/doc/html/rfc7748
+  - https://datatracker.ietf.org/doc/html/rfc8439
+  - https://datatracker.ietf.org/doc/html/rfc5869
+---
+
+# WireGuard와 modern VPN
+
+## Reader Question
+
+WireGuard는 왜 modern VPN이라고 불리는가? 답은 "더 빠르다"보다 "작은 고정 설계와 cryptokey routing을 선택했다"에 가깝다. IPsec은 architecture, policy database, algorithm negotiation, SA lifecycle을 넓게 다룬다. WireGuard는 interface private key, peer public key, AllowedIPs, endpoint, UDP packet flow로 구성된 비교적 작은 모델을 둔다. 많은 선택지를 협상하는 대신 제한된 cryptographic construction과 단순한 peer table을 운영자가 명시한다.
+
+핵심 질문은 "이 packet은 어떤 peer public key로 보내지고, 수신한 packet의 inner source IP는 그 peer에게 허용된 주소인가"다. WireGuard에서는 public key가 peer identity이고 AllowedIPs가 outbound route 선택과 inbound source authorization을 동시에 수행한다. 이 이중 역할을 이해하지 못하면 full tunnel, split tunnel, site-to-site routing, overlapping prefix 장애를 제대로 분석할 수 없다.
+
+## Why It Matters
+
+WireGuard 공식 문서는 빠르고 단순하며 modern cryptography를 사용하는 VPN tunnel을 목표로 한다고 설명한다. Protocol & Cryptography 문서는 WireGuard가 Noise_IK handshake를 사용하고 모든 packet을 UDP로 보낸다고 설명한다. 공식 whitepaper는 WireGuard를 layer 3 secure network tunnel로 설명하며, public key와 tunnel source IP 주소의 association을 핵심 원칙으로 둔다. Known Limitations 문서는 WireGuard가 obfuscation에 초점을 두지 않는다고 명확히 적는다.
+
+이 설계는 운영자에게 두 가지 효과를 준다. 첫째, 협상 가능한 조합이 적어 설정 표면이 줄어든다. 둘째, 잘못된 AllowedIPs나 endpoint 설정은 바로 routing과 authorization 실패로 이어진다. 단순성은 자동 안전이 아니다. 단순한 모델을 정확히 이해해야 한다.
+
+zkTLS와 연결하면 WireGuard는 "proof collector가 어떤 private network path로 origin에 접근했는가"를 설명하는 provenance가 될 수 있다. 그러나 WireGuard peer key가 곧 HTTPS origin identity는 아니다. origin proof는 TLS certificate와 transcript에서 나온다.
+
+## Core Model
+
+WireGuard mental model은 cryptokey routing이다.
+
+```txt
+interface wg0
+  private_key = local secret
+  address = 10.7.0.2/32
+
+peer
+  public_key = peer identity
+  allowed_ips = 10.7.0.1/32, 10.20.0.0/16
+  endpoint = vpn.example.net:51820
+```
+
+outbound에서는 destination IP가 AllowedIPs table에 매칭된다. 가장 적절한 peer가 선택되고, packet은 그 peer public key와 관련된 session으로 보호되어 UDP packet으로 나간다. inbound에서는 cryptographic authentication이 성공한 뒤 inner source IP가 그 peer의 AllowedIPs에 맞는지 확인되어야 한다. 즉 AllowedIPs는 "어디로 보낼지"와 "이 peer가 어떤 inner source를 주장해도 되는지"를 함께 결정한다.
+
+WireGuard의 handshake는 Noise framework의 IK 패턴 계열을 기반으로 한다. 공식 문서는 Curve25519, ChaCha20-Poly1305, BLAKE2s, HKDF, optional pre-shared key 같은 primitives를 설명한다. 운영자는 이 primitives를 suite 목록처럼 협상하지 않는다. 이것은 IPsec과 대비되는 지점이다. IPsec은 proposal negotiation과 policy compatibility가 큰 부분이고, WireGuard는 고정된 protocol behavior와 peer table correctness가 큰 부분이다.
+
+## Protocol or System Artifact
+
+WireGuard artifact는 설정 파일과 runtime state에서 바로 볼 수 있다.
+
+```ini
+[Interface]
+PrivateKey = local-private-key
+Address = 10.7.0.2/32
+
+[Peer]
+PublicKey = peer-public-key
+AllowedIPs = 10.7.0.1/32, 10.20.0.0/16
+Endpoint = vpn.example.net:51820
+PersistentKeepalive = 25
+```
+
+이 artifact에서 `PublicKey`는 peer identity다. `AllowedIPs`는 route prefix이면서 inbound source filter다. `Endpoint`는 outer UDP destination이다. endpoint는 roaming 상황에서 바뀔 수 있다. WireGuard가 올바르게 authenticated packet을 받으면 peer의 endpoint를 새 source address로 갱신할 수 있다. 이것은 roaming에 유리하지만, 운영자는 endpoint update가 reachability와 DoS surface에 어떤 의미를 갖는지 이해해야 한다.
+
+packet flow는 다음처럼 그릴 수 있다.
+
+```txt
+inner IP packet
+  src = 10.7.0.2
+  dst = 10.20.0.10
+
+cryptokey routing
+  dst matches peer AllowedIPs
+  use peer public key session
+
+outer UDP packet
+  src = user public IP:ephemeral
+  dst = peer endpoint:51820
+  payload = WireGuard transport data
+```
+
+수신 방향에서는 순서가 반대다. UDP packet을 받고 peer key에 해당하는 session으로 인증/복호화한 뒤, inner source가 그 peer의 AllowedIPs에 들어 있는지 확인한다. 이 source check가 없으면 peer가 다른 tunnel address를 spoof할 수 있다.
+
+## Failure Mode
+
+첫 번째 실패는 `AllowedIPs = 0.0.0.0/0`의 의미를 반만 이해하는 것이다. client에서 이것은 full tunnel route로 모든 IPv4 destination을 peer로 보내는 뜻일 수 있다. 그러나 peer entry의 AllowedIPs는 inbound source authorization 의미도 가진다. site-to-site hub에서 너무 넓은 prefix를 한 peer에 주면 그 peer가 너무 넓은 source range를 주장할 수 있다.
+
+두 번째 실패는 overlapping AllowedIPs다. 두 peer에게 같은 prefix 또는 겹치는 prefix를 주면 outbound route selection이 모호해지고 운영자가 예상한 peer와 다른 peer가 선택될 수 있다. WireGuard는 "사용자 이름"이나 "조직 단위"로 route를 고르지 않는다. prefix와 public key table이 전부다.
+
+세 번째 실패는 obfuscation 착각이다. WireGuard는 UDP 기반이고 protocol fingerprint가 있을 수 있다. Known Limitations 문서는 obfuscation을 core 목표로 두지 않는다고 설명한다. censorship resistance나 traffic camouflage가 목표라면 별도 layer가 필요하다.
+
+네 번째 실패는 public key를 human identity와 혼동하는 것이다. public key는 peer device 또는 interface identity에 가깝다. 사람 사용자, 조직 role, application permission은 별도 identity plane이다. key rotation, device loss, user offboarding을 운영 절차와 연결하지 않으면 오래된 peer key가 계속 tunnel access를 가질 수 있다.
+
+다섯 번째 실패는 endpoint roaming을 audit 없이 허용하는 것이다. endpoint가 동적으로 바뀌는 것은 mobile client에 유용하지만, 관제에서는 "이 peer가 언제 어떤 egress address에서 들어왔는가"를 별도로 기록해야 한다. endpoint update가 곧 identity update는 아니다. cryptographic identity는 public key이고, endpoint는 현재 reachability 주소다.
+
+## Minimal Lab or Trace
+
+두 VM이나 network namespace에 WireGuard interface를 만들고 route와 packet visibility를 비교한다.
+
+```bash
+wg genkey
+wg pubkey
+wg show
+ip route
+tcpdump -ni any udp port 51820
+```
+
+관찰 항목은 peer public key, AllowedIPs, latest handshake, transfer byte count, endpoint다. tunnel 내부 IP로 ping을 보내면 outer network capture에는 UDP packet만 보여야 한다. inner destination을 AllowedIPs 밖으로 바꾸면 route가 tunnel을 타지 않거나 packet이 drop된다. AllowedIPs를 의도적으로 겹치게 구성하면 어떤 peer가 선택되는지 route table과 `wg show` counters로 확인한다.
+
+worksheet:
+
+| 실험 | 기대 관찰 | 의미 |
+|---|---|---|
+| `AllowedIPs = 10.7.0.1/32` | 해당 host만 tunnel | split route |
+| `AllowedIPs = 0.0.0.0/0` | default route tunnel | full tunnel |
+| wrong inner source | inbound drop | source authorization |
+| endpoint address change | `wg show` endpoint update | roaming reachability |
+| UDP capture | encrypted WireGuard packets | inner traffic hidden from local observer |
+
+## zkTLS Bridge
+
+WireGuard는 zkTLS collector가 private API에 접근하는 network path를 만들 수 있다. 예를 들어 prover가 사내 network 안의 HTTPS endpoint에 접근해야 한다면 WireGuard tunnel은 reachability와 path confidentiality를 제공할 수 있다. 그러나 verifier가 받아야 하는 origin proof는 WireGuard peer key가 아니라 TLS server certificate, transcript, response boundary에서 나온다.
+
+또한 WireGuard public key는 device 또는 tunnel peer identity다. zkTLS proof에서 공개할 identity는 보통 origin DNS identity와 response claim이다. 내부 네트워크 provenance가 필요하다면 "이 proof는 WireGuard peer X를 통해 수집되었다"를 별도 metadata로 붙일 수 있지만, 이것은 HTTP response authenticity와 다른 주장이다.
+
+이 구분은 privacy에도 중요하다. 사용자는 response field만 공개하고 싶을 수 있다. WireGuard peer key, internal tunnel IP, endpoint address는 enterprise policy에서는 중요하지만 외부 verifier에게는 과도한 metadata일 수 있다. zkTLS statement 설계는 network path provenance와 application claim을 선택적으로 분리해야 한다.
+
+## Verification Checklist
+
+- public key를 peer identity로 설명하되 사람 사용자 identity와 섞지 않았는가?
+- AllowedIPs가 outbound route selection과 inbound source authorization을 모두 담당한다고 설명했는가?
+- WireGuard가 UDP 기반이며 obfuscation을 core 목표로 하지 않는다고 명시했는가?
+- endpoint와 peer identity를 구분했는가?
+- overlapping AllowedIPs와 full tunnel 설정의 실패 모드를 다뤘는가?
+- zkTLS origin proof가 WireGuard peer key가 아니라 TLS transcript에서 나온다고 설명했는가?
+
+## Visual Artifact Brief
+
+- Artifact key: wireguard-cryptokey-routing
+- Purpose: public key, AllowedIPs, endpoint, packet flow의 관계를 한 화면에 보여준다.
+- Layout: 좌측에는 `wg0` peer table, 우측에는 outbound lookup과 inbound source check 두 개의 packet arrow를 배치한다.
+- Labels: peer public key, AllowedIPs, endpoint, Noise IK, UDP, source check, roaming endpoint, drop.
+- Motion idea: destination IP가 AllowedIPs table에서 peer key를 선택하고, 수신 packet은 source mismatch 시 빨간 drop line으로 떨어진다.
+- Reduced-motion state: 정적 peer table과 outbound/inbound 두 화살표.
+
+## References
+
+- [WireGuard official site](https://www.wireguard.com/)
+- [WireGuard Protocol & Cryptography](https://www.wireguard.com/protocol/)
+- [WireGuard whitepaper](https://www.wireguard.com/papers/wireguard.pdf)
+- [WireGuard Quick Start](https://www.wireguard.com/quickstart/)
+- [WireGuard Known Limitations](https://www.wireguard.com/known-limitations/)
+- [WireGuard Formal Verification](https://www.wireguard.com/formal-verification/)
+- [Noise Protocol Framework](https://noiseprotocol.org/noise.html)
+- [RFC 7748](https://datatracker.ietf.org/doc/html/rfc7748)
+- [RFC 8439](https://datatracker.ietf.org/doc/html/rfc8439)
+- [RFC 5869](https://datatracker.ietf.org/doc/html/rfc5869)

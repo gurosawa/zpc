@@ -651,7 +651,7 @@
       "order": 4,
       "title": "NETWORK TUNNELS AND IDENTITY PLANES",
       "slug": "network-tunnels-and-identity-planes",
-      "status": "planned",
+      "status": "draft",
       "visualKey": "tunnel-encapsulation-stack",
       "guidingQuestion": "네트워크 터널과 identity plane은 어떤 것을 숨기고 어떤 신뢰를 새로 만든다?",
       "articles": [
@@ -662,7 +662,7 @@
           "title": "VPN은 무엇을 숨기고 무엇을 못 숨기나",
           "slug": "vpn-privacy-boundaries",
           "branch": "content/c04-a01-vpn-privacy-boundaries",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "foundation",
           "wordCountTarget": 4600,
           "visualKey": "tunnel-encapsulation-stack",
@@ -680,8 +680,13 @@
           ],
           "references": [
             "https://datatracker.ietf.org/doc/html/rfc4301",
-            "https://www.wireguard.com/"
-          ]
+            "https://datatracker.ietf.org/doc/html/rfc4303",
+            "https://www.wireguard.com/",
+            "https://www.wireguard.com/known-limitations/",
+            "https://datatracker.ietf.org/doc/html/rfc8484",
+            "https://datatracker.ietf.org/doc/html/rfc7858"
+          ],
+          "actualWordCount": 5656
         },
         {
           "id": "c04-a02",
@@ -690,7 +695,7 @@
           "title": "IPsec, IKEv2, ESP",
           "slug": "ipsec-ikev2-esp",
           "branch": "content/c04-a02-ipsec-ikev2-esp",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "deep",
           "wordCountTarget": 8200,
           "visualKey": "tunnel-encapsulation-stack",
@@ -707,9 +712,14 @@
             "TLS 기반 provenance와 차이를 적었는가?"
           ],
           "references": [
+            "https://datatracker.ietf.org/doc/html/rfc4301",
+            "https://datatracker.ietf.org/doc/html/rfc4303",
             "https://datatracker.ietf.org/doc/html/rfc7296",
-            "https://www.rfc-editor.org/info/rfc4303/"
-          ]
+            "https://datatracker.ietf.org/doc/html/rfc8247",
+            "https://datatracker.ietf.org/doc/html/rfc8221",
+            "https://datatracker.ietf.org/doc/html/rfc6071"
+          ],
+          "actualWordCount": 9352
         },
         {
           "id": "c04-a03",
@@ -718,7 +728,7 @@
           "title": "WireGuard와 modern VPN",
           "slug": "wireguard-modern-vpn",
           "branch": "content/c04-a03-wireguard-modern-vpn",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "intermediate",
           "wordCountTarget": 6600,
           "visualKey": "tunnel-encapsulation-stack",
@@ -735,9 +745,18 @@
             "프로토콜 단순성이 zkTLS 설계에 주는 교훈을 적었는가?"
           ],
           "references": [
+            "https://www.wireguard.com/",
             "https://www.wireguard.com/protocol/",
-            "https://www.wireguard.com/papers/wireguard.pdf"
-          ]
+            "https://www.wireguard.com/papers/wireguard.pdf",
+            "https://www.wireguard.com/quickstart/",
+            "https://www.wireguard.com/known-limitations/",
+            "https://www.wireguard.com/formal-verification/",
+            "https://noiseprotocol.org/noise.html",
+            "https://datatracker.ietf.org/doc/html/rfc7748",
+            "https://datatracker.ietf.org/doc/html/rfc8439",
+            "https://datatracker.ietf.org/doc/html/rfc5869"
+          ],
+          "actualWordCount": 6796
         },
         {
           "id": "c04-a04",
@@ -746,7 +765,7 @@
           "title": "DNS, DoH, DoT, ECH",
           "slug": "dns-doh-dot-ech",
           "branch": "content/c04-a04-dns-doh-dot-ech",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "intermediate",
           "wordCountTarget": 6800,
           "visualKey": "trust-layer-stack",
@@ -765,8 +784,14 @@
           "references": [
             "https://datatracker.ietf.org/doc/html/rfc8484",
             "https://datatracker.ietf.org/doc/html/rfc7858",
-            "https://datatracker.ietf.org/doc/rfc9849/"
-          ]
+            "https://www.rfc-editor.org/rfc/rfc8310",
+            "https://datatracker.ietf.org/doc/html/rfc9460",
+            "https://datatracker.ietf.org/doc/html/rfc9848",
+            "https://www.rfc-editor.org/info/rfc9849",
+            "https://www.rfc-editor.org/info/rfc9230",
+            "https://www.rfc-editor.org/info/rfc7626"
+          ],
+          "actualWordCount": 6110
         },
         {
           "id": "c04-a05",
@@ -775,7 +800,7 @@
           "title": "Zero Trust Network Access",
           "slug": "zero-trust-network-access",
           "branch": "content/c04-a05-zero-trust-network-access",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "intermediate",
           "wordCountTarget": 6800,
           "visualKey": "trust-boundary-map",
@@ -792,8 +817,14 @@
             "zkTLS verifier policy와 연결했는가?"
           ],
           "references": [
-            "https://csrc.nist.gov/pubs/sp/800/207/final"
-          ]
+            "https://csrc.nist.gov/pubs/sp/800/207/final",
+            "https://doi.org/10.6028/NIST.SP.800-207",
+            "https://csrc.nist.gov/pubs/sp/800/207/a/final",
+            "https://doi.org/10.6028/NIST.SP.800-207A",
+            "https://www.nccoe.nist.gov/projects/implementing-zero-trust-architecture",
+            "https://www.cisa.gov/resources-tools/resources/zero-trust-maturity-model"
+          ],
+          "actualWordCount": 6462
         },
         {
           "id": "c04-a06",
@@ -802,7 +833,7 @@
           "title": "Service mesh와 mTLS",
           "slug": "service-mesh-mtls",
           "branch": "content/c04-a06-service-mesh-mtls",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "intermediate",
           "wordCountTarget": 6500,
           "visualKey": "trust-layer-stack",
@@ -820,8 +851,16 @@
           ],
           "references": [
             "https://datatracker.ietf.org/doc/html/rfc8446",
-            "https://kubernetes.io/docs/concepts/security/"
-          ]
+            "https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/",
+            "https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/",
+            "https://istio.io/latest/docs/concepts/security/",
+            "https://istio.io/latest/docs/reference/config/security/peer_authentication/",
+            "https://istio.io/latest/docs/reference/config/security/authorization-policy/",
+            "https://linkerd.io/docs/features/automatic-mtls/",
+            "https://linkerd.io/2-edge/tasks/validating-your-traffic/",
+            "https://spiffe.io/docs/latest/spiffe-about/spiffe-concepts/"
+          ],
+          "actualWordCount": 7724
         }
       ]
     },

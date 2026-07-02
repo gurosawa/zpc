@@ -1,0 +1,139 @@
+---
+title: VPN은 무엇을 숨기고 무엇을 못 숨기나
+chapter: Network Tunnels and Identity Planes
+chapterSlug: network-tunnels-and-identity-planes
+articleSlug: vpn-privacy-boundaries
+status: draft
+difficulty: foundation
+wordCountTarget: 4600
+visualKey: tunnel-encapsulation-stack
+branch: content/c04-a01-vpn-privacy-boundaries
+readerQuestion: VPN을 켜면 누구에게서 무엇이 숨겨지고, 어떤 정보는 여전히 남는가?
+zktlsBridge: zkTLS는 네트워크 경로 은닉이 아니라 서버 응답에 대한 증명이므로 VPN privacy boundary와 proof boundary를 분리해야 한다.
+references:
+  - https://datatracker.ietf.org/doc/html/rfc4301
+  - https://datatracker.ietf.org/doc/html/rfc4303
+  - https://www.wireguard.com/
+  - https://www.wireguard.com/known-limitations/
+  - https://datatracker.ietf.org/doc/html/rfc8484
+  - https://datatracker.ietf.org/doc/html/rfc7858
+---
+
+# VPN은 무엇을 숨기고 무엇을 못 숨기나
+
+## Reader Question
+
+VPN을 켜면 "익명"이 되는가? 기술적으로는 아니다. VPN은 사용자의 장치와 VPN endpoint 사이에 암호화된 tunnel을 만들고, 그 tunnel 안으로 IP packet 또는 가상 인터페이스 traffic을 보낸다. 그래서 local Wi-Fi 관찰자나 access ISP는 사용자가 어떤 destination으로 직접 연결하는지 덜 볼 수 있다. 하지만 VPN endpoint는 tunnel 밖으로 나가는 traffic의 다음 hop을 알고, destination server는 VPN의 egress IP와 application request를 본다. 로그인한 웹 서비스는 여전히 계정, cookie, browser fingerprint, application payload를 볼 수 있다.
+
+따라서 질문은 "VPN이 나를 숨기는가"가 아니라 "누구에게서 어떤 layer가 숨겨지는가"다. VPN은 network path의 일부를 바꾼다. HTTP cookie, TLS endpoint identity, 결제 계정, device attestation, application authorization을 자동으로 지우지 않는다.
+
+## Why It Matters
+
+RFC 4301의 IPsec architecture는 IP layer에서 traffic 보호 서비스를 제공하는 구조를 설명한다. RFC 4303의 ESP는 confidentiality, data origin authentication, connectionless integrity, anti-replay 같은 서비스를 제공할 수 있다. WireGuard 공식 문서는 빠르고 단순한 modern VPN tunnel을 목표로 하며, known limitations 문서는 WireGuard가 obfuscation에 초점을 두지 않는다고 명시한다. DoH와 DoT 같은 DNS privacy 기술도 DNS query의 last-mile privacy를 개선하지만, VPN과 같은 문제를 풀지는 않는다.
+
+실패는 보통 "VPN = privacy"라는 한 문장에서 시작한다. VPN은 local network와 ISP에게 destination visibility를 줄일 수 있지만, VPN provider에게 trust를 옮긴다. 또한 HTTPS를 쓰는 사이트라면 이미 request body는 TLS로 보호된다. VPN은 TLS를 대체하지 않는다. 반대로 VPN이 있어도 DNS leak, split tunnel, IPv6 leak, WebRTC local address exposure, app telemetry는 여전히 privacy boundary 밖으로 나갈 수 있다.
+
+zkTLS 관점에서도 구분이 필요하다. VPN은 packet path를 숨기거나 바꾼다. zkTLS는 특정 origin에서 받은 response의 claim을 증명한다. VPN을 통해 받은 응답이라도 proof는 서버 identity와 TLS transcript에 묶여야 하며, VPN provider를 신뢰한다는 사실만으로 origin proof가 생기지 않는다.
+
+## Core Model
+
+VPN boundary는 세 구간으로 나눠 기억한다.
+
+```txt
+device -> local network / ISP -> VPN endpoint -> destination service
+```
+
+device와 VPN endpoint 사이에서는 tunnel protocol이 packet을 감싼다. local network는 사용자가 VPN endpoint와 통신한다는 사실, timing, packet size, volume을 볼 수 있지만 tunnel 안쪽 destination IP나 payload는 직접 보기 어렵다. VPN endpoint 이후에는 packet이 다시 일반 network로 나간다. destination service는 VPN egress IP를 client IP로 보고, TLS connection은 destination과 client application 사이에서 별도로 성립한다.
+
+무엇을 숨기고 무엇을 못 숨기는지 표로 정리하면 다음과 같다.
+
+| 관찰자 | VPN이 줄이는 visibility | 여전히 남는 visibility |
+|---|---|---|
+| Local Wi-Fi | destination IP, clear DNS, plaintext traffic | VPN endpoint IP, timing, volume |
+| ISP | 직접 destination 접속 목록 | VPN provider와의 연결 metadata |
+| VPN provider | 해당 없음, trust가 이동함 | egress destination, timing, DNS if routed |
+| Destination | 사용자의 원래 access IP | VPN egress IP, TLS/app data, account |
+| Web app | network path 일부 | login, cookie, request content, device signals |
+
+핵심은 "privacy boundary가 이동한다"는 것이다. VPN은 local network trust를 VPN provider trust로 바꾼다. 그래서 VPN provider의 logging policy, jurisdiction, egress architecture, DNS handling, leak prevention이 threat model에 들어간다.
+
+## Protocol or System Artifact
+
+간단한 artifact는 tunnel encapsulation stack이다.
+
+```txt
+outer packet:
+  src = user public IP
+  dst = vpn.example.net
+  payload = encrypted tunnel packet
+
+inner packet:
+  src = tunnel address
+  dst = api.example.com IP
+  payload = TLS records or other traffic
+```
+
+IPsec ESP라면 outer IP header와 ESP header/trailer/authentication data 구조가 있고, tunnel mode에서는 inner IP packet이 ESP payload로 들어간다. WireGuard라면 UDP packet 안에 WireGuard message가 들어가며, peer public key와 allowed IPs 설정이 routing 판단에 영향을 준다. 어떤 구현이든 "outer path"와 "inner destination"을 분리해서 봐야 한다.
+
+## Failure Mode
+
+첫 번째 실패는 DNS leak이다. traffic은 VPN으로 보내지만 DNS resolver는 기존 ISP resolver를 계속 쓰면 사용자가 어떤 domain을 조회했는지 local network나 ISP가 알 수 있다. DoH나 DoT는 DNS query privacy를 개선할 수 있지만 resolver 선택과 trust boundary가 다시 생긴다.
+
+두 번째 실패는 split tunnel 오해다. 업무용 VPN은 회사 subnet만 tunnel로 보내고 일반 인터넷은 로컬 경로로 보낼 수 있다. 사용자가 "VPN이 켜졌다"고 생각해도 특정 app traffic은 tunnel 밖으로 나갈 수 있다. route table, allowed IPs, per-app VPN 정책을 확인해야 한다.
+
+세 번째 실패는 application identity를 network identity와 혼동하는 것이다. destination server는 VPN egress IP만 보더라도 사용자가 로그인하면 계정으로 식별할 수 있다. browser fingerprint, payment token, API key, device attestation도 VPN이 숨기지 않는다. VPN은 IP 관측을 바꾸지만 application identity plane을 지우지 않는다.
+
+네 번째 실패는 obfuscation 기대다. WireGuard known limitations 문서처럼 WireGuard 자체는 deep packet inspection 회피에 초점을 두지 않는다. 어떤 VPN traffic은 protocol fingerprint, packet timing, endpoint IP로 식별될 수 있다. 검열 회피나 traffic camouflage가 목표라면 별도 obfuscation layer가 필요하다.
+
+## Minimal Lab or Trace
+
+간단한 실험은 VPN 전후의 관찰 지점을 나누는 것이다.
+
+```bash
+curl https://ifconfig.me
+nslookup example.com
+tracert example.com
+```
+
+VPN 전후로 public IP, DNS resolver, route path를 비교한다. Windows라면 `route print`, Linux/macOS라면 `ip route` 또는 `netstat -rn`으로 default route와 split route를 확인한다. packet capture에서는 VPN을 켜기 전에는 destination IP와 DNS query가 보일 수 있고, 켠 뒤에는 VPN endpoint로 향하는 UDP 또는 ESP traffic이 주로 보인다. 단, timing과 volume은 남는다.
+
+worksheet는 다음처럼 작성한다.
+
+| 항목 | VPN 전 | VPN 후 | 해석 |
+|---|---|---|---|
+| public IP | ISP address | VPN egress | destination이 보는 source가 바뀜 |
+| DNS resolver | ISP/local | VPN/DoH/DoT provider | DNS privacy boundary 변경 |
+| route | direct internet | tunnel or split | traffic별 경로 확인 필요 |
+| logged-in service | same account | same account | app identity는 그대로 |
+
+## zkTLS Bridge
+
+zkTLS와 VPN은 서로 다른 문제를 푼다. VPN은 network observer가 destination을 보는 방식을 바꾼다. zkTLS는 verifier가 원본 응답 전체를 보지 않고도 특정 origin 응답에서 나온 claim을 확인하도록 한다. 사용자가 VPN을 통해 `api.example.com`에 접속했다면, local ISP는 `api.example.com`을 직접 보지 못할 수 있다. 그러나 zkTLS proof는 여전히 TLS certificate, transcript, response parsing을 통해 `api.example.com`의 응답이라는 사실을 증명해야 한다.
+
+또한 VPN provider는 zkTLS verifier가 아니다. VPN provider가 egress traffic을 봤다고 해서 response field의 integrity가 보장되는 것은 아니다. 반대로 zkTLS proof가 있다고 해서 사용자의 network path가 숨겨지는 것도 아니다. privacy-preserving architecture에서는 VPN boundary와 proof boundary를 별도 diagram으로 그려야 한다.
+
+## Verification Checklist
+
+- VPN이 local network와 ISP에게 숨기는 정보와 VPN provider에게 노출되는 정보를 분리했는가?
+- DNS leak, IPv6 leak, split tunnel, app telemetry를 별도 실패 모드로 확인했는가?
+- destination server가 VPN egress IP와 application identity를 볼 수 있음을 명시했는가?
+- VPN이 TLS나 application authorization을 대체하지 않는다고 설명했는가?
+- zkTLS proof boundary가 VPN tunnel boundary와 다르다는 점을 표시했는가?
+
+## Visual Artifact Brief
+
+- Artifact key: vpn-privacy-boundary-map
+- Purpose: VPN을 켰을 때 observer별 visibility가 어떻게 이동하는지 보여준다.
+- Layout: Device, local network, ISP, VPN endpoint, destination, application identity plane을 좌우로 배치하고 outer tunnel과 inner request를 겹쳐 그린다.
+- Labels: outer IP, tunnel ciphertext, VPN egress, DNS resolver, account identity, timing metadata.
+- Motion idea: VPN toggle을 켜면 destination line이 VPN endpoint를 경유하도록 접히고, observer visibility badge가 바뀐다.
+- Reduced-motion state: observer table과 고정 tunnel stack diagram.
+
+## References
+
+- https://datatracker.ietf.org/doc/html/rfc4301
+- https://datatracker.ietf.org/doc/html/rfc4303
+- https://www.wireguard.com/
+- https://www.wireguard.com/known-limitations/
+- https://datatracker.ietf.org/doc/html/rfc8484
+- https://datatracker.ietf.org/doc/html/rfc7858

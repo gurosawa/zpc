@@ -1,0 +1,199 @@
+---
+title: Service mesh와 mTLS
+chapter: Network Tunnels and Identity Planes
+chapterSlug: network-tunnels-and-identity-planes
+articleSlug: service-mesh-mtls
+status: draft
+difficulty: intermediate
+wordCountTarget: 6500
+visualKey: trust-layer-stack
+branch: content/c04-a06-service-mesh-mtls
+readerQuestion: Service mesh에서 mTLS가 켜졌다는 말은 authentication, encryption, authorization 중 어디까지를 의미하는가?
+zktlsBridge: mesh 내부 proof는 public WebPKI가 아니라 workload identity, trust domain, proxy coverage, policy decision을 별도 신뢰 경계로 다뤄야 한다.
+references:
+  - https://datatracker.ietf.org/doc/html/rfc8446
+  - https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/
+  - https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/
+  - https://istio.io/latest/docs/concepts/security/
+  - https://istio.io/latest/docs/reference/config/security/peer_authentication/
+  - https://istio.io/latest/docs/reference/config/security/authorization-policy/
+  - https://linkerd.io/docs/features/automatic-mtls/
+  - https://linkerd.io/2-edge/tasks/validating-your-traffic/
+  - https://spiffe.io/docs/latest/spiffe-about/spiffe-concepts/
+---
+
+# Service mesh와 mTLS
+
+## Reader Question
+
+Service mesh에서 mTLS가 켜져 있으면 service-to-service 보안은 끝난 것인가? 아니다. mTLS는 두 endpoint가 certificate를 사용해 서로를 인증하고 channel을 암호화하는 transport control이다. 그러나 "누가 무엇을 호출할 수 있는가"는 authorization policy의 문제다. mesh가 proxy를 통해 mTLS를 자동 적용해도, workload identity가 거칠거나 policy가 없거나 proxy를 우회하는 path가 있으면 보안 모델은 약해진다.
+
+질문은 "mTLS on인가"가 아니라 "어떤 workload identity가 어떤 trust domain에서 발급된 certificate로 어떤 proxy를 통해 어떤 authorization policy를 통과했는가"다. 이 질문을 해야 sidecar injection gap, permissive mode, default ServiceAccount 남용, mesh CA rotation 실패를 볼 수 있다.
+
+## Why It Matters
+
+TLS 1.3은 channel security의 기본 구조를 제공한다. Kubernetes는 Pod 안 프로세스가 사용할 ServiceAccount를 제공하고, Kubernetes DNS는 Service와 Pod 이름 해석을 제공한다. Istio security 문서는 peer authentication과 request authentication을 구분하고, PeerAuthentication으로 mTLS 요구 수준을 정의하며, AuthorizationPolicy로 workload access control을 정의한다. Linkerd automatic mTLS 문서는 meshed pod 사이 TCP traffic에 mTLS를 자동 적용한다고 설명한다. SPIFFE는 workload를 식별하는 URI 기반 SPIFFE ID와 SVID 개념을 제공한다.
+
+이 자료들이 말하는 핵심은 "mesh mTLS는 identity transport이고, policy가 access를 완성한다"는 점이다. service mesh는 application code를 크게 바꾸지 않고 service-to-service traffic을 proxy로 통과시킬 수 있다. 그러나 proxy coverage가 완전하지 않거나, trust anchor가 만료되거나, namespace 정책이 PERMISSIVE로 남아 있으면 plaintext나 과권한 path가 남는다.
+
+zkTLS와 연결하면 내부 proof boundary가 달라진다. public web에서는 DNS name과 WebPKI certificate가 origin identity의 중심이다. mesh 내부에서는 Kubernetes ServiceAccount, SPIFFE ID, mesh CA, trust domain이 service identity의 중심일 수 있다. 외부 verifier에게 내부 identity를 얼마나 공개할지는 별도 privacy 문제다.
+
+## Core Model
+
+service mesh mTLS는 세 plane으로 나누면 명확하다.
+
+```txt
+identity plane
+  Kubernetes ServiceAccount
+  SPIFFE ID or mesh identity
+  trust domain
+  CA / trust anchor
+  workload certificate
+
+data plane
+  sidecar proxy or node proxy
+  mTLS handshake
+  encrypted service-to-service traffic
+
+policy plane
+  PeerAuthentication
+  AuthorizationPolicy
+  server policy
+  namespace/workload scope
+```
+
+Identity plane은 "이 workload는 누구인가"를 다룬다. Kubernetes ServiceAccount가 workload identity의 기초가 되고, mesh는 이를 certificate identity로 변환할 수 있다. SPIFFE 모델에서는 `spiffe://trust-domain/path` 형태의 workload identity를 쓴다.
+
+Data plane은 실제 traffic 경로다. application container가 localhost proxy로 요청을 보내고, client proxy와 server proxy가 mTLS를 수행한 뒤 server application으로 전달한다. application은 TLS를 직접 구현하지 않아도 되지만, 실제 보호는 proxy coverage에 의존한다.
+
+Policy plane은 authentication result를 access decision으로 바꾼다. mTLS가 성공했다는 것은 caller identity를 알 수 있다는 뜻이지, 모든 caller가 허용된다는 뜻이 아니다. AuthorizationPolicy나 server policy가 caller principal, namespace, method, path, port 같은 조건을 기준으로 접근을 제한해야 한다.
+
+## Protocol or System Artifact
+
+대표적인 mesh flow:
+
+```txt
+Pod A app
+  -> local proxy A
+  -> mTLS connection
+  -> remote proxy B
+  -> Pod B app
+
+identity:
+  Pod A ServiceAccount
+    -> workload cert
+  Pod B ServiceAccount
+    -> workload cert
+
+policy:
+  PeerAuthentication: require mTLS
+  AuthorizationPolicy:
+    allow principal A to call B
+```
+
+Istio에서는 PeerAuthentication이 incoming connection에 mTLS를 허용하거나 요구하는 정책이다. STRICT 모드는 plaintext path를 줄이는 데 중요하고, PERMISSIVE 모드는 migration에는 유용하지만 운영 기본값으로 남으면 위험하다. AuthorizationPolicy는 action과 rule을 통해 access control을 표현한다. 특히 HTTP attribute를 TCP traffic에 잘못 적용하지 않도록 port scoping과 protocol awareness가 필요하다.
+
+Linkerd에서는 meshed pod 사이 TCP traffic에 automatic mTLS가 적용되며, workload certificate와 identity issuer, trust anchor rotation이 중요하다. `linkerd viz`나 edges view로 traffic이 secured인지 확인할 수 있다.
+
+SPIFFE artifact는 다음처럼 볼 수 있다.
+
+```txt
+SPIFFE ID:
+  spiffe://example.org/ns/payments/sa/api
+
+X.509-SVID:
+  SAN URI = SPIFFE ID
+  signed by trust domain authority
+```
+
+이 identity를 authorization policy가 이해할 수 있어야 한다. DNS service name만으로 service identity를 판단하면 workload spoofing이나 routing change에 약해진다.
+
+## Failure Mode
+
+첫 번째 실패는 PERMISSIVE mode가 migration 후에도 남는 것이다. PERMISSIVE는 mTLS와 plaintext를 모두 허용할 수 있어 전환에는 편하지만, unmeshed caller나 misconfigured proxy path를 계속 허용할 수 있다. 운영 목표가 mesh-only secure traffic이라면 STRICT로 전환하고 예외를 관리해야 한다.
+
+두 번째 실패는 proxy bypass다. sidecar injection이 빠진 pod, hostNetwork pod, direct egress, node-local path, debug container가 proxy를 우회하면 mTLS와 policy가 적용되지 않는다. "mesh에 배포했다"가 곧 "모든 traffic이 mesh를 탄다"가 아니다. coverage inventory가 필요하다.
+
+세 번째 실패는 default ServiceAccount 공유다. 여러 workload가 `default` ServiceAccount를 쓰면 identity granularity가 무너진다. policy는 "payments reader"와 "admin batch"를 구분하고 싶지만 certificate identity가 같으면 세밀한 authorization이 어렵다.
+
+네 번째 실패는 authentication과 authorization 혼동이다. mTLS는 caller를 인증한다. 하지만 policy가 없다면 인증된 모든 caller가 server에 접근할 수 있다. "encrypted and authenticated"와 "allowed"는 다른 상태다.
+
+다섯 번째 실패는 trust anchor와 issuer rotation 실패다. mesh CA나 issuer certificate가 만료되면 service-to-service 통신이 광범위하게 끊길 수 있다. 반대로 rotation이 느슨하면 오래된 compromised identity가 오래 남을 수 있다. short-lived cert와 rotation telemetry가 필요하다.
+
+여섯 번째 실패는 mesh identity와 application user identity를 섞는 것이다. service A가 service B를 호출할 수 있다는 사실은 user Alice가 payroll data를 볼 수 있다는 뜻이 아니다. user JWT, session, business authorization은 app layer에서 계속 검증해야 한다.
+
+## Minimal Lab or Trace
+
+Istio lab trace:
+
+```txt
+1. two workloads with distinct ServiceAccounts
+2. inject sidecars
+3. call service B from service A
+4. check mTLS mode
+5. apply PeerAuthentication STRICT
+6. add AuthorizationPolicy for only service A
+7. test call from service C fails
+```
+
+실제 명령은 환경마다 다르지만 `istioctl authn tls-check`, `istioctl proxy-config secret`, workload labels, PeerAuthentication, AuthorizationPolicy 상태를 본다. unmeshed pod에서 호출했을 때 STRICT 정책이 막는지도 확인한다.
+
+Linkerd trace:
+
+```txt
+1. inject workloads
+2. check secured edges
+3. inspect client and server identity
+4. validate trust anchor and issuer status
+```
+
+Kubernetes trace는 ServiceAccount를 확인하는 데서 시작한다. `spec.serviceAccountName`이 workload별로 분리되어 있는지, default ServiceAccount가 남아 있는지, namespace와 workload labels가 policy scope와 맞는지 본다.
+
+worksheet:
+
+| 테스트 | 기대 결과 | 의미 |
+|---|---|---|
+| STRICT mTLS | unmeshed caller fail | plaintext path 제거 |
+| AuthorizationPolicy | unauthorized principal fail | authn과 authz 분리 |
+| ServiceAccount split | policy 세분화 가능 | workload identity 품질 |
+| cert rotation | short-lived cert renewed | identity lifecycle |
+| proxy bypass probe | direct path fail | enforcement coverage |
+
+## zkTLS Bridge
+
+public zkTLS proof는 보통 browser/client와 public origin 사이의 TLS transcript를 다룬다. service mesh 내부에서는 origin identity가 public DNS와 WebPKI가 아닐 수 있다. `payments.default.svc.cluster.local` 같은 service name은 Kubernetes DNS artifact이고, 실제 workload identity는 ServiceAccount 또는 SPIFFE ID일 수 있다. mesh CA가 발급한 certificate는 public root store가 아니라 mesh trust domain에 묶인다.
+
+따라서 mesh 내부 응답을 증명하려면 proof statement가 달라져야 한다. verifier는 "public example.com이 말했다"가 아니라 "trust domain X의 ServiceAccount Y를 가진 workload가 mTLS-protected mesh connection에서 응답했다"는 주장을 받을 수 있다. 이때 proxy coverage와 AuthorizationPolicy decision도 중요하다. proxy를 우회한 plaintext response라면 mesh mTLS proof가 아니다.
+
+privacy 측면도 있다. 외부 verifier에게 내부 namespace, service account, cluster name을 모두 공개하면 topology leakage가 된다. selective disclosure는 response field뿐 아니라 workload identity와 policy evidence에도 적용되어야 한다. 예를 들어 "authorized payroll service"라는 category만 공개하고 구체적 SPIFFE ID는 숨기는 설계가 가능해야 한다.
+
+## Verification Checklist
+
+- mTLS authentication/encryption과 authorization policy를 분리했는가?
+- Kubernetes ServiceAccount 또는 SPIFFE ID가 workload identity의 기초임을 설명했는가?
+- Istio PeerAuthentication과 AuthorizationPolicy의 역할을 구분했는가?
+- Linkerd automatic mTLS와 certificate rotation의 운영 의미를 다뤘는가?
+- PERMISSIVE mode, proxy bypass, default ServiceAccount 공유를 실패 모드로 포함했는가?
+- mesh CA trust와 public WebPKI trust를 혼동하지 않았는가?
+- zkTLS 내부 proof에서 workload identity와 policy evidence 공개 범위를 언급했는가?
+
+## Visual Artifact Brief
+
+- Artifact key: service-mesh-mtls-identity-policy-plane
+- Purpose: service mesh mTLS가 보호하는 transport와 authorization policy가 결정하는 access를 분리한다.
+- Layout: Pod A app, local proxy, mTLS tunnel, remote proxy, Pod B app을 sequence diagram으로 그리고 위에는 identity plane, 아래에는 policy plane을 배치한다.
+- Labels: ServiceAccount, SPIFFE ID, trust anchor, workload cert, PeerAuthentication, AuthorizationPolicy, STRICT, PERMISSIVE, proxy bypass.
+- Motion idea: certificate issuance, mTLS handshake, authorization decision이 순서대로 점등되고 bypass path는 빨간 점선으로 표시된다.
+- Reduced-motion state: 정적 sequence diagram과 failure callout.
+
+## References
+
+- [RFC 8446: TLS 1.3](https://datatracker.ietf.org/doc/html/rfc8446)
+- [Kubernetes ServiceAccount](https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/)
+- [Kubernetes DNS for Services and Pods](https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/)
+- [Istio Security Concepts](https://istio.io/latest/docs/concepts/security/)
+- [Istio PeerAuthentication](https://istio.io/latest/docs/reference/config/security/peer_authentication/)
+- [Istio AuthorizationPolicy](https://istio.io/latest/docs/reference/config/security/authorization-policy/)
+- [Linkerd Automatic mTLS](https://linkerd.io/docs/features/automatic-mtls/)
+- [Linkerd validating traffic](https://linkerd.io/2-edge/tasks/validating-your-traffic/)
+- [SPIFFE Concepts](https://spiffe.io/docs/latest/spiffe-about/spiffe-concepts/)

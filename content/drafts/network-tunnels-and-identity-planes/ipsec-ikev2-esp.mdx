@@ -1,0 +1,226 @@
+---
+title: IPsec, IKEv2, ESP
+chapter: Network Tunnels and Identity Planes
+chapterSlug: network-tunnels-and-identity-planes
+articleSlug: ipsec-ikev2-esp
+status: draft
+difficulty: deep
+wordCountTarget: 8200
+visualKey: tunnel-encapsulation-stack
+branch: content/c04-a02-ipsec-ikev2-esp
+readerQuestion: IPsec에서 IKEv2와 ESP는 각각 무엇을 협상하고 어떤 packet을 보호하는가?
+zktlsBridge: zkTLS를 이해할 때 IPsec은 channel protection과 application proof가 다른 계층에 놓인다는 대비 모델을 제공한다.
+references:
+  - https://datatracker.ietf.org/doc/html/rfc4301
+  - https://datatracker.ietf.org/doc/html/rfc4303
+  - https://datatracker.ietf.org/doc/html/rfc7296
+  - https://datatracker.ietf.org/doc/html/rfc8247
+  - https://datatracker.ietf.org/doc/html/rfc8221
+  - https://datatracker.ietf.org/doc/html/rfc6071
+---
+
+# IPsec, IKEv2, ESP
+
+## Reader Question
+
+IPsec은 하나의 프로토콜 이름처럼 들리지만 실제로는 architecture, policy database, key exchange, security association, packet protection이 맞물린 시스템이다. IKEv2는 peer를 인증하고 Security Association을 협상한다. ESP는 협상된 SA를 사용해 IP packet에 confidentiality, integrity, anti-replay 같은 서비스를 적용한다. 이 둘을 섞어 말하면 "VPN이 암호화된다"라는 문장 뒤에 어떤 policy가 어떤 packet에 적용되는지 사라진다.
+
+핵심 질문은 "누가 누구와 어떤 SA를 만들고, 어떤 selector에 해당하는 packet이 어떤 ESP SA로 보호되는가"다. 이 질문을 할 수 있어야 tunnel mode, transport mode, route-based VPN, policy-based VPN, NAT traversal, rekey, anti-replay 실패를 구분할 수 있다.
+
+## Why It Matters
+
+RFC 4301은 IPsec architecture를 정의하며 Security Policy Database(SPD), Security Association Database(SAD), selector, inbound/outbound processing 같은 기본 구조를 설명한다. RFC 4303은 ESP가 제공하는 confidentiality, data origin authentication, connectionless integrity, anti-replay, limited traffic flow confidentiality를 정의한다. RFC 7296은 IKEv2가 mutual authentication과 SA 생성, 유지, rekey를 수행하는 방식을 정의한다. RFC 8247과 RFC 8221은 각각 IKEv2와 ESP/AH의 알고리즘 구현 요구와 사용 지침을 다룬다.
+
+이 자료들이 공통으로 요구하는 사고는 "패킷이 보호된다"를 policy와 state machine으로 보는 것이다. IPsec은 TLS처럼 application stream 안에서 handshake하고 record를 만드는 구조가 아니다. IP layer에서 traffic selector와 SA가 packet 처리를 결정한다. 따라서 실패도 애플리케이션 request가 아니라 route, policy, selector, SA lifetime, sequence number, replay window, algorithm negotiation에서 발생한다.
+
+zkTLS와 비교하면 계층 차이가 더 선명하다. IPsec은 endpoint 사이의 IP traffic channel을 보호한다. zkTLS는 특정 TLS origin response의 claim을 증명한다. IPsec tunnel 안에서 HTTPS를 써도, IPsec은 HTTP response field의 provenance를 선택적으로 증명하지 않는다. 반대로 zkTLS proof가 있어도 IP packet path의 privacy가 자동으로 생기지 않는다.
+
+## Core Model
+
+IPsec을 네 개의 database와 두 개의 packet path로 기억한다.
+
+```txt
+SPD: 어떤 traffic을 discard, bypass, protect할지 결정
+SAD: 실제 SA state, keys, sequence, algorithms 보관
+PAD: peer authentication과 identity 정책
+IKE SA: IKEv2 control channel 보호
+Child SA: ESP/AH data traffic 보호
+```
+
+outbound packet은 먼저 SPD selector에 맞는지 검사된다. selector는 source/destination IP, protocol, port 같은 값을 포함할 수 있다. 보호해야 하는 traffic이면 SAD에서 적절한 SA를 찾거나 IKEv2로 Child SA를 만든다. 그 후 ESP가 packet을 감싸고 sequence number와 integrity/authentication data를 붙여 전송한다.
+
+inbound packet은 ESP SPI와 destination을 통해 SA를 찾는다. sequence number와 anti-replay window를 확인하고, integrity 또는 AEAD tag를 검증하고, 복호화한 뒤 inner packet이 policy와 일치하는지 확인해야 한다. 이 마지막 policy check가 빠지면 공격자가 보호된 SA를 통해 예상 밖의 traffic을 넣는 문제가 생길 수 있다.
+
+IKEv2는 control plane이고 ESP는 data plane이다. IKEv2는 IKE SA를 만든 뒤 Child SA를 협상한다. Child SA는 실제 user traffic을 보호한다. rekey가 일어나면 새 Child SA가 만들어지고 old SA가 정리된다. 운영자는 "VPN이 up"이라는 상태가 IKE SA만 up인지, Child SA까지 traffic을 처리하는지 구분해야 한다.
+
+또 하나의 핵심은 inbound policy verification이다. outbound에서 SPD가 보호할 packet을 골랐다고 해서 inbound에서는 아무 inner packet이나 받아도 되는 것이 아니다. ESP 복호화와 integrity 검증이 성공한 뒤에도 inner source, destination, protocol이 해당 SA의 selector와 맞는지 확인해야 한다. 그렇지 않으면 공격자가 합법적인 SA를 이용해 policy가 의도하지 않은 traffic을 주입하는 문제가 생긴다. IPsec은 "암호화 성공"과 "정책상 허용"을 모두 만족해야 한다.
+
+NAT traversal도 별도 모델로 둬야 한다. ESP는 IP protocol 50을 사용하지만, NAT 장비가 ESP를 잘 처리하지 못하는 환경에서는 UDP encapsulation을 사용한다. 운영 trace에서 UDP 500만 보인다고 data plane이 흐르는 것이 아니고, UDP 4500 또는 ESP packet counters가 움직이는지 봐야 한다. NAT-T는 ESP의 보안 의미를 대체하는 것이 아니라, middlebox를 통과하기 위한 encapsulation 문제다.
+
+## Protocol or System Artifact
+
+IKEv2 초기 교환은 단순화하면 다음과 같다.
+
+```txt
+IKE_SA_INIT
+  negotiate algorithms
+  exchange nonces
+  Diffie-Hellman
+
+IKE_AUTH
+  authenticate peers
+  establish first Child SA
+  exchange traffic selectors
+
+CREATE_CHILD_SA
+  rekey IKE SA or Child SA
+  create additional Child SA
+```
+
+ESP tunnel mode packet은 다음처럼 볼 수 있다.
+
+```txt
+outer IP header
+ESP header
+  SPI
+  Sequence Number
+encrypted payload
+  inner IP packet
+  padding
+  next header
+Integrity Check Value or AEAD tag
+```
+
+SPI는 SA를 찾는 index이고, sequence number는 anti-replay와 nonce derivation 또는 integrity context에 중요하다. tunnel mode에서는 inner IP packet 전체가 보호 payload가 된다. transport mode에서는 원래 IP payload를 보호하며 host-to-host 보호에 더 가깝다.
+
+정책 artifact는 다음 형태로 적을 수 있다.
+
+```txt
+selector:
+  src: 10.10.0.0/16
+  dst: 10.20.0.0/16
+  protocol: any
+action: protect
+peer: gateway-b
+mode: tunnel
+proposal: ESP with AEAD
+```
+
+이 artifact의 핵심은 route가 아니라 selector다. packet이 어느 interface로 나가는지와 어떤 policy가 적용되는지는 함께 맞아야 한다.
+
+NAT-T가 있는 artifact는 한 겹 더 생긴다.
+
+```txt
+outer IP
+UDP 4500
+Non-ESP marker or ESP-in-UDP
+ESP header
+encrypted inner packet
+ICV or AEAD tag
+```
+
+이 구조를 보면 firewall rule도 달라진다. IKE negotiation은 UDP 500에서 시작할 수 있지만 NAT가 감지되면 UDP 4500으로 전환된다. 일부 장애는 IKE_AUTH까지 성공한 뒤 data traffic만 실패한다. 이때 "인증은 성공했는데 업무 traffic이 안 된다"는 현상은 Child SA, NAT-T, firewall, route, selector를 모두 봐야 한다는 신호다.
+
+algorithm artifact도 IKE와 ESP를 나눠야 한다. IKE SA를 보호하는 알고리즘과 ESP Child SA가 user traffic을 보호하는 알고리즘은 같은 정책 문서에서 함께 관리되지만 적용 대상이 다르다. RFC 8247은 IKEv2 algorithm requirements에 초점을 두고, RFC 8221은 ESP/AH algorithm usage guidance에 초점을 둔다. 운영자가 "AES-GCM을 켰다"라고 말할 때 그것이 IKE SA의 encryption인지 ESP data plane의 AEAD인지 분명히 해야 한다.
+
+## Failure Mode
+
+첫 번째 실패는 SPD selector mismatch다. 운영자는 `10.10.0.0/16 -> 10.20.0.0/16` traffic을 보호하려 하지만 실제 service는 `10.30.0.0/16`로 이동했거나 NAT 후 주소가 바뀌었을 수 있다. 이 경우 traffic이 bypass되거나 drop되거나 잘못된 SA로 들어간다. "터널은 살아 있는데 app이 안 된다"는 장애는 종종 selector와 route의 불일치에서 온다.
+
+두 번째 실패는 identity mismatch다. IKEv2 peer 인증은 pre-shared key, certificate, EAP 등 배포 방식에 따라 달라진다. 인증서 기반이면 certificate subject/SAN과 IKE identity가 정책과 맞아야 한다. peer가 암호학적으로 인증되어도 기대한 gateway identity가 아니면 site-to-site trust가 깨진다.
+
+세 번째 실패는 algorithm negotiation drift다. 한쪽은 최신 알고리즘만 허용하고 다른 쪽은 오래된 proposal만 제공하면 Child SA가 만들어지지 않는다. 반대로 호환성을 위해 약한 알고리즘을 남겨 두면 security baseline이 낮아진다. RFC 8247과 RFC 8221 같은 지침을 참조하되, 실제 구현과 정책 버전을 확인해야 한다.
+
+네 번째 실패는 anti-replay window 오해다. ESP sequence number와 anti-replay window는 old packet 재전송을 막는 데 중요하지만, packet reordering이 많은 네트워크에서는 window 크기와 성능이 얽힌다. integrity가 없는 SA에서 anti-replay를 켜면 sequence number 자체가 보호되지 않으므로 의미가 없다. 구현과 정책은 이 관계를 따라야 한다.
+
+다섯 번째 실패는 rekey race다. Child SA rekey 중 양쪽이 old SA와 new SA를 다르게 정리하면 일시적 packet loss가 발생한다. long-lived tunnel에서 이 문제는 간헐 장애처럼 보인다. 로그에는 IKE SA up/down보다 Child SA SPI, lifetime, byte count, replay counter를 같이 남겨야 한다.
+
+여섯 번째 실패는 tunnel mode가 application authorization을 대신한다고 믿는 것이다. IPsec은 두 network 사이 path를 보호할 수 있지만, tunnel 안의 service가 사용자를 authorization하는 것은 별도다. site-to-site VPN으로 내부망에 들어온 packet을 모두 신뢰하면 lateral movement surface가 커진다.
+
+일곱 번째 실패는 inbound selector check 누락이다. 어떤 구현이나 gateway 정책이 SA로 들어온 packet을 복호화한 뒤 inner packet이 기대한 TSi/TSr 범위에 들어 있는지 충분히 확인하지 않으면, peer가 허용되지 않은 source나 destination을 주장할 수 있다. 특히 넓은 any-any selector를 임시로 열어 장애를 해결하면 나중에 어떤 traffic이 tunnel을 통과해도 "정상 SA"처럼 보인다.
+
+여덟 번째 실패는 NAT-T와 keepalive를 보안 기능으로 오해하는 것이다. NAT keepalive는 mapping을 유지하기 위한 운영 장치다. 이것이 peer authentication을 강화하거나 application traffic을 검증하지 않는다. NAT 장비가 바뀌거나 idle timeout이 짧으면 tunnel이 주기적으로 끊기는 것처럼 보이고, 운영자는 암호 알고리즘보다 UDP state와 firewall session lifetime을 먼저 봐야 할 수 있다.
+
+아홉 번째 실패는 packet counter만 보고 보안을 판단하는 것이다. ESP byte counter가 증가한다는 것은 data가 어떤 SA로 흐른다는 뜻이지, 그 traffic이 business policy상 허용되어야 한다는 뜻은 아니다. 보안 검토에서는 counter, selector, peer identity, route, application authorization log를 함께 봐야 한다.
+
+## Minimal Lab or Trace
+
+실험은 실제 production VPN이 아니라 lab gateway 두 대에서 한다. 확인 항목은 다음이다.
+
+```txt
+1. IKE SA established?
+2. Child SA established?
+3. outbound selector matches packet?
+4. ESP SPI and sequence number observed?
+5. inbound anti-replay counter stable?
+6. inner packet reaches intended subnet?
+```
+
+Linux strongSwan 계열 환경이라면 `ip xfrm state`, `ip xfrm policy`, `swanctl --list-sas` 같은 명령으로 SA와 policy를 볼 수 있다. Windows나 appliance에서는 vendor CLI가 다르지만 봐야 할 값은 같다. SPI, peer identity, algorithms, tunnel endpoints, traffic selectors, packet counters, rekey time이다.
+
+packet capture에서는 outer IP destination이 gateway이고 protocol이 ESP이거나 NAT traversal이면 UDP encapsulation이 보일 수 있다. inner packet은 복호화 없이는 보이지 않아야 한다. selector를 일부러 틀리게 설정하면 ping은 tunnel 밖으로 나가거나 drop된다. 이 실험은 route success와 policy protection success가 다르다는 것을 보여준다.
+
+NAT-T trace는 다음처럼 해석한다.
+
+```txt
+udp/500:
+  IKE_SA_INIT begins
+
+udp/4500:
+  NAT traversal encapsulation
+  IKE messages after NAT detection
+  ESP packets in UDP
+
+proto 50:
+  native ESP, NAT 없는 경로에서 관찰 가능
+```
+
+테스트에서 UDP 500 handshake만 보이고 UDP 4500 data가 보이지 않으면 IKE control plane은 시작했지만 data plane이 막혔을 수 있다. 반대로 ESP packet은 보이는데 inner service가 실패하면 route, firewall, selector, application ACL을 봐야 한다. IPsec troubleshooting은 "어느 layer의 success인가"를 계속 분리하는 작업이다.
+
+trace worksheet:
+
+| 증상 | 확인할 artifact | 가능한 원인 |
+|---|---|---|
+| IKE up, traffic fail | Child SA counter | selector mismatch, route issue |
+| SA repeatedly rekeys | lifetime, proposal | policy mismatch, clock/state issue |
+| intermittent loss | replay counter, window | reordering, duplicate packets |
+| one-way traffic | inbound/outbound SA | NAT, firewall, asymmetric route |
+| wrong peer accepted | PAD/IKE identity | certificate or PSK policy error |
+
+## zkTLS Bridge
+
+IPsec은 channel protection을 IP layer에서 제공한다. zkTLS는 application response claim을 TLS transcript에 묶어 제공한다. 이 둘을 비교하면 보안 경계가 분명해진다. IPsec tunnel이 있으면 user traffic이 gateway 사이에서 보호될 수 있지만, verifier는 그 안의 HTTPS 응답 field가 어떤 origin에서 왔는지 알 수 없다. zkTLS proof는 HTTP response semantics를 다루지만, packet path privacy나 site-to-site route protection을 보장하지 않는다.
+
+또 하나의 bridge는 identity plane이다. IKEv2 peer identity는 gateway 또는 device identity다. TLS server identity는 DNS origin identity다. zkTLS verifier가 보는 origin identity는 certificate chain과 transcript에 묶인 service identity다. 세 identity를 섞으면 "VPN gateway가 인증되었으니 API origin도 인증되었다"는 잘못된 결론이 나온다.
+
+실무적으로 zkTLS 시스템이 VPN 안에서 운영되더라도 proof statement에는 IPsec SA 정보를 넣을지 말지를 별도로 결정해야 한다. 대부분의 경우 origin proof에는 TLS transcript가 충분하고, VPN 정보는 network access provenance 또는 enterprise policy evidence로만 쓰인다. 이 분리가 설계 문서에 있어야 한다.
+
+예를 들어 기업 내부 API가 IPsec site-to-site tunnel 뒤에 있고, 사용자가 그 API response를 zkTLS로 증명한다고 하자. verifier가 외부 서비스라면 "응답은 internal API origin의 TLS transcript에서 나왔다"가 핵심이고, IPsec tunnel의 SPI나 gateway identity는 공개하지 않는 편이 privacy에 맞을 수 있다. 반대로 감사 목적 verifier라면 "이 response는 approved partner tunnel의 Child SA를 통해 수집되었다"는 provenance도 필요할 수 있다. 두 경우의 공개 범위가 다르므로 IPsec evidence는 선택 가능한 layer로 모델링해야 한다.
+
+## Verification Checklist
+
+- IKEv2 control plane과 ESP data plane을 구분했는가?
+- SPD selector, SAD state, Child SA, SPI, sequence number를 artifact로 확인했는가?
+- tunnel mode와 transport mode의 보호 범위를 분리했는가?
+- anti-replay가 integrity 보호와 함께 의미를 갖는다는 점을 설명했는가?
+- rekey와 algorithm proposal mismatch를 실패 모드로 다뤘는가?
+- IPsec gateway identity와 TLS origin identity를 혼동하지 않았는가?
+- zkTLS가 IPsec channel protection과 다른 계층의 application proof임을 명시했는가?
+
+## Visual Artifact Brief
+
+- Artifact key: ipsec-ikev2-esp-stack
+- Purpose: IKEv2가 SA를 협상하고 ESP가 packet을 보호하는 control/data plane 분리를 보여준다.
+- Layout: 상단에는 IKE_SA_INIT, IKE_AUTH, CREATE_CHILD_SA 흐름을 두고, 하단에는 outbound SPD lookup에서 ESP tunnel packet 생성까지의 packet path를 둔다.
+- Labels: SPD, SAD, PAD, IKE SA, Child SA, SPI, sequence number, anti-replay window, tunnel mode, selector mismatch.
+- Motion idea: selector에 맞는 packet만 ESP envelope로 감싸지고, rekey 시 새 SPI로 packet line이 전환된다.
+- Reduced-motion state: control plane과 data plane을 나란히 둔 정적 stack diagram.
+
+## References
+
+- https://datatracker.ietf.org/doc/html/rfc4301
+- https://datatracker.ietf.org/doc/html/rfc4303
+- https://datatracker.ietf.org/doc/html/rfc7296
+- https://datatracker.ietf.org/doc/html/rfc8247
+- https://datatracker.ietf.org/doc/html/rfc8221
+- https://datatracker.ietf.org/doc/html/rfc6071
