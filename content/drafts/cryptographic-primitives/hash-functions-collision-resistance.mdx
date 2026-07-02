@@ -1,0 +1,134 @@
+---
+title: 해시 함수와 충돌 저항성
+chapter: Cryptographic Primitives
+chapterSlug: cryptographic-primitives
+articleSlug: hash-functions-collision-resistance
+status: draft
+difficulty: foundation
+wordCountTarget: 5200
+visualKey: hash-chain
+branch: content/c02-a03-hash-functions-collision-resistance
+readerQuestion: 해시는 왜 지문처럼 쓰이지만 원본의 의미를 보장하지는 않는가?
+zktlsBridge: 선택 공개 claim은 원본 transcript digest와 공개 필드를 안전하게 결합해야 한다.
+references:
+  - https://csrc.nist.gov/pubs/fips/180-4/upd1/final
+  - https://csrc.nist.gov/pubs/fips/202/final
+  - https://csrc.nist.gov/pubs/sp/800/185/final
+  - https://csrc.nist.gov/news/2022/nist-transitioning-away-from-sha-1-for-all-apps
+  - https://datatracker.ietf.org/doc/html/rfc9162
+  - https://datatracker.ietf.org/doc/html/rfc8446
+---
+
+# 해시 함수와 충돌 저항성
+
+## Reader Question
+
+해시는 데이터의 지문처럼 쓰인다. 하지만 지문이라는 비유는 반만 맞다. 해시 함수는 임의 길이 입력을 고정 길이 digest로 압축한다. digest가 같으면 같은 입력일 가능성이 매우 높다고 기대할 수 있지만, digest 자체가 원본의 의미를 설명하거나 원본이 올바른 source에서 왔음을 보장하지는 않는다. 해시는 binding 재료이지 semantic verifier가 아니다.
+
+질문은 "SHA-256을 썼는가?"보다 넓다. 어떤 bytes를 어떤 순서로 넣었는가? domain separator가 있는가? JSON canonicalization은 정해졌는가? field path와 value를 구분했는가? transcript digest와 public claim digest를 어떻게 연결했는가? 이 article은 해시를 단일 함수 호출이 아니라 commitment, transcript, Merkle proof, zkTLS claim binding의 공통 문법으로 다룬다.
+
+## Why It Matters
+
+NIST FIPS 180-4는 SHA-1과 SHA-2 계열 secure hash algorithms를 다루며, NIST FIPS 202는 SHA-3와 extendable-output functions를 표준화한다. NIST는 SHA-1 사용을 모든 application에서 전환하는 계획을 공지했고, 전환 완료 목표일을 2030년 12월 31일로 제시했다. SP 800-185는 cSHAKE, KMAC, TupleHash, ParallelHash처럼 SHA-3 derived function을 다룬다. TLS 1.3은 handshake transcript hash를 key schedule과 Finished verification에 사용한다. RFC 9162 Certificate Transparency도 Merkle Tree Hash와 inclusion proof를 통해 append-only log의 데이터를 작은 proof로 연결한다.
+
+zkTLS에서는 해시가 거의 모든 경계에 나타난다. TLS transcript digest, response commitment, redaction manifest hash, public input hash, verifying key hash, policy hash가 모두 proof artifact의 일부가 될 수 있다. 하지만 해시를 잘못 쓰면 binding ambiguity가 생긴다. 같은 문자열 조합이 다른 의미로 파싱되거나, 같은 value가 다른 field path에 붙거나, 같은 digest가 다른 protocol context에서 재사용될 수 있다.
+
+## Core Model
+
+해시의 세 가지 안전성 목표를 구분한다.
+
+| Property | 질문 | 직관 |
+|---|---|---|
+| Preimage resistance | digest에서 원본을 찾기 어려운가? | 지문만 보고 사람 전체를 복원하기 어렵다. |
+| Second preimage resistance | 주어진 원본과 같은 digest를 갖는 다른 원본을 찾기 어려운가? | 계약서를 보고 같은 지문을 가진 다른 계약서를 만들기 어렵다. |
+| Collision resistance | 아무 두 입력이라도 같은 digest가 나오게 찾기 어려운가? | 공격자가 두 문서를 함께 설계해 같은 지문을 만들기 어렵다. |
+
+이 속성들은 사용 맥락과 출력 길이에 의존한다. 또한 해시는 secret을 자동으로 만들지 않는다. public value의 hash는 public이다. 낮은 entropy 값, 예를 들어 `tier=gold` 같은 작은 domain의 값을 그대로 hash하면 공격자는 가능한 값을 모두 hash해 맞춰볼 수 있다. hiding이 필요하면 salt, commitment scheme, zero-knowledge proof 같은 추가 구조가 필요하다.
+
+## Protocol or System Artifact
+
+domain separation이 없는 commitment는 모호하다.
+
+```txt
+hash("field=age" || "value=18")
+hash("field=agevalue" || "=18")
+```
+
+실제 시스템에서는 length prefix, canonical encoding, domain tag를 사용해 input grammar를 분리한다.
+
+```txt
+H("zktls:v1:field-claim" ||
+  len(origin) || origin ||
+  len(path) || path ||
+  len(fieldPath) || fieldPath ||
+  len(valueHash) || valueHash)
+```
+
+이 artifact는 "무엇을 hash했는가"가 "어떤 hash를 썼는가"만큼 중요하다는 점을 보여준다. Merkle tree도 비슷하다. leaf hash와 internal node hash를 같은 domain으로 쓰면 구조 혼동이 생길 수 있으므로 leaf와 node domain을 분리한다. RFC 9162의 Merkle tree 구조는 이런 구분의 좋은 사례다.
+
+## Failure Mode
+
+첫 번째 실패는 raw JSON을 그대로 hash하는 것이다. JSON은 whitespace, key order, number representation, escaping에 따라 bytes가 달라질 수 있다. 같은 의미의 object가 다른 digest를 만들고, 다른 의미의 object가 parser 차이 때문에 같은 claim으로 해석될 수도 있다. canonicalization rule이 proof statement의 일부여야 한다.
+
+두 번째 실패는 field path를 hash하지 않는 것이다. `valueHash = H("gold")`만 public input으로 쓰면 그 값이 `membershipTier`에서 왔는지 `couponTier`에서 왔는지 알 수 없다. field path, origin, response scope를 함께 binding해야 한다.
+
+세 번째 실패는 hash를 MAC처럼 쓰는 것이다. `H(secret || message)` 같은 ad hoc construction은 length extension이나 parsing 문제를 만들 수 있다. shared secret이 있는 message authentication에는 HMAC 같은 검증된 MAC construction을 써야 한다. 해시는 secret key가 없는 public compression function이라는 사실을 잊으면 안 된다.
+
+네 번째 실패는 digest를 source provenance로 착각하는 것이다. digest는 bytes가 바뀌지 않았음을 비교하는 데 유용하지만, 그 bytes가 어떤 origin에서 왔는지는 별도 증거가 필요하다. zkTLS에서는 TLS transcript binding, notary/MPC evidence, verifier policy가 함께 있어야 한다.
+
+## Minimal Lab or Trace
+
+다음 pseudo-code는 domain separator가 있는 commitment와 없는 commitment를 비교한다.
+
+```ts
+const bad = sha256(`${fieldPath}:${value}`);
+
+const good = sha256(encode([
+  "zktls:v1:field-claim",
+  origin,
+  responseDigest,
+  fieldPath,
+  sha256(value),
+]));
+```
+
+lab에서는 같은 `value = "gold"`를 두 field path에 넣는다.
+
+| Field path | Value | Bad commitment | Good commitment |
+|---|---|---|---|
+| `/membershipTier` | gold | same value-derived hash | path-bound hash |
+| `/couponTier` | gold | same value-derived hash | different path-bound hash |
+
+목표는 SHA-256 구현이 아니라 encoding discipline이다. proof가 어떤 bytes universe를 대표하는지 명확해야 verifier가 같은 statement를 재구성할 수 있다.
+
+## zkTLS Bridge
+
+zkTLS selective disclosure는 원본 response를 전부 공개하지 않고 특정 field나 predicate만 공개하려 한다. 이때 해시는 hidden transcript와 public claim 사이의 접착제다. 하지만 접착제가 안전하려면 원본 transcript digest, origin, field path, canonical value, policy id, disclosure manifest가 함께 들어가야 한다.
+
+해시는 privacy를 자동으로 제공하지 않는다. public claim space가 작으면 hash만으로 숨겨지지 않는다. 예를 들어 `ageOver18=true`는 가능한 값이 두 개뿐이다. 따라서 hiding이 필요한 경우 salt, commitment, zero-knowledge proof, Merkle inclusion proof를 같이 설계해야 한다. zkTLS에서 해시의 역할은 "의미를 숨기는 마법"이 아니라 "검증자가 같은 구조를 재계산할 수 있는 binding grammar"다.
+
+## Verification Checklist
+
+- preimage, second preimage, collision resistance를 혼동하지 않았는가?
+- hash input의 canonical encoding과 domain separator를 명시했는가?
+- field path, origin, response digest, policy id가 public claim에 묶여 있는가?
+- low-entropy value hash를 privacy guarantee처럼 설명하지 않았는가?
+- Merkle proof나 transcript digest가 어떤 data universe를 대표하는지 적었는가?
+
+## Visual Artifact Brief
+
+- Artifact key: hash-chain
+- Purpose: raw response에서 transcript digest, field commitment, public claim으로 이어지는 binding chain을 보여준다.
+- Layout: response bytes -> canonicalizer -> transcript digest -> field path/value hash -> claim commitment -> verifier recompute.
+- Labels: "domain tag", "length prefix", "field path", "value hash", "policy id", "not hiding by itself".
+- Motion idea: field path나 domain tag를 제거하면 ambiguous binding warning이 표시된다.
+- Reduced-motion state: good/bad commitment input grammar를 두 개의 정적 stack으로 비교한다.
+
+## References
+
+- NIST FIPS 180-4 Update 1: https://csrc.nist.gov/pubs/fips/180-4/upd1/final
+- NIST FIPS 202: https://csrc.nist.gov/pubs/fips/202/final
+- NIST SP 800-185: https://csrc.nist.gov/pubs/sp/800/185/final
+- NIST SHA-1 transition notice: https://csrc.nist.gov/news/2022/nist-transitioning-away-from-sha-1-for-all-apps
+- RFC 9162: https://datatracker.ietf.org/doc/html/rfc9162
+- RFC 8446: https://datatracker.ietf.org/doc/html/rfc8446

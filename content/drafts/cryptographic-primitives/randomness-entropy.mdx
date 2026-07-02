@@ -1,0 +1,137 @@
+---
+title: 난수와 entropy
+chapter: Cryptographic Primitives
+chapterSlug: cryptographic-primitives
+articleSlug: randomness-entropy
+status: draft
+difficulty: foundation
+wordCountTarget: 4500
+visualKey: crypto-strip
+branch: content/c02-a01-randomness-entropy
+readerQuestion: 암호 시스템에서 예측 불가능성은 어디에서 오고 어디에서 무너지는가?
+zktlsBridge: zkTLS proof가 transcript와 claim을 묶을 때 randomness 품질이 replay와 linkage 위험을 좌우한다.
+references:
+  - https://csrc.nist.gov/pubs/sp/800/90/a/r1/final
+  - https://csrc.nist.gov/pubs/sp/800/90/b/final
+  - https://csrc.nist.gov/pubs/sp/800/90/c/final
+  - https://csrc.nist.gov/pubs/sp/800/57/pt1/r5/final
+  - https://datatracker.ietf.org/doc/html/rfc4086
+  - https://datatracker.ietf.org/doc/html/rfc8446
+---
+
+# 난수와 entropy
+
+## Reader Question
+
+암호에서 난수는 "무작위처럼 보이는 값"이 아니라 공격자가 예측하거나 재사용할 수 없는 상태 공간이다. 이 차이를 놓치면 난수 함수 호출 횟수만 세고 실제 보안은 놓친다. 좋은 난수는 키 생성, nonce, salt, challenge, session identifier, proof randomness처럼 서로 다른 역할로 나타난다. 같은 비트열이라도 위치가 바뀌면 실패 방식이 달라진다.
+
+질문은 단순하다. 공격자가 이 값을 미리 알 수 있는가? 이전 값을 보고 다음 값을 추측할 수 있는가? 같은 값이 두 번 쓰이면 어떤 보장이 깨지는가? 시스템이 시작 직후, VM snapshot 복원 직후, test seed 사용 중, browser runtime fallback 중에도 같은 답을 유지하는가? 이 article은 난수를 값이 아니라 source, conditioning, DRBG, use-site가 이어진 pipeline으로 보는 법을 다룬다.
+
+## Why It Matters
+
+NIST SP 800-90A Rev. 1은 결정론적 방법으로 random bits를 생성하는 DRBG mechanism을 다룬다. SP 800-90B는 random bit generation에 쓰이는 entropy source의 설계 원칙, 요구사항, validation test를 다룬다. 2025년에 final로 공개된 SP 800-90C는 SP 800-90A의 DRBG와 SP 800-90B의 entropy source를 포함하는 RBG construction을 다룬다. RFC 4086은 security randomness가 예측 불가능해야 하며, 여러 source와 운영 조건을 고려해야 함을 설명한다. 즉 "난수 API를 썼다"는 말은 충분하지 않다. entropy source와 상태 관리가 함께 맞아야 한다.
+
+TLS 1.3에서는 ClientHello와 ServerHello에 random 값이 들어가고, key schedule은 secret derivation과 transcript binding을 통해 session key를 만든다. zkTLS에서는 여기에 proof challenge, nonce, salt, hiding randomness가 추가된다. 낮은 entropy나 재사용은 replay, linkability, proof reuse, commitment opening confusion을 만든다. 암호 알고리즘이 강해도 randomness lifecycle이 약하면 전체 시스템이 약해진다.
+
+## Core Model
+
+난수 pipeline은 다음처럼 기억한다.
+
+```txt
+noise source -> entropy estimate -> conditioning -> DRBG state -> use-site value
+```
+
+noise source는 물리적 또는 시스템적 불확실성을 제공한다. entropy estimate는 공격자가 모르는 정보량을 보수적으로 판단한다. conditioning은 raw noise를 cryptographic primitive에 넣기 좋은 형태로 압축한다. DRBG는 내부 state에서 여러 random bits를 생성한다. use-site는 그 비트가 key인지 nonce인지 salt인지 challenge인지 결정한다.
+
+| 값 | 목적 | 실패하면 생기는 일 |
+|---|---|---|
+| Key | secret 자체 | 예측되면 모든 보호가 무너진다. |
+| Nonce | 한 key 아래에서 unique/fresh context | 재사용되면 AEAD나 signature scheme이 깨질 수 있다. |
+| Salt | 같은 입력을 다르게 binding | 없는 경우 dictionary나 cross-context linkage가 쉬워진다. |
+| Challenge | verifier가 freshness를 요구 | 재사용되면 replay가 쉬워진다. |
+| Proof randomness | zero-knowledge/hiding 성질 보조 | 반복되면 witness linkage나 privacy 손상이 생길 수 있다. |
+
+## Protocol or System Artifact
+
+다음 toy artifact는 randomness 사용처를 구분한다.
+
+```json
+{
+  "session": {
+    "clientRandom": "32 bytes from TLS handshake",
+    "serverRandom": "32 bytes from TLS handshake"
+  },
+  "proof": {
+    "verifierNonce": "one-time challenge",
+    "commitmentSalt": "per-claim salt",
+    "proofRandomness": "proof-system-specific"
+  },
+  "policy": {
+    "maxAgeSeconds": 600,
+    "nonceReuse": "reject"
+  }
+}
+```
+
+이 artifact의 핵심은 randomness를 한 칸에 넣지 않는 것이다. `clientRandom`과 `commitmentSalt`는 모두 random-looking bytes지만 역할이 다르다. verifier nonce는 freshness와 audience binding에 가깝고, salt는 commitment나 field binding의 domain을 나누며, proof randomness는 privacy 속성을 보조한다. 시각적으로는 source에서 use-site로 흐르는 strip이 적합하다.
+
+## Failure Mode
+
+첫 번째 실패는 deterministic test seed가 production에 남는 것이다. 테스트에서는 재현성이 필요하므로 고정 seed를 쓴다. 하지만 production proof에서 같은 salt나 nonce가 반복되면 같은 사용자의 여러 claim이 연결될 수 있다. 더 나쁘게는 challenge가 반복되어 오래된 proof를 새 요청에 붙일 수 있다.
+
+두 번째 실패는 uniqueness와 unpredictability를 혼동하는 것이다. counter는 unique할 수 있지만 secret key 생성에는 충분하지 않다. 반대로 random 값이라도 같은 key 아래 nonce로 재사용되면 위험하다. AEAD nonce는 대개 반복 금지가 핵심이고, key는 예측 불가능성이 핵심이다. 요구사항을 바꿔 쓰면 통제가 잘못된다.
+
+세 번째 실패는 entropy 고갈이나 VM snapshot을 무시하는 것이다. 같은 VM image가 같은 초기 DRBG state로 여러 instance를 시작하면 서로 다른 서비스가 같은 random sequence를 만들 수 있다. modern OS는 이를 줄이기 위한 장치를 갖지만, threat model에는 "runtime이 신뢰할 수 있는 CSPRNG를 제공한다"는 가정이 명시되어야 한다.
+
+## Minimal Lab or Trace
+
+아래 table은 반복 nonce와 fresh nonce의 차이를 보여주는 minimal trace다.
+
+| Attempt | Key id | Nonce | Claim | Decision |
+|---|---|---|---|---|
+| 1 | k1 | n-001 | tier == gold | accept |
+| 2 | k1 | n-001 | tier == gold | reject: nonce reused |
+| 3 | k1 | n-002 | tier == gold | accept |
+| 4 | k2 | n-001 | tier == gold | depends on nonce scope |
+
+scope가 중요하다. 어떤 nonce는 key마다 unique하면 충분하고, 어떤 challenge는 verifier와 audience마다 unique해야 한다. lab에서는 `nonceScope = keyId + verifierId + predicateId`처럼 scope를 명시하고, 같은 scope에서 중복되면 reject하는 pseudo-code를 작성한다.
+
+```ts
+const nonceScope = `${keyId}:${verifierId}:${predicateId}`;
+if (seen.has(`${nonceScope}:${nonce}`)) {
+  return "reject: nonce reused";
+}
+seen.add(`${nonceScope}:${nonce}`);
+```
+
+## zkTLS Bridge
+
+zkTLS는 "원본 TLS 응답을 숨기면서 특정 claim을 증명한다"는 구조다. 이때 randomness는 세 곳에서 중요하다. 첫째, TLS session 자체가 fresh key material에 의존한다. 둘째, proof request는 verifier challenge와 max age에 묶여야 replay를 줄인다. 셋째, selective disclosure는 salt나 proof randomness를 통해 같은 hidden field가 여러 verifier 사이에서 쉽게 연결되지 않도록 해야 한다.
+
+따라서 zkTLS proof artifact에는 random-looking 값만 넣는 것이 아니라 각 값의 scope와 lifecycle을 넣어야 한다. `challenge`, `issuedAt`, `expiresAt`, `audience`, `predicateId`, `saltScope`가 함께 있어야 verifier가 무엇을 재사용하면 안 되는지 알 수 있다. randomness는 crypto primitive가 아니라 proof policy의 일부이기도 하다.
+
+## Verification Checklist
+
+- key, nonce, salt, challenge, proof randomness를 같은 "난수"로 뭉치지 않았는가?
+- 각 random value의 scope와 reuse rule을 명시했는가?
+- production에서 deterministic test seed가 사용되지 않음을 확인하는 경로가 있는가?
+- verifier challenge가 audience, predicate, expiry에 묶여 있는가?
+- linkability를 줄여야 하는 값과 uniqueness만 필요한 값을 구분했는가?
+
+## Visual Artifact Brief
+
+- Artifact key: crypto-strip
+- Purpose: entropy source에서 zkTLS proof use-site까지 randomness가 이동하는 경로를 보여준다.
+- Layout: 왼쪽부터 noise source, conditioning, DRBG state, TLS/session, proof/challenge, verifier policy strip.
+- Labels: "entropy estimate", "DRBG state", "nonce scope", "challenge", "salt", "reuse rejects".
+- Motion idea: 값 chip을 클릭하면 key/nonce/salt/challenge별 실패 모드가 아래에 나타난다.
+- Reduced-motion state: 각 chip 옆에 failure badge를 정적으로 배치한다.
+
+## References
+
+- NIST SP 800-90A Rev. 1: https://csrc.nist.gov/pubs/sp/800/90/a/r1/final
+- NIST SP 800-90B: https://csrc.nist.gov/pubs/sp/800/90/b/final
+- NIST SP 800-90C: https://csrc.nist.gov/pubs/sp/800/90/c/final
+- NIST SP 800-57 Part 1 Rev. 5: https://csrc.nist.gov/pubs/sp/800/57/pt1/r5/final
+- RFC 4086: https://datatracker.ietf.org/doc/html/rfc4086
+- RFC 8446: https://datatracker.ietf.org/doc/html/rfc8446

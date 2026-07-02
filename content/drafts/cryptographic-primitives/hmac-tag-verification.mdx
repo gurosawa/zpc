@@ -1,0 +1,160 @@
+---
+title: MAC, HMAC, tag 검증
+chapter: Cryptographic Primitives
+chapterSlug: cryptographic-primitives
+articleSlug: hmac-tag-verification
+status: draft
+difficulty: intermediate
+wordCountTarget: 6200
+visualKey: crypto-strip
+branch: content/c02-a04-hmac-tag-verification
+readerQuestion: MAC과 HMAC은 메시지 무결성을 어떤 신뢰 관계 안에서 검증하는가?
+zktlsBridge: zkTLS는 TLS가 이미 검증한 tag와 transcript를 제3자 claim으로 안전하게 옮기는 문제를 다룬다.
+references:
+  - https://csrc.nist.gov/pubs/fips/198-1/final
+  - https://csrc.nist.gov/pubs/sp/800/224/ipd
+  - https://datatracker.ietf.org/doc/html/rfc2104
+  - https://datatracker.ietf.org/doc/html/rfc5869
+  - https://datatracker.ietf.org/doc/html/rfc5116
+  - https://datatracker.ietf.org/doc/html/rfc8446
+---
+
+# MAC, HMAC, tag 검증
+
+## Reader Question
+
+MAC은 message authentication code다. 이름 그대로 메시지가 공유 비밀을 가진 당사자 사이에서 바뀌지 않았음을 검증하는 tag를 만든다. HMAC은 cryptographic hash function을 building block으로 쓰는 MAC construction이다. 일반 hash와 다른 점은 key다. `SHA-256(message)`는 누구나 계산할 수 있지만, `HMAC(key, message)`는 key를 가진 쪽만 만들고 검증할 수 있다.
+
+이 구분은 작아 보이지만 TLS와 zkTLS를 이해하는 데 중요하다. TLS Finished, HKDF, AEAD tag, transcript binding은 모두 "어떤 key를 가진 당사자만 이 값을 만들 수 있는가?"라는 질문과 연결된다. zkTLS에서 verifier는 TLS session secret을 모른다. 그래서 기존 TLS 내부 tag를 그대로 검증하지 못한다. 대신 protocol은 그 검증된 사실을 proof artifact로 옮겨야 한다.
+
+## Why It Matters
+
+NIST FIPS 198-1은 HMAC을 approved hash function과 shared secret key를 결합한 message authentication mechanism으로 다룬다. NIST는 SP 800-224 initial public draft에서 FIPS 198-1 내용을 옮기고 message authentication 요구사항을 다루는 작업을 진행했다. 즉 이 영역은 표준 문서의 상태까지 확인해야 하는 항목이다. RFC 2104는 HMAC construction의 IETF specification이고, RFC 5869는 HMAC 기반 extract-and-expand key derivation function인 HKDF를 정의한다.
+
+TLS 1.3은 HKDF를 key schedule 중심에 둔다. Finished message도 transcript hash와 traffic secret에서 파생된 key를 사용해 handshake가 바뀌지 않았음을 검증한다. 여기서 HMAC은 단순 "hash helper"가 아니라 secret-dependent verification primitive다. zkTLS proof가 TLS transcript provenance를 다루려면 MAC/HMAC/tag의 신뢰 범위를 이해해야 한다.
+
+AEAD tag도 같은 장에서 다뤄야 한다. RFC 5116은 AEAD interface를 정의하고, 그 output은 ciphertext와 authentication tag를 포함한다. HMAC tag와 AEAD tag는 같은 API가 아니지만, verifier 입장에서는 둘 다 "keyed verification에 실패하면 메시지를 쓰지 않는다"는 공통 규칙을 갖는다. 이 article은 HMAC을 중심으로 보되, TLS record tag와 Finished verification을 같은 mental model 위에 올린다.
+
+## Core Model
+
+MAC은 다음 관계다.
+
+```txt
+tag = MAC(key, message)
+verify(key, message, tag) -> accept or reject
+```
+
+MAC은 confidentiality를 제공하지 않는다. 메시지를 숨기지 않고, 변경 여부를 검출한다. key를 모르는 공격자는 새 message에 맞는 valid tag를 만들기 어려워야 한다. HMAC은 이 역할을 hash function과 inner/outer keyed construction으로 수행한다. 중요한 점은 message만 바꿔도 tag가 바뀌고, key가 달라도 tag가 바뀐다는 것이다.
+
+| Mechanism | Key required? | Primary goal | Example |
+|---|---:|---|---|
+| Hash | no | public digest/binding | transcript digest |
+| MAC | yes | message authentication | API webhook signature |
+| HMAC | yes | hash-based MAC | HKDF, TLS Finished internals |
+| AEAD tag | yes | ciphertext/AAD authentication | TLS record protection |
+
+## Protocol or System Artifact
+
+다음 artifact는 message, key, tag verification strip이다.
+
+```json
+{
+  "message": "transcript_hash || context",
+  "key": "finished_key",
+  "tag": "HMAC(finished_key, transcript_hash)",
+  "decision": "accept only if recomputed tag matches"
+}
+```
+
+tag 검증은 비교 방식까지 포함한다. 공격자가 timing 차이를 관찰할 수 있는 환경에서는 byte-by-byte early return 비교가 side channel을 만들 수 있다. 모든 환경에서 같은 위험이 같은 크기는 아니지만, cryptographic tag는 constant-time comparison을 기본 습관으로 둔다. 문서나 code sample에서 `tag === expected`를 무비판적으로 쓰면 잘못된 패턴이 퍼진다.
+
+## Failure Mode
+
+첫 번째 실패는 일반 hash를 MAC처럼 쓰는 것이다. `SHA-256(secret || message)` 같은 ad hoc construction은 표준 HMAC과 다르다. parsing ambiguity, length extension, key separation 문제를 만들 수 있다. shared secret이 있는 message authentication에는 HMAC처럼 검토된 construction을 써야 한다.
+
+두 번째 실패는 tag mismatch를 soft failure로 다루는 것이다. tag가 맞지 않으면 메시지는 "부분적으로 신뢰"되는 것이 아니라 reject되어야 한다. logging을 위해 파싱할 수는 있어도 decision input으로 쓰면 안 된다. TLS record나 Finished 검증에서 이 원칙이 깨지면 transcript integrity가 무너진다.
+
+세 번째 실패는 key scope를 모호하게 하는 것이다. 같은 HMAC key를 서로 다른 protocol purpose에 재사용하면 domain separation이 약해진다. HKDF는 extract와 expand를 분리하고 `info` context로 key material을 목적별로 나누는 구조를 제공한다. "하나의 secret으로 모든 tag를 만든다"는 설계는 나중에 proof, session, audit tag가 서로 섞이는 위험을 만든다.
+
+네 번째 실패는 verification result와 proof statement를 혼동하는 것이다. TLS endpoint는 tag를 검증했지만, 제3자는 그 key를 모른다. 따라서 verifier에게 "tag가 맞았다"고 말하려면 별도의 증거가 필요하다. screenshot이나 JSON copy는 tag verification evidence가 아니다.
+
+다섯 번째 실패는 truncation policy를 숨기는 것이다. tag를 짧게 잘라 쓰는 protocol은 그 길이와 security level을 명시해야 한다. 어떤 tag length가 허용되는지는 mechanism과 policy에 따라 달라진다. zkTLS proof public input에 "검증된 tag"라는 말만 있고 tag length, cipher suite, transcript context가 없으면 verifier는 실제 보안 수준을 재구성하지 못한다.
+
+여섯 번째 실패는 key confirmation과 data authentication을 같은 이벤트로 기록하는 것이다. TLS Finished는 handshake transcript와 traffic secret derivation이 맞물렸음을 확인한다. AEAD record tag는 개별 record의 ciphertext와 AAD가 바뀌지 않았음을 확인한다. 둘 다 keyed verification이지만, 하나는 handshake-level confirmation이고 다른 하나는 record-level authentication이다. zkTLS proof statement가 이 층을 섞으면 어떤 증거가 어느 failure를 막았는지 알 수 없다.
+
+## Minimal Lab or Trace
+
+다음 pseudo-code는 HMAC mismatch를 decision으로 연결한다.
+
+```ts
+const message = "origin=api.example;field=/tier;value=gold";
+const tag = hmac(key, message);
+
+verifyHmac(key, message, tag); // accept
+verifyHmac(key, message.replace("gold", "platinum"), tag); // reject
+```
+
+trace table로 보면 더 명확하다.
+
+| Message | Key id | Tag source | Decision |
+|---|---|---|---|
+| original message | k1 | HMAC(k1, message) | accept |
+| modified message | k1 | old tag | reject |
+| original message | k2 | tag from k1 | reject |
+| original message | k1 | truncated without policy | reject unless truncation policy allows |
+
+lab에서 중요한 것은 HMAC 구현이 아니라 failure path다. mismatch가 나면 어떤 reason code가 남고, 이후 pipeline이 멈추는지 확인해야 한다. zkTLS verifier도 invalid proof, wrong transcript, wrong policy를 같은 "실패"로 뭉치지 말고 구분해야 한다.
+
+AEAD tag trace를 붙이면 HMAC과 record protection의 차이를 동시에 볼 수 있다.
+
+| Check | Input tuple | Secret material | Failure result |
+|---|---|---|---|
+| HMAC | message, tag | HMAC key | reject message |
+| HKDF Extract | salt, input keying material | HMAC primitive | wrong derived secret |
+| TLS Finished | transcript hash, verify_data | finished key | abort handshake |
+| AEAD record | nonce, AAD, ciphertext, tag | traffic key | reject record |
+
+같은 "tag"라는 단어를 쓰더라도 verification tuple과 key scope가 다르다. 이 table은 원고 독자가 tag를 결과 bytes로만 보지 않고, 검증 context로 기억하게 만든다.
+
+검증 trace에는 reject reason도 포함한다.
+
+| Reason | Meaning | Next action |
+|---|---|---|
+| tag-mismatch | message나 key context가 맞지 않음 | artifact reject |
+| wrong-purpose-key | tag는 맞을 수 있지만 key scope가 틀림 | policy/circuit error |
+| unsupported-truncation | tag length policy가 없음 | reject or manual review |
+| transcript-mismatch | Finished context가 다름 | session provenance reject |
+
+이 수준의 reason은 사용자에게 내부 secret을 노출하지 않으면서도 감사와 디버깅을 가능하게 한다.
+
+## zkTLS Bridge
+
+zkTLS는 TLS 내부의 MAC/HMAC/tag 검증 사실을 제3자 검증 가능 claim으로 옮긴다. 여기서 두 가지 경계가 있다. 첫째, TLS endpoint만 session traffic secret을 알고 record tag를 직접 검증할 수 있다. 둘째, 외부 verifier는 secret을 보지 않아야 한다. 이 간극을 메우기 위해 MPC-TLS, notary attestation, proof circuit 같은 구조가 등장한다.
+
+HMAC mental model은 public claim design에도 적용된다. public input에는 `origin`, `transcriptDigest`, `predicateId`, `policyId`, `challenge`가 함께 묶여야 한다. 그렇지 않으면 "tag는 맞았지만 어떤 statement에 대한 tag였는가"가 흐려진다. zkTLS proof는 HMAC을 대체하는 것이 아니라, key가 없는 verifier가 accept할 수 있는 새로운 evidence layer를 만든다.
+
+## Verification Checklist
+
+- hash와 MAC/HMAC의 key 사용 차이를 분명히 설명했는가?
+- tag mismatch가 reject로 이어지는 failure path를 적었는가?
+- constant-time comparison 또는 timing side-channel 주의를 언급했는가?
+- HKDF처럼 purpose separation이 필요한 이유를 설명했는가?
+- TLS 내부 검증과 zkTLS 외부 검증의 경계를 구분했는가?
+
+## Visual Artifact Brief
+
+- Artifact key: crypto-strip
+- Purpose: message/key/tag verification과 mismatch reject path를 보여준다.
+- Layout: message와 key가 HMAC box로 들어가 tag가 나오고, verifier가 recomputed tag와 비교한다.
+- Labels: "shared secret", "message", "tag", "constant-time compare", "reject on mismatch", "TLS Finished".
+- Motion idea: message, key, tag 중 하나를 바꾸면 comparison line이 빨간 reject로 바뀐다.
+- Reduced-motion state: accept/reject 네 행 table로 표시한다.
+
+## References
+
+- NIST FIPS 198-1: https://csrc.nist.gov/pubs/fips/198-1/final
+- NIST SP 800-224 Initial Public Draft: https://csrc.nist.gov/pubs/sp/800/224/ipd
+- RFC 2104: https://datatracker.ietf.org/doc/html/rfc2104
+- RFC 5869: https://datatracker.ietf.org/doc/html/rfc5869
+- RFC 5116: https://datatracker.ietf.org/doc/html/rfc5116
+- RFC 8446: https://datatracker.ietf.org/doc/html/rfc8446

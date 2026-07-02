@@ -225,7 +225,7 @@
       "order": 2,
       "title": "CRYPTOGRAPHIC PRIMITIVES",
       "slug": "cryptographic-primitives",
-      "status": "planned",
+      "status": "draft",
       "visualKey": "crypto-strip",
       "guidingQuestion": "TLS와 zkTLS가 의존하는 암호 재료는 어떤 보장과 한계를 가지는가?",
       "articles": [
@@ -236,7 +236,7 @@
           "title": "난수와 entropy",
           "slug": "randomness-entropy",
           "branch": "content/c02-a01-randomness-entropy",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "foundation",
           "wordCountTarget": 4500,
           "visualKey": "crypto-strip",
@@ -253,8 +253,14 @@
             "proof 생성의 randomness 요구를 언급했는가?"
           ],
           "references": [
-            "https://csrc.nist.gov/pubs/sp/800/57/pt1/r5/final"
-          ]
+            "https://csrc.nist.gov/pubs/sp/800/90/a/r1/final",
+            "https://csrc.nist.gov/pubs/sp/800/90/b/final",
+            "https://csrc.nist.gov/pubs/sp/800/90/c/final",
+            "https://csrc.nist.gov/pubs/sp/800/57/pt1/r5/final",
+            "https://datatracker.ietf.org/doc/html/rfc4086",
+            "https://datatracker.ietf.org/doc/html/rfc8446"
+          ],
+          "actualWordCount": 4921
         },
         {
           "id": "c02-a02",
@@ -263,7 +269,7 @@
           "title": "대칭키 암호와 AEAD",
           "slug": "symmetric-key-aead",
           "branch": "content/c02-a02-symmetric-key-aead",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "intermediate",
           "wordCountTarget": 6500,
           "visualKey": "crypto-strip",
@@ -281,8 +287,13 @@
           ],
           "references": [
             "https://csrc.nist.gov/pubs/fips/197/final",
-            "https://csrc.nist.gov/pubs/sp/800/38/d/final"
-          ]
+            "https://csrc.nist.gov/pubs/sp/800/38/d/final",
+            "https://datatracker.ietf.org/doc/html/rfc5116",
+            "https://datatracker.ietf.org/doc/html/rfc8439",
+            "https://datatracker.ietf.org/doc/html/rfc8452",
+            "https://datatracker.ietf.org/doc/html/rfc8446"
+          ],
+          "actualWordCount": 6247
         },
         {
           "id": "c02-a03",
@@ -291,7 +302,7 @@
           "title": "해시 함수와 충돌 저항성",
           "slug": "hash-functions-collision-resistance",
           "branch": "content/c02-a03-hash-functions-collision-resistance",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "foundation",
           "wordCountTarget": 5200,
           "visualKey": "hash-chain",
@@ -309,8 +320,13 @@
           ],
           "references": [
             "https://csrc.nist.gov/pubs/fips/180-4/upd1/final",
-            "https://datatracker.ietf.org/doc/html/rfc9162"
-          ]
+            "https://csrc.nist.gov/pubs/fips/202/final",
+            "https://csrc.nist.gov/pubs/sp/800/185/final",
+            "https://csrc.nist.gov/news/2022/nist-transitioning-away-from-sha-1-for-all-apps",
+            "https://datatracker.ietf.org/doc/html/rfc9162",
+            "https://datatracker.ietf.org/doc/html/rfc8446"
+          ],
+          "actualWordCount": 5022
         },
         {
           "id": "c02-a04",
@@ -319,7 +335,7 @@
           "title": "MAC, HMAC, tag 검증",
           "slug": "hmac-tag-verification",
           "branch": "content/c02-a04-hmac-tag-verification",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "intermediate",
           "wordCountTarget": 6200,
           "visualKey": "crypto-strip",
@@ -338,8 +354,12 @@
           "references": [
             "https://csrc.nist.gov/pubs/fips/198-1/final",
             "https://csrc.nist.gov/pubs/sp/800/224/ipd",
-            "https://datatracker.ietf.org/doc/html/rfc5869"
-          ]
+            "https://datatracker.ietf.org/doc/html/rfc2104",
+            "https://datatracker.ietf.org/doc/html/rfc5869",
+            "https://datatracker.ietf.org/doc/html/rfc5116",
+            "https://datatracker.ietf.org/doc/html/rfc8446"
+          ],
+          "actualWordCount": 6441
         },
         {
           "id": "c02-a05",
@@ -348,7 +368,7 @@
           "title": "공개키, 서명, 키 교환",
           "slug": "public-key-signatures-key-exchange",
           "branch": "content/c02-a05-public-key-signatures-key-exchange",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "intermediate",
           "wordCountTarget": 6800,
           "visualKey": "crypto-strip",
@@ -366,8 +386,13 @@
           ],
           "references": [
             "https://datatracker.ietf.org/doc/html/rfc8446",
-            "https://datatracker.ietf.org/doc/html/rfc5280"
-          ]
+            "https://datatracker.ietf.org/doc/html/rfc5280",
+            "https://csrc.nist.gov/pubs/fips/186-5/final",
+            "https://csrc.nist.gov/pubs/sp/800/56/a/r3/final",
+            "https://csrc.nist.gov/pubs/sp/800/56/c/r2/final",
+            "https://datatracker.ietf.org/doc/html/rfc7748"
+          ],
+          "actualWordCount": 6448
         },
         {
           "id": "c02-a06",
@@ -376,7 +401,7 @@
           "title": "키 관리와 crypto period",
           "slug": "key-management-crypto-period",
           "branch": "content/c02-a06-key-management-crypto-period",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "deep",
           "wordCountTarget": 7800,
           "visualKey": "risk-matrix",
@@ -393,8 +418,15 @@
             "proof artifact의 key version을 포함했는가?"
           ],
           "references": [
-            "https://csrc.nist.gov/pubs/sp/800/57/pt1/r5/final"
-          ]
+            "https://csrc.nist.gov/pubs/sp/800/57/pt1/r5/final",
+            "https://csrc.nist.gov/pubs/sp/800/57/pt2/r1/final",
+            "https://csrc.nist.gov/pubs/sp/800/133/r2/final",
+            "https://csrc.nist.gov/pubs/sp/800/131/a/r2/final",
+            "https://datatracker.ietf.org/doc/html/rfc8446",
+            "https://datatracker.ietf.org/doc/html/rfc5869",
+            "https://datatracker.ietf.org/doc/html/rfc9162"
+          ],
+          "actualWordCount": 8219
         }
       ]
     },

@@ -1,0 +1,151 @@
+---
+title: 대칭키 암호와 AEAD
+chapter: Cryptographic Primitives
+chapterSlug: cryptographic-primitives
+articleSlug: symmetric-key-aead
+status: draft
+difficulty: intermediate
+wordCountTarget: 6500
+visualKey: crypto-strip
+branch: content/c02-a02-symmetric-key-aead
+readerQuestion: AES-GCM 같은 AEAD는 암호화와 무결성 보장을 어떻게 함께 제공하는가?
+zktlsBridge: TLS record의 AEAD tag가 transcript claim의 무결성 출발점이다.
+references:
+  - https://csrc.nist.gov/pubs/fips/197/final
+  - https://csrc.nist.gov/pubs/sp/800/38/d/final
+  - https://datatracker.ietf.org/doc/html/rfc5116
+  - https://datatracker.ietf.org/doc/html/rfc8439
+  - https://datatracker.ietf.org/doc/html/rfc8452
+  - https://datatracker.ietf.org/doc/html/rfc8446
+---
+
+# 대칭키 암호와 AEAD
+
+## Reader Question
+
+대칭키 암호는 같은 secret key를 가진 당사자들이 빠르게 데이터를 보호하는 도구다. 하지만 "암호화"만으로는 충분하지 않다. 암호문이 읽히지 않아도 공격자가 bit를 바꾸거나, header를 다른 context에 붙이거나, nonce를 재사용하게 만들면 시스템은 깨질 수 있다. 그래서 현대 protocol은 encryption과 authentication을 따로 조립하지 않고 AEAD, 즉 authenticated encryption with associated data를 사용한다.
+
+AEAD의 핵심 질문은 "어떤 plaintext를 숨기고, 어떤 associated data를 숨기지 않지만 무결성에는 묶을 것인가?"다. TLS record layer는 application data를 AEAD로 보호한다. zkTLS는 나중에 이 보호된 record가 어떤 origin/session에서 왔는지 증명하려 한다. 따라서 AEAD를 이해하지 못하면 TLS transcript와 proof claim의 무결성 근거를 흐리게 된다.
+
+## Why It Matters
+
+NIST FIPS 197은 AES를 128-bit block과 128/192/256-bit key를 갖는 block cipher family로 표준화한다. 하지만 AES 자체는 block 변환이다. 실제 메시지 보호에는 mode가 필요하다. NIST SP 800-38D는 GCM과 GMAC을 다루며, GCM을 authenticated encryption with associated data algorithm으로 설명한다. 해당 NIST 페이지는 2024년에 SP 800-38D 개정 결정을 알리고 있으므로, 본문에서는 GCM의 현재 표준적 위치와 nonce 관리 위험을 함께 다룬다. RFC 5116은 AEAD interface를 nonce, plaintext, associated data, ciphertext, tag를 포함하는 protocol interface로 정리한다.
+
+TLS 1.3은 오래된 record protection 조합을 줄이고 AEAD cipher suite를 사용한다. 여기서 record type, sequence number, negotiated key, nonce construction, additional data가 함께 작동한다. zkTLS proof가 "이 응답은 TLS로 보호되었다"고 말하려면 단순히 암호문이 있었다는 사실보다, record가 올바른 AEAD verification을 통과했다는 흐름이 중요하다.
+
+AEAD는 AES-GCM만을 뜻하지 않는다. RFC 8439는 ChaCha20-Poly1305를 IETF protocol에서 쓰기 위한 AEAD로 정의하고, RFC 8452는 nonce misuse-resistant 성격을 가진 AES-GCM-SIV를 다룬다. 이 article은 특정 cipher suite를 추천하는 글이 아니라 AEAD interface의 공통 구조를 설명한다. cipher suite 선택은 성능, hardware support, misuse resistance, protocol compatibility에 따라 달라질 수 있지만, verifier가 확인해야 할 tuple은 여전히 key, nonce, plaintext/ciphertext, AAD, tag다.
+
+## Core Model
+
+AEAD는 다음 다섯 값을 하나의 검증 단위로 묶는다.
+
+```txt
+key + nonce + plaintext + associated data -> ciphertext + tag
+key + nonce + ciphertext + associated data + tag -> plaintext or reject
+```
+
+plaintext는 숨길 데이터다. associated data는 숨기지 않지만 인증 범위에는 포함할 데이터다. nonce는 같은 key 아래에서 encryption invocation을 구분한다. tag는 ciphertext와 associated data가 바뀌지 않았음을 검증한다. receiver는 tag verification이 실패하면 plaintext를 사용하지 않아야 한다.
+
+| Component | Hidden? | Integrity protected? | Example |
+|---|---:|---:|---|
+| Plaintext | yes | yes | HTTP response bytes |
+| Associated data | no | yes | record header/context |
+| Nonce | no 또는 derived | yes by construction | sequence-derived value |
+| Ciphertext | no | yes | encrypted record |
+| Tag | no | verification evidence | authentication tag |
+
+## Protocol or System Artifact
+
+TLS-style record를 단순화하면 다음과 같다.
+
+```json
+{
+  "record": {
+    "sequence": 17,
+    "aad": "content-type || legacy-version || length",
+    "nonce": "static_iv xor sequence",
+    "ciphertext": "encrypted application data",
+    "tag": "authentication tag"
+  },
+  "verification": "decrypt only if tag verifies"
+}
+```
+
+이 artifact에서 중요한 것은 `aad`가 암호화되지 않아도 무결성 범위에 들어간다는 점이다. 공격자가 header context를 바꾸면 tag verification이 실패해야 한다. 또한 sequence-derived nonce는 "random해 보이기"보다 "같은 key 아래 중복되지 않기"가 중요하다. GCM에서는 nonce reuse가 치명적일 수 있으므로 key/nonce 관리가 mode safety의 일부다.
+
+## Failure Mode
+
+첫 번째 실패는 tag verification을 optional처럼 다루는 것이다. 복호화 API가 plaintext-looking bytes를 돌려주더라도 tag가 실패하면 그 데이터는 버려야 한다. "일단 파싱해 보고 오류를 처리한다"는 방식은 padding oracle이나 parsing side effect 같은 문제를 만들 수 있다.
+
+두 번째 실패는 nonce reuse다. 같은 key와 nonce로 두 메시지를 암호화하면 GCM 같은 mode에서는 confidentiality와 integrity가 모두 위험해질 수 있다. 이 문제는 난수 품질만의 문제가 아니다. counter reset, VM snapshot, key rotation 실패, sequence number overflow 같은 운영 문제도 nonce reuse를 만든다.
+
+세 번째 실패는 associated data를 빠뜨리는 것이다. 메시지 body만 인증하고 context를 묶지 않으면 같은 ciphertext/tag가 다른 endpoint, 다른 policy, 다른 protocol version에서 의미가 바뀔 수 있다. zkTLS에서 이와 비슷한 실패는 public claim을 transcript digest, origin, policy id와 함께 묶지 않는 것이다.
+
+네 번째 실패는 encryption과 authorization을 혼동하는 것이다. TLS record가 올바르게 보호되어도 origin server가 잘못된 권한으로 응답을 반환했을 수 있다. AEAD는 network tampering을 막지만 application policy correctness를 보장하지 않는다. 이 경계는 Chapter 01의 인증/인가 구분과 연결된다.
+
+다섯 번째 실패는 misuse-resistant 이름을 면책 조항으로 읽는 것이다. AES-GCM-SIV 같은 construction은 특정 nonce misuse에 더 강한 성질을 목표로 하지만, 이것이 key lifecycle, replay prevention, context binding을 제거한다는 뜻은 아니다. 특히 zkTLS verifier는 "nonce misuse-resistant AEAD를 썼다"가 아니라 "이 proof가 어떤 session, 어떤 record, 어떤 policy에 묶였는가"를 확인해야 한다.
+
+여섯 번째 실패는 record verification과 application parsing 순서를 뒤집는 것이다. HTTP parser, JSON parser, redaction selector는 인증된 plaintext 위에서만 실행되어야 한다. tag 검증 전 bytes를 application layer로 넘기면, 암호 검증 실패가 parser side effect나 error oracle로 새어 나갈 수 있다. zkTLS pipeline에서도 record authentication, canonical parsing, selective disclosure 순서를 명확히 둬야 한다.
+
+## Minimal Lab or Trace
+
+다음 pseudo-trace는 AAD가 바뀌면 tag verification이 실패해야 함을 보여준다.
+
+```ts
+const key = "k1";
+const nonce = "n17";
+const plaintext = "{\"tier\":\"gold\"}";
+const aad = "origin=api.example.invalid;path=/me";
+
+const record = aeadSeal({ key, nonce, plaintext, aad });
+
+aeadOpen({ ...record, aad }); // ok
+aeadOpen({ ...record, aad: "origin=evil.example;path=/me" }); // reject
+```
+
+이 lab에서 검증자는 plaintext를 보지 않고도 "context가 바뀌면 실패해야 한다"는 구조를 배운다. 실제 browser lab에서는 Web Crypto나 mock AEAD를 쓰되, 실제 secret이나 production token을 쓰지 않는다. 중요한 것은 algorithm implementation이 아니라 input tuple의 불변성이다.
+
+두 번째 lab은 nonce scope를 바꾸는 것이다.
+
+| Case | Key | Nonce | AAD | Expected |
+|---|---|---|---|---|
+| baseline | k1 | n1 | origin A | decrypt ok |
+| same key, same nonce, new plaintext | k1 | n1 | origin A | policy violation |
+| same nonce, different key | k2 | n1 | origin A | separate scope |
+| same key, new nonce, changed AAD | k1 | n2 | origin B | old tag rejects |
+
+이 table은 "nonce는 전역 unique여야 한다"는 단순화를 피하게 한다. 실제 요구는 key와 algorithm, protocol construction에 묶인다. 하지만 구현자는 그 scope를 명시해야 한다.
+
+## zkTLS Bridge
+
+zkTLS는 TLS record layer의 AEAD verification 이후에 시작된다. 사용자가 받은 response는 TLS endpoint 사이에서 AEAD로 보호되었다. 하지만 제3자는 그 세션 key를 모르므로 직접 record를 열 수 없다. zkTLS protocol은 이 gap을 해결하려고 한다. 즉 "TLS가 보호한 response에서 나온 claim"을 제3자가 검증할 수 있는 artifact로 옮긴다.
+
+이때 AEAD의 mental model은 그대로 유지된다. public claim은 hidden witness와 transcript commitment에 묶여야 하고, associated data에 해당하는 origin, path, time, policy id도 같이 묶여야 한다. 그렇지 않으면 claim은 맞지만 context가 다른 proof가 된다. TLS AEAD tag가 record 무결성의 출발점이라면, zkTLS proof는 그 무결성을 selective disclosure와 verifier policy까지 확장하는 계층이다.
+
+실무적으로 proof builder는 "복호화된 응답"을 입력으로 받는 함수가 아니라 "검증된 record에서 추출된 응답"을 입력으로 받는 함수여야 한다. 이 표현 차이가 중요하다. 전자는 plaintext origin을 숨기고, 후자는 AEAD 검증과 transcript context를 요구사항으로 남긴다.
+
+## Verification Checklist
+
+- encryption, authentication, associated data를 분리해 설명했는가?
+- tag verification 실패 시 plaintext를 사용하지 않는다는 규칙을 명시했는가?
+- key/nonce reuse failure를 운영 문제와 연결했는가?
+- TLS record layer에서 AEAD가 어디에 쓰이는지 설명했는가?
+- zkTLS public claim이 transcript/origin/policy context와 함께 묶여야 함을 적었는가?
+
+## Visual Artifact Brief
+
+- Artifact key: crypto-strip
+- Purpose: AEAD input tuple과 output tuple, verification failure path를 한 줄로 보여준다.
+- Layout: `key`, `nonce`, `plaintext`, `AAD` chip이 seal box로 들어가고 `ciphertext`, `tag`가 나온다. open box는 tag failure 시 red reject path로 간다.
+- Labels: "hidden", "authenticated but visible", "nonce scope", "reject before use", "TLS record".
+- Motion idea: AAD나 nonce chip을 바꾸면 tag가 깨지고 plaintext path가 닫힌다.
+- Reduced-motion state: 정상 tuple과 tampered tuple을 두 행으로 비교한다.
+
+## References
+
+- NIST FIPS 197: https://csrc.nist.gov/pubs/fips/197/final
+- NIST SP 800-38D: https://csrc.nist.gov/pubs/sp/800/38/d/final
+- RFC 5116: https://datatracker.ietf.org/doc/html/rfc5116
+- RFC 8439: https://datatracker.ietf.org/doc/html/rfc8439
+- RFC 8452: https://datatracker.ietf.org/doc/html/rfc8452
+- RFC 8446: https://datatracker.ietf.org/doc/html/rfc8446

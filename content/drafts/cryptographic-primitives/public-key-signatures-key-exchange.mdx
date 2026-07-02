@@ -1,0 +1,143 @@
+---
+title: 공개키, 서명, 키 교환
+chapter: Cryptographic Primitives
+chapterSlug: cryptographic-primitives
+articleSlug: public-key-signatures-key-exchange
+status: draft
+difficulty: intermediate
+wordCountTarget: 6800
+visualKey: crypto-strip
+branch: content/c02-a05-public-key-signatures-key-exchange
+readerQuestion: 공개키 암호, 전자서명, 키 교환은 TLS handshake에서 어떻게 다른 역할을 맡는가?
+zktlsBridge: zkTLS provenance는 서버 인증서와 TLS key schedule이 만든 출처 신호에 기대어 시작한다.
+references:
+  - https://datatracker.ietf.org/doc/html/rfc8446
+  - https://datatracker.ietf.org/doc/html/rfc5280
+  - https://csrc.nist.gov/pubs/fips/186-5/final
+  - https://csrc.nist.gov/pubs/sp/800/56/a/r3/final
+  - https://csrc.nist.gov/pubs/sp/800/56/c/r2/final
+  - https://datatracker.ietf.org/doc/html/rfc7748
+---
+
+# 공개키, 서명, 키 교환
+
+## Reader Question
+
+공개키 암호, 전자서명, 키 교환은 모두 public/private key라는 말로 묶이지만 역할은 다르다. 공개키 암호는 공개키로 숨기고 개인키로 연다. 전자서명은 개인키로 서명하고 공개키로 검증한다. 키 교환은 양쪽이 공개 값을 주고받아 공유 secret을 만든다. TLS handshake에서는 이 역할들이 섞이지 않고 서로 다른 질문에 답한다.
+
+서버 인증서는 "이 공개키가 이 domain의 server identity와 연결된다"는 신뢰 자료다. 서명은 handshake message가 인증된 key에 의해 확인될 수 있음을 보여준다. ephemeral Diffie-Hellman 계열 키 교환은 session key material을 만든다. 이 구분이 흐리면 "인증서는 있으니 세션은 안전하다"거나 "키 교환을 했으니 origin이 맞다"는 잘못된 결론이 나온다.
+
+## Why It Matters
+
+RFC 8446은 TLS 1.3 handshake가 key agreement, server authentication, transcript binding을 결합하는 방식을 정의한다. RFC 5280은 Internet X.509 PKI certificate와 CRL profile, certification path validation을 다룬다. NIST FIPS 186-5는 digital signature standard이고, NIST SP 800-56A Rev. 3은 discrete logarithm 기반 pair-wise key-establishment scheme을 다룬다. SP 800-56C Rev. 2는 established shared secret에서 keying material을 derivation하는 방법을 다루며, 해당 NIST 페이지는 2026년에 revise 계획을 공지한다. RFC 7748은 X25519와 X448 같은 elliptic curve Diffie-Hellman 함수의 protocol-level 배경이다.
+
+zkTLS는 TLS response provenance를 주장한다. 그 provenance는 "어떤 server와 세션을 맺었는가"에서 시작한다. 서버 인증서와 certificate path는 origin identity의 근거이고, handshake transcript와 Finished는 세션 무결성의 근거이며, key exchange는 record protection key의 출발점이다. proof system이 아무리 좋아도 이 출처 신호를 혼동하면 잘못된 origin claim을 만들 수 있다.
+
+## Core Model
+
+세 primitive를 한 표로 분리한다.
+
+| Primitive | Private key action | Public key action | TLS role |
+|---|---|---|---|
+| Public-key encryption | decrypt | encrypt | TLS 1.3 핵심 handshake에서는 중심 역할이 아님 |
+| Digital signature | sign | verify | server authentication, certificate/key proof |
+| Key exchange/agreement | combine private share | send public share | ephemeral shared secret 생성 |
+
+TLS 1.3에서 중요한 것은 authenticated key exchange다. key exchange만 하면 man-in-the-middle가 끼어들 수 있다. authentication만 하면 fresh session secret이 생기지 않는다. transcript binding이 없으면 공격자가 message context를 바꿀 수 있다. 따라서 handshake는 세 가지를 합쳐 "이 origin과 이 transcript에 대한 fresh secret"을 만든다.
+
+## Protocol or System Artifact
+
+단순화한 TLS handshake trace는 다음과 같다.
+
+```txt
+ClientHello: supported groups, key_share, random
+ServerHello: selected group, key_share, random
+Certificate: server certificate chain
+CertificateVerify: signature over transcript
+Finished: keyed verification over transcript
+Application Data: AEAD records under traffic secrets
+```
+
+`Certificate`는 identity material이다. `CertificateVerify`는 server가 certificate public key에 대응하는 private key를 통제함을 transcript 위에서 보여준다. `ServerHello key_share`는 ephemeral key exchange material이다. `Finished`는 handshake transcript와 derived secret이 서로 맞다는 최종 확인이다.
+
+zkTLS diagram에서는 이 trace에 `origin`, `transcript digest`, `traffic secret handling`, `response record`, `public claim`을 붙이면 된다. 서버 인증서만 떼어 내면 response provenance가 아니고, record plaintext만 떼어 내면 origin evidence가 아니다.
+
+certificate path validation은 별도 artifact로 둔다.
+
+| Certificate field | Why it matters |
+|---|---|
+| Subject/SAN | verifier가 origin name과 연결할 identity |
+| Issuer/path | trust anchor까지 이어지는 chain |
+| Validity period | handshake 시각에 유효했는지 |
+| Key usage | 해당 key가 서명/인증 용도에 맞는지 |
+| Signature algorithm | certificate와 transcript signature 검증 방법 |
+
+이 표는 zkTLS proof가 certificate 전체를 공개해야 한다는 뜻은 아니다. 필요한 경우 verifier는 origin validation을 off-circuit에서 수행하고, circuit에는 transcript digest와 public claim만 넣을 수 있다. 중요한 것은 어느 경계에서 무엇을 검증했는지 기록하는 것이다.
+
+## Failure Mode
+
+첫 번째 실패는 signing key와 key exchange key를 섞는 것이다. 인증서의 public key는 server identity를 검증하는 데 쓰인다. ephemeral key share는 session secret을 만드는 데 쓰인다. 같은 "키"라는 단어 때문에 둘을 같은 lifecycle로 다루면 회전, 폐기, audit이 꼬인다.
+
+두 번째 실패는 static key exchange나 non-ephemeral secret을 선호해 forward secrecy를 잃는 것이다. ephemeral DH 계열은 long-term key가 나중에 노출되어도 과거 session content 보호를 강화한다. TLS 1.3은 이런 방향으로 handshake를 단순화했다. zkTLS가 과거 transcript를 다룰 때도 long-term credential과 session-specific secret을 구분해야 한다.
+
+세 번째 실패는 certificate validation을 "서명 검증" 하나로 축소하는 것이다. RFC 5280 path validation은 issuer, validity period, name constraints, key usage, revocation-related material 등 여러 맥락을 가진다. 검증자가 origin을 claim에 넣을 때는 "서명이 맞았다"보다 "어떤 policy로 certificate path가 valid했는가"가 중요하다.
+
+네 번째 실패는 proof artifact가 key schedule context를 잃는 것이다. response bytes만 proof에 넣고 negotiated TLS version, cipher suite, transcript hash, origin을 빼면 verifier는 어떤 security context에서 온 응답인지 알 수 없다. minimal disclosure와 provenance 보존은 함께 설계해야 한다.
+
+다섯 번째 실패는 off-circuit verification과 on-circuit verification의 책임을 흐리는 것이다. 어떤 zkTLS 설계는 certificate path validation이나 signature verification을 proof 밖에서 수행하고 그 결과를 public input으로 넣을 수 있다. 다른 설계는 일부 cryptographic verification을 circuit 안에서 모델링할 수 있다. 어느 쪽이든 "검증됐다"는 말만 남기면 안 된다. off-circuit 결과에는 verifier software version, policy id, accepted root set 같은 context가 필요하고, on-circuit 결과에는 circuit id와 public input schema가 필요하다.
+
+## Minimal Lab or Trace
+
+다음 table은 handshake 요소를 역할로 분해한다.
+
+| Trace item | Authentication | Key agreement | Transcript binding |
+|---|---|---|---|
+| Certificate chain | yes | no | indirect |
+| CertificateVerify | yes | no | yes |
+| KeyShare | no by itself | yes | yes through transcript |
+| Finished | no by itself | derived key proof | yes |
+| Application record | endpoint protected | uses traffic secret | record sequence/context |
+
+toy lab은 "certificate key"와 "ephemeral share"를 다른 색으로 표시하고, 각 값이 어느 verification step에 들어가는지 따라간다. 두 값을 하나의 `serverKey` 변수로 뭉치지 않는 것이 목표다.
+
+두 번째 trace는 transcript tampering이다.
+
+```txt
+baseline: ClientHello || ServerHello || Certificate || CertificateVerify || Finished
+tamper:   ClientHello || changed ServerHello.key_share || Certificate || CertificateVerify || Finished
+expected: Certificate signature alone may still verify, but Finished/transcript binding fails
+```
+
+이 trace는 "인증서 검증 성공"이 "전체 handshake 검증 성공"이 아니라는 점을 보여준다. zkTLS claim도 마찬가지다. origin identity, key exchange, transcript hash, record decryption이 같은 statement 안에서 연결되어야 한다.
+
+## zkTLS Bridge
+
+zkTLS provenance는 TLS handshake가 만든 origin/session evidence에 기대어 시작한다. 사용자는 origin server와 TLS session을 맺고 response를 받는다. proof는 그 response가 특정 origin과 handshake context에서 왔다는 사실을 최소 공개로 전달하려 한다. 따라서 proof statement에는 server identity, transcript digest, response commitment, disclosure predicate가 함께 있어야 한다.
+
+MPC-TLS나 notary 기반 구조에서도 이 분리는 유지된다. notary가 확인하는 것은 단순 plaintext가 아니라 TLS session에서 나온 data다. verifier가 받아야 하는 것도 "문자열 gold"가 아니라 "특정 origin, 특정 transcript, 특정 policy 아래서 `membershipTier == gold`였다는 claim"이다. 공개키 primitive는 그 출처 신호의 뿌리다.
+
+## Verification Checklist
+
+- 공개키 암호, 전자서명, 키 교환의 목적을 분리했는가?
+- TLS handshake에서 certificate, key_share, CertificateVerify, Finished의 역할을 구분했는가?
+- ephemeral key exchange와 forward secrecy를 언급했는가?
+- certificate path validation을 단순 서명 검증으로 축소하지 않았는가?
+- zkTLS proof statement가 origin/session/transcript context를 보존하는가?
+
+## Visual Artifact Brief
+
+- Artifact key: crypto-strip
+- Purpose: TLS handshake에서 signature path와 key exchange path가 합쳐져 record protection으로 이어지는 흐름을 보여준다.
+- Layout: 위 lane은 certificate/signature, 아래 lane은 ephemeral key share/key schedule, 오른쪽에서 Finished와 application record로 합류한다.
+- Labels: "certificate identity", "signature verification", "ephemeral DH", "traffic secret", "transcript hash", "origin claim".
+- Motion idea: signature lane이나 key-exchange lane을 끄면 어떤 보장이 사라지는지 표시한다.
+- Reduced-motion state: 두 lane을 고정된 sequence table로 표시한다.
+
+## References
+
+- RFC 8446: https://datatracker.ietf.org/doc/html/rfc8446
+- RFC 5280: https://datatracker.ietf.org/doc/html/rfc5280
+- NIST FIPS 186-5: https://csrc.nist.gov/pubs/fips/186-5/final
+- NIST SP 800-56A Rev. 3: https://csrc.nist.gov/pubs/sp/800/56/a/r3/final
+- NIST SP 800-56C Rev. 2: https://csrc.nist.gov/pubs/sp/800/56/c/r2/final
+- RFC 7748: https://datatracker.ietf.org/doc/html/rfc7748
