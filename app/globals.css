@@ -258,6 +258,14 @@ textarea:focus-visible {
   gap: var(--toc-section-gap-y);
 }
 
+.toc-section {
+  --artifact-scan-x: -110%;
+}
+
+.toc-section.is-visible {
+  --artifact-scan-x: 110%;
+}
+
 .section-heading-row {
   align-items: start;
   display: grid;
@@ -277,7 +285,30 @@ textarea:focus-visible {
 
 .section-number {
   color: var(--text-secondary);
+  display: inline-block;
   min-width: 22px;
+  transform: translateY(0);
+}
+
+.toc-section.is-visible .section-number {
+  animation: section-counter-tick 0.36s steps(4, end) both;
+}
+
+@keyframes section-counter-tick {
+  0% {
+    color: var(--text-secondary);
+    transform: translateY(5px);
+  }
+
+  60% {
+    color: var(--accent);
+    transform: translateY(-1px);
+  }
+
+  100% {
+    color: var(--text-secondary);
+    transform: translateY(0);
+  }
 }
 
 .section-title {
@@ -301,6 +332,24 @@ textarea:focus-visible {
   height: var(--artifact-slot-height);
   margin: 14px 0 var(--toc-heading-list-gap);
   overflow: hidden;
+  position: relative;
+}
+
+.visual-artifact-slot::after {
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  content: "";
+  height: 1px;
+  left: 0;
+  opacity: 0;
+  position: absolute;
+  top: 50%;
+  transform: translateX(var(--artifact-scan-x));
+  transition: transform 0.8s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.2s ease;
+  width: 42%;
+}
+
+.toc-section.is-visible .visual-artifact-slot::after {
+  opacity: 0.9;
 }
 
 .artifact-schematic {
@@ -316,11 +365,16 @@ textarea:focus-visible {
   border: 1px solid var(--border);
   display: block;
   height: 16px;
+  transition: border-color 0.35s ease, transform 0.35s ease;
 }
 
 .artifact-schematic span:nth-child(2),
 .artifact-schematic span:nth-child(4) {
   border-style: dotted;
+}
+
+.toc-section.is-visible .artifact-schematic span:nth-child(odd) {
+  border-color: var(--accent);
 }
 
 .artifact-label {
@@ -377,9 +431,16 @@ textarea:focus-visible {
     transparent var(--leader-dot-size),
     transparent calc(var(--leader-dot-size) + var(--leader-dot-gap))
   );
+  background-position: 0 0;
   height: var(--leader-thickness);
   margin: 0 8px var(--leader-y-offset);
   min-width: 24px;
+  transition: background-position 0.4s ease;
+}
+
+.article-row:hover .article-leader,
+.search-result:hover .search-result-leader {
+  background-position: 12px 0;
 }
 
 .compact-meta {
@@ -836,5 +897,19 @@ textarea:focus-visible {
 
   .masthead-line {
     transform: scaleX(1);
+  }
+
+  .toc-section,
+  .toc-section.is-visible {
+    --artifact-scan-x: 0;
+  }
+
+  .toc-section.is-visible .section-number {
+    animation: none;
+  }
+
+  .visual-artifact-slot::after {
+    opacity: 0;
+    transition: none;
   }
 }

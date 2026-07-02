@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { GuideShell } from "@/components/guide-shell";
+import { TocMotion } from "@/components/toc-motion";
 import type { TocSection } from "@/lib/content";
 import { getChapters, getTocSections } from "@/lib/content";
 
@@ -195,6 +196,7 @@ export default function Home() {
       wordsLabel={formatWords(totalWords)}
     >
       <div className="toc-page">
+        <TocMotion />
         <nav className="editorial-toc" aria-label="Guide table of contents">
           <div className="editorial-toc-grid">
             {tocColumns.map((column, columnIndex) => (
