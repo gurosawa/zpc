@@ -1,148 +1,269 @@
 import Link from "next/link";
 import { GuideShell } from "@/components/guide-shell";
-import { getChapters } from "@/lib/content";
+import type { TocSection } from "@/lib/content";
+import { getChapters, getTocSections } from "@/lib/content";
 
-const tocSections = [
-  {
-    number: "1.",
+const sectionOverrides: Record<string, Partial<TocSection>> = {
+  "foundations-of-cryptography": {
     title: "CRYPTOGRAPHIC PRIMITIVES",
-    slug: "foundations-of-cryptography",
-    items: [
-      ["What is a commitment?", "2.4K WORDS"],
-      ["Symmetric vs public-key crypto.", "3.1K WORDS"],
-      ["Hashes and digital signatures.", "3.7K WORDS"],
-      ["MAC, AEAD and AES-GCM.", "2.8K WORDS"],
-    ],
+    visualKey: "merkle-branch",
   },
-  {
-    number: "2.",
+  "tls-protocol": {
     title: "TLS AND WEB TRUST",
-    slug: "tls-protocol",
-    items: [
-      ["How HTTPS protects a request.", "2.9K WORDS"],
-      ["TLS 1.2 vs TLS 1.3 handshakes.", "4.1K WORDS"],
-      ["Certificates and X.509 chains.", "2.6K WORDS"],
-      ["Where normal TLS stops short.", "3.0K WORDS"],
+    visualKey: "tls-record-strip",
+  },
+  "advanced-cryptography": {
+    title: "ZERO-KNOWLEDGE FOUNDATIONS",
+    visualKey: "circuit-grid",
+  },
+  "zktls-architecture": {
+    title: "THE ZKTLS PIPELINE",
+    visualKey: "proof-pipeline",
+  },
+  "implementation-and-runtime": {
+    order: 6,
+    title: "HANDS-ON LAB",
+    visualKey: "browser-session-trace",
+  },
+};
+
+const plannedSections: TocSection[] = [
+  {
+    id: "implementations-in-the-wild",
+    order: 5,
+    title: "IMPLEMENTATIONS IN THE WILD",
+    subtitle: "실제 프로젝트들은 zkTLS를 어떻게 구현했고, 어떤 한계가 있는가?",
+    status: "planned",
+    wordCount: 9200,
+    articleCount: 3,
+    visualKey: "transcript-receipt",
+    articles: [
+      {
+        id: "implementations-in-the-wild-1",
+        slug: "zktls-architecture",
+        order: 1,
+        title: "TLSNotary deep dive",
+        status: "planned",
+        wordCount: 3400,
+      },
+      {
+        id: "implementations-in-the-wild-2",
+        slug: "zktls-architecture",
+        order: 2,
+        title: "DECO and oracle patterns",
+        status: "planned",
+        wordCount: 3000,
+      },
+      {
+        id: "implementations-in-the-wild-3",
+        slug: "zktls-architecture",
+        order: 3,
+        title: "Reclaim, zkPass and emerging protocols",
+        status: "planned",
+        wordCount: 2800,
+      },
     ],
   },
   {
-    number: "3.",
-    title: "ZERO KNOWLEDGE SYSTEMS",
-    slug: "advanced-cryptography",
-    items: [
-      ["Provers, verifiers and soundness.", "3.3K WORDS"],
-      ["SNARKs and STARKs.", "3.8K WORDS"],
-      ["MPC and garbled circuits.", "3.4K WORDS"],
-      ["Proof statements as circuits.", "2.7K WORDS"],
+    id: "trust-models-and-ecosystem",
+    order: 7,
+    title: "TRUST MODELS & ECOSYSTEM",
+    subtitle: "zkTLS는 더 넓은 Web3 신뢰 인프라에서 어떤 위치에 있는가?",
+    status: "planned",
+    wordCount: 7800,
+    articleCount: 3,
+    visualKey: "trust-layer-stack",
+    articles: [
+      {
+        id: "trust-models-and-ecosystem-1",
+        slug: "zktls-architecture",
+        order: 1,
+        title: "Oracles, attestations and zkTLS",
+        status: "planned",
+        wordCount: 2600,
+      },
+      {
+        id: "trust-models-and-ecosystem-2",
+        slug: "zktls-architecture",
+        order: 2,
+        title: "On-chain verification patterns",
+        status: "planned",
+        wordCount: 2400,
+      },
+      {
+        id: "trust-models-and-ecosystem-3",
+        slug: "zktls-architecture",
+        order: 3,
+        title: "Privacy, compliance and selective disclosure",
+        status: "planned",
+        wordCount: 2800,
+      },
     ],
   },
   {
-    number: "4.",
-    title: "ZKTLS ARCHITECTURES",
-    slug: "zktls-architecture",
-    items: [
-      ["From Web2 data to private claims.", "2.8K WORDS"],
-      ["Proxy vs MPC designs.", "3.5K WORDS"],
-      ["DECO and TLSNotary lineage.", "3.1K WORDS"],
-      ["Fetch, prove, verify.", "2.9K WORDS"],
-    ],
-  },
-  {
-    number: "5.",
-    title: "HANDS-ON IMPLEMENTATION",
-    slug: "implementation-and-runtime",
-    items: [
-      ["WebGPU toy commitment lab.", "3.2K WORDS"],
-      ["Deterministic WASM-style runtime.", "2.5K WORDS"],
-      ["Toy circuits in Sandpack.", "2.7K WORDS"],
-      ["Local safety checklist.", "1.9K WORDS"],
-    ],
-  },
-  {
-    number: "6.",
-    title: "WRITER BRIEF IDEAS",
-    slug: "foundations-of-cryptography",
-    items: [
-      ["Opus: narrative protocol-first draft.", "BEST"],
-      ["Gemini: technical fact-check pass.", "VERIFY"],
-      ["Opus: visual analogy expansion.", "ALT"],
-      ["Gemini: diagrams and edge cases.", "ALT"],
+    id: "appendix-and-reference",
+    order: 8,
+    title: "APPENDIX & REFERENCE",
+    subtitle: "용어, 비교표, 추가 자료를 한 곳에 모은 보조 섹션.",
+    status: "planned",
+    wordCount: 2600,
+    articleCount: 3,
+    visualKey: "trust-layer-stack",
+    articles: [
+      {
+        id: "appendix-and-reference-1",
+        slug: "foundations-of-cryptography",
+        order: 1,
+        title: "Glossary of terms",
+        status: "planned",
+        wordCount: 1200,
+      },
+      {
+        id: "appendix-and-reference-2",
+        slug: "advanced-cryptography",
+        order: 2,
+        title: "Protocol comparison matrix",
+        status: "planned",
+        wordCount: 800,
+      },
+      {
+        id: "appendix-and-reference-3",
+        slug: "tls-protocol",
+        order: 3,
+        title: "Further reading & sources",
+        status: "planned",
+        wordCount: 600,
+      },
     ],
   },
 ];
 
-const briefIdeas = [
-  {
-    title: "A. Protocol-first master guide",
-    body: "추천안. TLS transcript에서 시작해 zkTLS가 왜 필요한지 자연스럽게 도달한다. Opus는 긴 원고와 비유를 쓰고, Gemini는 프로토콜 정확성, 용어, 다이어그램을 검증한다.",
-  },
-  {
-    title: "B. Visual systems guide",
-    body: "첨부 이미지 같은 시각 목차를 전면에 둔다. 각 장은 하나의 큰 그림, 하나의 toy model, 하나의 검증 질문으로 끝난다. 학습 속도는 빠르지만 세부 수식은 얕아질 수 있다.",
-  },
-  {
-    title: "C. Implementation workbook",
-    body: "제5장 실습을 중심축으로 두고 앞 장을 필요한 만큼만 설명한다. 개발자 친화적이지만 zkTLS 배경 설명은 별도 보강이 필요하다.",
-  },
-];
+const columnOrders = [[1, 2], [3, 4, 5], [6, 7, 8]];
+
+function formatWords(words: number) {
+  return `${(words / 1000).toFixed(1)}K`;
+}
+
+function statusLabel(status: TocSection["status"]) {
+  return status.toUpperCase();
+}
+
+function sectionHref(section: TocSection) {
+  return `/guide/${section.articles[0]?.slug ?? section.id}`;
+}
+
+function estimateArticleWords(section: TocSection) {
+  return Math.max(100, Math.round(section.wordCount / Math.max(section.articleCount, 1) / 100) * 100);
+}
+
+function prepareTocSections() {
+  const contentSections = getTocSections().map((section) => {
+    const override = sectionOverrides[section.id] ?? {};
+    const estimatedWords = estimateArticleWords(section);
+
+    return {
+      ...section,
+      ...override,
+      articles: section.articles.map((article) => ({
+        ...article,
+        wordCount: article.wordCount ?? estimatedWords,
+      })),
+    };
+  });
+
+  return [...contentSections, ...plannedSections].sort((a, b) => a.order - b.order);
+}
+
+function columnsFor(sections: TocSection[]) {
+  const sectionsByOrder = new Map(sections.map((section) => [section.order, section]));
+  return columnOrders.map((orders) =>
+    orders.map((order) => sectionsByOrder.get(order)).filter((section): section is TocSection => Boolean(section)),
+  );
+}
 
 export default function Home() {
   const chapters = getChapters();
+  const tocSections = prepareTocSections();
+  const tocColumns = columnsFor(tocSections);
+  const implementedSections = tocSections.filter((section) => section.status !== "planned").length;
+  const totalWords = tocSections.reduce((total, section) => total + section.wordCount, 0);
 
   return (
-    <GuideShell chapters={chapters}>
-      <article className="toc-page">
-        <section className="toc-grid" aria-label="zkTLS 목차">
-          {tocSections.map((section) => (
-            <div className="toc-section" key={section.title}>
-              <h2>
-                <span>{section.number}</span>
-                <Link href={`/guide/${section.slug}`}>{section.title}</Link>
-              </h2>
-              <ul>
-                {section.items.map(([label, words]) => (
-                  <li key={label}>
-                    <Link href={`/guide/${section.slug}`}>
-                      <span className="toc-bullet">•</span>
-                      <span className="toc-label">{label}</span>
-                      <span className="toc-dots" aria-hidden />
-                      <span className="toc-words">{words}</span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </section>
+    <GuideShell
+      chapters={chapters}
+      progressLabel={`${implementedSections}/${tocSections.length}`}
+      wordsLabel={formatWords(totalWords)}
+    >
+      <div className="toc-page">
+        <nav className="editorial-toc" aria-label="Guide table of contents">
+          <div className="editorial-toc-grid">
+            {tocColumns.map((column, columnIndex) => (
+              <div className="toc-column" key={columnIndex}>
+                {column.map((section) => {
+                  const headingId = `toc-section-${section.order}`;
 
-        <section className="brief-board" aria-label="원고 작성 브리프">
-          <div className="brief-title">
-            <span>OPUS · GEMINI DRAFT BOARD</span>
-            <p>
-              목차별 원고는 Opus가 서사와 설명 밀도를 만들고, Gemini가 기술 정확성,
-              표, 그림, 누락 조건을 보강하는 방식이 가장 안정적입니다.
-            </p>
-          </div>
-          <div className="brief-grid">
-            {briefIdeas.map((idea) => (
-              <div className="brief-item" key={idea.title}>
-                <h3>{idea.title}</h3>
-                <p>{idea.body}</p>
+                  return (
+                    <section
+                      className="toc-section"
+                      aria-labelledby={headingId}
+                      data-visual-key={section.visualKey}
+                      key={section.id}
+                    >
+                      <div className="section-heading-row">
+                        <h2 id={headingId}>
+                          <span className="section-number">{section.order}.</span>
+                          <Link className="section-title" href={sectionHref(section)}>
+                            {section.title}
+                          </Link>
+                        </h2>
+                        <span className="section-meta">
+                          {statusLabel(section.status)} · {section.articleCount} ART ·{" "}
+                          {formatWords(section.wordCount)} W
+                        </span>
+                      </div>
+
+                      <div className="visual-artifact-slot" aria-label={`${section.visualKey} placeholder`}>
+                        <div className="artifact-schematic" aria-hidden>
+                          <span />
+                          <span />
+                          <span />
+                          <span />
+                        </div>
+                        <span className="artifact-label">{section.visualKey.replace(/-/g, " ")}</span>
+                      </div>
+
+                      <ol className="article-list">
+                        {section.articles.map((article) => (
+                          <li key={article.id}>
+                            <Link className="article-row" href={`/guide/${article.slug}`}>
+                              <span className="article-marker">{String(article.order).padStart(2, "0")}</span>
+                              <span className="article-title">{article.title}</span>
+                              <span className="article-leader" aria-hidden />
+                              <span className="compact-meta">
+                                {formatWords(article.wordCount ?? estimateArticleWords(section))} W
+                              </span>
+                            </Link>
+                          </li>
+                        ))}
+                      </ol>
+                    </section>
+                  );
+                })}
               </div>
             ))}
           </div>
-        </section>
+        </nav>
 
         <section className="chapter-index" aria-label="현재 구현된 챕터">
           {chapters.map((chapter) => (
             <Link key={chapter.slug} href={`/guide/${chapter.slug}`}>
               <span>{String(chapter.order).padStart(2, "0")}</span>
               <strong>{chapter.title}</strong>
-              <small>{chapter.summary}</small>
+              <small>{chapter.readerPromise}</small>
             </Link>
           ))}
         </section>
-      </article>
+      </div>
     </GuideShell>
   );
 }

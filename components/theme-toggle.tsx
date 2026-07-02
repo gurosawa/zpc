@@ -23,7 +23,7 @@ export function ThemeToggle() {
   return (
     <button
       type="button"
-      className="word-button"
+      className="masthead-action-button"
       aria-label={isDark ? "라이트 모드로 전환" : "다크 모드로 전환"}
       title={isDark ? "라이트 모드" : "다크 모드"}
       onClick={toggleTheme}

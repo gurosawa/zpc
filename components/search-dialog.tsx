@@ -26,6 +26,22 @@ export function SearchDialog() {
       .catch(() => setItems([]));
   }, []);
 
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setIsOpen(true);
+      }
+
+      if (event.key === "Escape") {
+        setIsOpen(false);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   const fuse = useMemo(
     () =>
       new Fuse(items, {
@@ -44,10 +60,11 @@ export function SearchDialog() {
     <>
       <button
         type="button"
-        className="word-button"
+        className="masthead-action-button search-trigger"
+        aria-keyshortcuts="Control+K Meta+K"
         onClick={() => setIsOpen(true)}
       >
-        WORDS
+        SEARCH <span className="shortcut">Ctrl/⌘K</span>
       </button>
       {isOpen ? (
         <div className="search-backdrop" role="presentation">
@@ -85,9 +102,12 @@ export function SearchDialog() {
                     onClick={() => setIsOpen(false)}
                     className="search-result"
                   >
-                    <span>{item.chapterTitle}</span>
-                    <strong>{item.heading}</strong>
-                    <small>{item.text.slice(0, 150)}</small>
+                    <span className="search-result-heading">
+                      <strong>{item.heading}</strong>
+                      <span className="search-result-leader" aria-hidden />
+                      <small>{item.chapterTitle}</small>
+                    </span>
+                    <span>{item.text.slice(0, 150)}</span>
                   </Link>
                 ))
               ) : (
