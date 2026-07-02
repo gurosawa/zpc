@@ -1,0 +1,6 @@
+{
+  "engine": "typescript-deterministic-wrapper",
+  "module": "@/wasm",
+  "reason": "wasm-pack exists locally, but rustc is not installed in this environment",
+  "deterministic": true
+}

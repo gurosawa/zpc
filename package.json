@@ -1,0 +1,37 @@
+{
+  "name": "zktls",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "predev": "node scripts/build-search-index.mjs",
+    "dev": "next dev",
+    "prebuild": "node scripts/build-search-index.mjs",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "@codesandbox/sandpack-react": "^2.20.0",
+    "fuse.js": "^7.4.2",
+    "gray-matter": "^4.0.3",
+    "lucide-react": "^1.22.0",
+    "next": "16.2.10",
+    "next-mdx-remote": "^6.0.0",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "three": "^0.185.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/three": "^0.185.0",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.9",
+    "playwright": "^1.61.1",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
