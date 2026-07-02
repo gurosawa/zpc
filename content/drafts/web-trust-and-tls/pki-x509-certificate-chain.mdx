@@ -1,0 +1,193 @@
+---
+title: PKI, X.509, certificate chain
+chapter: Web Trust and TLS
+chapterSlug: web-trust-and-tls
+articleSlug: pki-x509-certificate-chain
+status: draft
+difficulty: deep
+wordCountTarget: 7600
+visualKey: transcript-receipt
+branch: content/c03-a05-pki-x509-certificate-chain
+readerQuestion: 브라우저는 서버 인증서를 그냥 믿는가, 아니면 신뢰 anchor까지 검증 가능한 경로를 구성하는가?
+zktlsBridge: zkTLS의 origin claim은 CertificateVerify transcript binding과 X.509 path validation, service identity matching을 함께 다뤄야 한다.
+references:
+  - https://datatracker.ietf.org/doc/html/rfc5280
+  - https://datatracker.ietf.org/doc/html/rfc8446
+  - https://datatracker.ietf.org/doc/html/rfc9525
+  - https://cabforum.org/working-groups/server/baseline-requirements/documents/
+  - https://www.mozilla.org/en-US/about/governance/policies/security-group/certs/policy/
+  - https://googlechrome.github.io/chromerootprogram/
+  - https://datatracker.ietf.org/doc/html/rfc6962
+  - https://datatracker.ietf.org/doc/html/rfc9162
+---
+
+# PKI, X.509, certificate chain
+
+## Reader Question
+
+브라우저는 서버가 보낸 인증서를 "믿는가"? 더 정확한 답은 "검증 가능한 경로를 만들고 정책을 적용한다"다. TLS 서버는 leaf certificate와 중간 인증서들을 보내고, 클라이언트는 그 certificate가 요청한 service identity에 맞는지, 허용된 용도로 쓰이는지, 유효 기간과 확장이 맞는지, 신뢰 anchor까지 path가 이어지는지 확인한다. 루트 인증서는 서버가 보내서 믿는 것이 아니라 클라이언트 또는 플랫폼의 trust store에 이미 들어 있는 정책적 출발점이다.
+
+이 차이를 놓치면 "인증서가 있다"를 "서버 identity가 검증되었다"로 오해한다. 인증서 파일은 데이터 구조이고, certificate chain은 경로이며, PKI는 서명 체인과 정책 체인과 이름 매칭을 함께 요구하는 시스템이다.
+
+## Why It Matters
+
+RFC 5280은 X.509 public key infrastructure certificate와 CRL profile, 그리고 path validation 모델을 정의한다. RFC 8446은 TLS 1.3 handshake에서 Certificate와 CertificateVerify가 어떻게 쓰이는지 설명한다. RFC 9525는 TLS에서 service identity를 검증하는 최신 지침을 제공한다. Web PKI에서는 CA/B Forum TLS Baseline Requirements, Mozilla Root Store Policy, Chrome Root Program Policy 같은 브라우저/루트 프로그램 요구사항도 현실적인 수락 기준이 된다. Certificate Transparency는 RFC 6962와 RFC 9162 계열에서 공개 로그 기반 관측 모델을 제공한다.
+
+즉 서버 인증은 순수 암호학만이 아니다. leaf certificate의 public key를 소유했다는 사실은 CertificateVerify 서명으로 확인할 수 있다. 그러나 그 public key가 `www.example.com`을 대표해도 되는지는 certificate subjectAltName, chain path, key usage, extended key usage, constraints, trust store, revocation 또는 transparency 정책을 통해 판단한다. 이 계층을 분리하지 않으면 private CA, enterprise root, public Web PKI, self-signed certificate를 같은 것으로 다루는 실수가 생긴다.
+
+zkTLS에서는 origin claim의 신뢰가 여기에 걸린다. "이 TLS transcript가 example.com에서 왔다"는 주장은 두 부분으로 나뉜다. 하나는 handshake transcript에 public key possession이 묶였다는 암호학적 주장이고, 다른 하나는 그 public key가 example.com의 certificate chain에서 온다는 PKI 주장이다.
+
+## Core Model
+
+PKI를 "서명 체인 + 정책 체인 + 이름 매칭"으로 기억한다.
+
+```txt
+leaf certificate
+  subjectAltName: DNS:api.example.com
+  subjectPublicKeyInfo: server public key
+  key usage / extended key usage
+  signed by intermediate
+
+intermediate certificate
+  CA:TRUE
+  keyCertSign
+  path length / name constraints
+  signed by root
+
+root trust anchor
+  installed in trust store
+  accepted by browser or platform policy
+```
+
+서명 체인은 leaf에서 root 방향으로 이어진다. leaf의 issuer가 intermediate의 subject와 맞고, leaf signature를 intermediate public key로 검증할 수 있어야 한다. intermediate도 다시 상위 CA의 public key로 검증된다. 하지만 서명만 맞으면 충분하지 않다. basic constraints에서 CA 권한이 있는지, key usage에 keyCertSign이 적절한지, EKU가 서버 인증 목적과 맞는지, name constraints가 있는지 확인해야 한다.
+
+이름 매칭은 별도다. 사용자가 `https://api.example.com`에 접속했다면 certificate의 subjectAltName에 그 DNS-ID가 있어야 한다. RFC 9525 관점에서는 service identity matching을 명시적으로 봐야 하며, 오래된 Common Name 관행에 기대지 않는 것이 현대적이다. chain이 cryptographically valid라도 SAN이 `www.other.example`이면 이 연결은 원하는 origin의 서버 인증이 아니다.
+
+trust anchor도 "마지막 certificate"가 아니라 검증자의 정책 입력이다. 서버가 root certificate를 같이 보내도 클라이언트가 그 root를 trust store에서 신뢰하지 않으면 path는 끝나지 않는다. 반대로 private enterprise 환경에서는 공용 Web PKI에 없는 root가 관리 장치에 설치되어 합법적인 trust anchor가 될 수 있다. 그래서 certificate 검증을 설명할 때는 "누가 신뢰 저장소를 관리하는가"를 반드시 포함해야 한다. 브라우저, OS, language runtime, container image, mobile app pinning 정책은 서로 다른 결론을 낼 수 있다.
+
+certificate는 정적인 이름표가 아니라 lifecycle을 가진다. 발급, 배포, rotation, revocation, expiration, transparency logging이 모두 운영 이벤트다. TLS 장애의 상당수는 암호 알고리즘이 깨져서가 아니라 intermediate 교체 누락, 만료된 leaf, 잘못된 SAN, staging certificate 배포, trust store 업데이트 지연 같은 lifecycle 문제에서 온다. 보안 사고방식으로는 certificate를 "파일"이 아니라 "검증 정책이 적용되는 시간 제한 credential"로 봐야 한다.
+
+## Protocol or System Artifact
+
+TLS 1.3에서 서버 인증 관련 artifact는 다음처럼 나타난다.
+
+```txt
+ServerHello
+EncryptedExtensions
+Certificate
+  CertificateEntry[0]: leaf certificate
+  CertificateEntry[1..n]:
+    intermediate certificates
+CertificateVerify
+  signature over transcript context
+Finished
+```
+
+`Certificate` 메시지는 chain을 전달한다. 보통 leaf가 첫 번째 entry이고, trust anchor는 보내지 않아도 된다. `CertificateVerify`는 서버가 leaf certificate의 public key에 대응하는 private key를 갖고 있음을 handshake transcript에 묶어 증명한다. `Finished`는 handshake 전체가 양쪽에서 같은 secret과 transcript로 계산되었음을 확인한다.
+
+검증 게이트는 다음처럼 나눌 수 있다.
+
+| 게이트 | 질문 | 실패 예 |
+|---|---|---|
+| Signature path | issuer public key로 child signature를 검증할 수 있는가? | missing intermediate, wrong issuer |
+| Validity time | 현재 시간이 notBefore와 notAfter 안에 있는가? | expired certificate |
+| Basic constraints | intermediate가 CA로 쓸 수 있는가? | leaf가 CA처럼 쓰임 |
+| Key usage | keyCertSign, digitalSignature 등이 목적에 맞는가? | key usage mismatch |
+| Extended key usage | serverAuth 목적이 허용되는가? | clientAuth 전용 cert를 서버에 사용 |
+| Name matching | SAN이 요청 origin과 맞는가? | hostname mismatch |
+| Trust anchor | local trust store가 root를 신뢰하는가? | enterprise root missing |
+| Transparency policy | public Web PKI 요구를 만족하는가? | CT log 관측 부족 |
+
+이 표는 실제 장애 대응에도 유용하다. "인증서 오류"라고만 하면 원인이 너무 넓다. chain 구성 오류인지, 이름 불일치인지, root store 차이인지, 정책 위반인지 분리해야 한다.
+
+## Failure Mode
+
+첫 번째 실패는 hostname mismatch다. 공격자가 유효한 certificate chain을 가진 서버를 운영하더라도 그 certificate가 `api.example.com`을 대표하지 않는다면 원하는 origin 인증이 아니다. chain valid와 hostname valid는 다른 조건이다.
+
+두 번째 실패는 missing intermediate다. 서버가 leaf만 보내고 필요한 intermediate를 누락하면 어떤 클라이언트는 AIA fetching으로 보완할 수 있지만, 어떤 환경에서는 path를 만들지 못한다. 운영자는 "내 브라우저에서는 열린다"가 아니라 다양한 client trust store와 chain building 동작을 봐야 한다.
+
+세 번째 실패는 CA 권한 확장 오용이다. intermediate certificate는 `CA:TRUE`와 keyCertSign 같은 권한을 가져야 하지만, leaf certificate가 이런 권한을 갖고 있거나 constraint가 잘못되면 발급 체계가 위험해진다. private PKI에서 이 실수가 자주 발생한다.
+
+네 번째 실패는 EKU와 key usage mismatch다. TLS server authentication에 쓰는 certificate는 그 목적을 허용해야 한다. clientAuth 전용 인증서를 serverAuth로 쓰거나, digitalSignature가 필요한 handshake에서 적절한 usage가 없으면 검증이 실패해야 한다.
+
+다섯 번째 실패는 trust store divergence다. Windows, macOS, Firefox, Chrome, Java, container image, enterprise device는 서로 다른 trust store와 정책을 가질 수 있다. 어떤 root가 한 환경에서는 신뢰되고 다른 환경에서는 신뢰되지 않을 수 있다. 보안 검증에서 "공개 CA가 서명했다"와 "이 verifier의 trust store가 수락한다"는 문장을 구분해야 한다.
+
+여섯 번째 실패는 Certificate Transparency와 revocation을 단순화하는 것이다. CT log에 보인다는 사실은 certificate가 투명하게 관측되었다는 의미이지, 그 자체로 모든 클라이언트가 수락한다는 뜻은 아니다. revocation도 CRL, OCSP, browser-specific mechanism, soft-fail 정책이 얽힌다. Web PKI 수락 여부는 브라우저 정책과 시점에 의존한다.
+
+일곱 번째 실패는 wildcard와 multi-SAN certificate의 blast radius를 과소평가하는 것이다. `*.example.com` certificate 하나가 너무 많은 서비스에 배포되면 private key 노출 시 영향 범위가 넓어진다. multi-SAN certificate는 운영을 단순화하지만 서비스 이름 목록을 불필요하게 공개하고, 한 서비스의 갱신 장애가 여러 origin에 영향을 줄 수 있다. certificate 설계는 DNS naming, service ownership, key isolation과 함께 결정해야 한다.
+
+여덟 번째 실패는 pinning 또는 private trust policy를 문서화하지 않는 것이다. 특정 mobile app이나 backend client가 public root store 대신 고정된 intermediate 또는 leaf를 기대한다면 일반 브라우저 테스트와 다른 결과가 나온다. pinning은 misissuance 위험을 줄일 수 있지만 rotation 실패를 outage로 바꿀 수 있다. 따라서 "브라우저에서는 정상"과 "이 verifier에서는 정상"을 분리해 기록해야 한다.
+
+## Minimal Lab or Trace
+
+다음 trace로 chain을 직접 본다.
+
+```bash
+openssl s_client -connect example.com:443 \
+  -servername example.com \
+  -showcerts
+```
+
+출력에서 leaf와 intermediate를 나누어 저장한 뒤 다음을 확인한다.
+
+```bash
+openssl x509 -in leaf.pem -noout -text
+openssl x509 -in intermediate.pem -noout -text
+```
+
+관찰 항목은 `Subject Alternative Name`, `Basic Constraints`, `Key Usage`, `Extended Key Usage`, `Authority Key Identifier`, `Subject Key Identifier`, `notBefore`, `notAfter`다. 실험용 private CA를 만들어 leaf certificate를 발급하고, trust anchor를 OS나 브라우저에 추가하기 전후의 결과를 비교하면 "서명 chain"과 "trust store acceptance"의 차이를 볼 수 있다.
+
+다음 worksheet도 유용하다.
+
+| Trace line | 해석 |
+|---|---|
+| `Verify return code: 0` | 이 클라이언트 환경에서 path validation이 성공했다. |
+| SAN에 요청 host 없음 | path가 성공해도 service identity는 실패해야 한다. |
+| `CA:FALSE`인 certificate가 issuer 역할 | path validation에서 거부되어야 한다. |
+| expired leaf | chain 서명이 맞아도 현재 시점에서는 거부되어야 한다. |
+| root가 신뢰 저장소에 없음 | self-signed 또는 private CA는 별도 배포 없이는 수락되지 않는다. |
+
+CT는 공개 로그 조회로 관찰할 수 있지만, 원고에서는 "로그에 있다"와 "브라우저가 수락한다"를 섞지 않아야 한다. CT는 misissuance를 발견하고 정책을 적용하는 생태계의 일부다.
+
+## zkTLS Bridge
+
+zkTLS의 origin binding은 X.509 검증 없이는 약하다. prover가 어떤 TLS transcript와 record를 제시하더라도, verifier가 그 transcript의 server public key가 원하는 DNS identity에 묶였는지 확인하지 않으면 "어떤 서버가 말했다"와 "api.example.com이 말했다"가 분리된다.
+
+CertificateVerify는 handshake transcript에 server private key possession을 묶는다. 그러나 CertificateVerify는 certificate chain이 public Web PKI에서 수락 가능한지 자체적으로 증명하지 않는다. 반대로 certificate chain만 검증하고 transcript binding을 보지 않으면 서버가 실제 handshake에서 그 private key로 참여했는지 알 수 없다. zkTLS proof는 이 둘을 연결해야 한다.
+
+또한 verifier policy는 어떤 trust anchor와 어떤 Web PKI 정책을 사용할지 명시해야 한다. 브라우저와 같은 root store를 따르는지, 특정 enterprise root를 허용하는지, self-signed test certificate를 거부하는지, CT evidence를 요구하는지에 따라 proof의 의미가 달라진다. "valid certificate"라는 말은 정책 없이는 완전하지 않다.
+
+Selective disclosure도 certificate와 만난다. 사용자의 민감한 HTTP response는 숨기면서 origin identity와 freshness는 공개해야 할 수 있다. 이때 certificate chain, SAN, transcript hash, response digest는 공개 입력이 되고, session keys와 response 원문은 private witness가 될 수 있다. 어떤 값을 공개하고 어떤 값을 숨길지 결정하는 것이 zkTLS 설계의 핵심이다.
+
+운영형 zkTLS verifier는 certificate validation result를 단순히 `true`로 저장하지 않는 편이 낫다. 최소한 검증 시각, leaf fingerprint, SAN match target, chain issuer set, trust policy version, CT 또는 revocation policy 적용 여부를 receipt에 남겨야 한다. 그래야 나중에 root program 정책이 바뀌거나 certificate가 폐기되었을 때 기존 proof를 어떻게 해석할지 결정할 수 있다. proof는 과거 시점의 사실을 다루는 경우가 많으므로, "검증 당시 어떤 정책으로 수락했는가"가 provenance의 일부가 된다.
+
+## Verification Checklist
+
+- leaf certificate가 chain의 첫 번째 entry인지 확인했는가?
+- certificate path validation과 service identity matching을 별도 단계로 다뤘는가?
+- SAN의 DNS-ID 또는 IP-ID가 요청 origin과 맞는지 확인했는가?
+- intermediate certificate에 `CA:TRUE`와 keyCertSign 같은 권한이 적절히 있는가?
+- EKU와 key usage가 TLS server authentication 목적과 맞는가?
+- 검증에 사용할 trust store와 root program policy를 명시했는가?
+- CT와 revocation을 "수락 보장"으로 과장하지 않았는가?
+- zkTLS origin claim이 CertificateVerify와 X.509 path validation을 모두 포함하는가?
+
+## Visual Artifact Brief
+
+- Artifact key: x509-path-validation-ladder
+- Purpose: certificate chain을 단순 서명 목록이 아니라 policy gate와 name gate가 붙은 검증 경로로 보여준다.
+- Layout: 왼쪽에는 leaf, intermediate, root를 세로 ladder로 배치하고, 오른쪽에는 signature, time, KU/EKU, basic constraints, SAN, trust store, CT policy 게이트를 둔다.
+- Labels: leaf, intermediate, root, SAN DNS-ID, serverAuth, CA:TRUE, keyCertSign, trust anchor, CertificateVerify, transcript binding.
+- Motion idea: verifier cursor가 leaf에서 root로 올라가며 각 게이트를 통과한다. 실패 게이트는 해당 certificate와 빨간 선으로 연결된다.
+- Reduced-motion state: 정적 ladder와 실패 유형별 marker.
+
+## References
+
+- [RFC 5280: Internet X.509 PKI](https://datatracker.ietf.org/doc/html/rfc5280)
+- [RFC 8446: TLS 1.3](https://datatracker.ietf.org/doc/html/rfc8446)
+- [RFC 9525: Service Identity in TLS](https://datatracker.ietf.org/doc/html/rfc9525)
+- [CA/B Forum TLS Baseline Requirements](https://cabforum.org/working-groups/server/baseline-requirements/documents/)
+- [Mozilla Root Store Policy](https://www.mozilla.org/en-US/about/governance/policies/security-group/certs/policy/)
+- [Chrome Root Program Policy](https://googlechrome.github.io/chromerootprogram/)
+- [RFC 6962: Certificate Transparency](https://datatracker.ietf.org/doc/html/rfc6962)
+- [RFC 9162: Certificate Transparency v2](https://datatracker.ietf.org/doc/html/rfc9162)

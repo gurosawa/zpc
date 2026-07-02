@@ -435,7 +435,7 @@
       "order": 3,
       "title": "WEB TRUST AND TLS",
       "slug": "web-trust-and-tls",
-      "status": "planned",
+      "status": "draft",
       "visualKey": "tls-record-strip",
       "guidingQuestion": "HTTPS 신뢰는 TLS handshake, certificate chain, record layer에서 어떻게 만들어지는가?",
       "articles": [
@@ -446,7 +446,7 @@
           "title": "SSL이 아니라 TLS라고 부르는 이유",
           "slug": "ssl-vs-tls",
           "branch": "content/c03-a01-ssl-vs-tls",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "foundation",
           "wordCountTarget": 4200,
           "visualKey": "tls-record-strip",
@@ -463,9 +463,14 @@
             "zkTLS transcript version을 언급했는가?"
           ],
           "references": [
-            "https://datatracker.ietf.org/doc/html/rfc8446",
-            "https://datatracker.ietf.org/doc/html/rfc5246"
-          ]
+            "https://datatracker.ietf.org/doc/html/rfc6101",
+            "https://datatracker.ietf.org/doc/html/rfc6176",
+            "https://datatracker.ietf.org/doc/html/rfc7568",
+            "https://datatracker.ietf.org/doc/html/rfc8996",
+            "https://datatracker.ietf.org/doc/html/rfc9325",
+            "https://datatracker.ietf.org/doc/html/rfc8446"
+          ],
+          "actualWordCount": 4518
         },
         {
           "id": "c03-a02",
@@ -474,7 +479,7 @@
           "title": "HTTPS 요청은 어떻게 보호되는가",
           "slug": "https-protection-path",
           "branch": "content/c03-a02-https-protection-path",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "intermediate",
           "wordCountTarget": 6500,
           "visualKey": "tls-handshake-transcript",
@@ -491,9 +496,16 @@
             "copy-paste proof의 한계를 언급했는가?"
           ],
           "references": [
+            "https://datatracker.ietf.org/doc/html/rfc9110",
+            "https://datatracker.ietf.org/doc/html/rfc2818",
             "https://datatracker.ietf.org/doc/html/rfc8446",
-            "https://datatracker.ietf.org/doc/html/rfc5280"
-          ]
+            "https://datatracker.ietf.org/doc/html/rfc5280",
+            "https://datatracker.ietf.org/doc/html/rfc9525",
+            "https://datatracker.ietf.org/doc/html/rfc6066",
+            "https://datatracker.ietf.org/doc/html/rfc7301",
+            "https://datatracker.ietf.org/doc/html/rfc6797"
+          ],
+          "actualWordCount": 6047
         },
         {
           "id": "c03-a03",
@@ -502,7 +514,7 @@
           "title": "TLS 1.2와 TLS 1.3의 구조적 차이",
           "slug": "tls12-vs-tls13",
           "branch": "content/c03-a03-tls12-vs-tls13",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "deep",
           "wordCountTarget": 8200,
           "visualKey": "tls-handshake-transcript",
@@ -521,8 +533,12 @@
           "references": [
             "https://datatracker.ietf.org/doc/html/rfc5246",
             "https://datatracker.ietf.org/doc/html/rfc8446",
-            "https://datatracker.ietf.org/doc/html/rfc5869"
-          ]
+            "https://datatracker.ietf.org/doc/html/rfc5869",
+            "https://datatracker.ietf.org/doc/html/rfc9325",
+            "https://datatracker.ietf.org/doc/html/rfc8996",
+            "https://datatracker.ietf.org/doc/html/rfc7301"
+          ],
+          "actualWordCount": 8585
         },
         {
           "id": "c03-a04",
@@ -531,7 +547,7 @@
           "title": "TLS record layer와 AEAD",
           "slug": "tls-record-layer",
           "branch": "content/c03-a04-tls-record-layer",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "deep",
           "wordCountTarget": 8200,
           "visualKey": "tls-record-strip",
@@ -549,8 +565,13 @@
           ],
           "references": [
             "https://datatracker.ietf.org/doc/html/rfc8446",
-            "https://csrc.nist.gov/pubs/sp/800/38/d/final"
-          ]
+            "https://datatracker.ietf.org/doc/html/rfc5116",
+            "https://datatracker.ietf.org/doc/html/rfc8439",
+            "https://datatracker.ietf.org/doc/html/rfc8452",
+            "https://csrc.nist.gov/pubs/sp/800/38/d/final",
+            "https://csrc.nist.gov/pubs/sp/800/52/r2/final"
+          ],
+          "actualWordCount": 8533
         },
         {
           "id": "c03-a05",
@@ -559,7 +580,7 @@
           "title": "PKI, X.509, certificate chain",
           "slug": "pki-x509-certificate-chain",
           "branch": "content/c03-a05-pki-x509-certificate-chain",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "deep",
           "wordCountTarget": 7600,
           "visualKey": "transcript-receipt",
@@ -577,8 +598,15 @@
           ],
           "references": [
             "https://datatracker.ietf.org/doc/html/rfc5280",
+            "https://datatracker.ietf.org/doc/html/rfc8446",
+            "https://datatracker.ietf.org/doc/html/rfc9525",
+            "https://cabforum.org/working-groups/server/baseline-requirements/documents/",
+            "https://www.mozilla.org/en-US/about/governance/policies/security-group/certs/policy/",
+            "https://googlechrome.github.io/chromerootprogram/",
+            "https://datatracker.ietf.org/doc/html/rfc6962",
             "https://datatracker.ietf.org/doc/html/rfc9162"
-          ]
+          ],
+          "actualWordCount": 8915
         },
         {
           "id": "c03-a06",
@@ -587,7 +615,7 @@
           "title": "0-RTT, ECH, QUIC, mTLS",
           "slug": "zero-rtt-ech-quic-mtls",
           "branch": "content/c03-a06-zero-rtt-ech-quic-mtls",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "deep",
           "wordCountTarget": 8400,
           "visualKey": "tunnel-encapsulation-stack",
@@ -605,9 +633,16 @@
           ],
           "references": [
             "https://datatracker.ietf.org/doc/html/rfc8446",
+            "https://www.rfc-editor.org/info/rfc9849",
+            "https://datatracker.ietf.org/doc/html/rfc9848",
+            "https://www.rfc-editor.org/info/rfc9934",
             "https://datatracker.ietf.org/doc/html/rfc9001",
-            "https://datatracker.ietf.org/doc/rfc9849/"
-          ]
+            "https://datatracker.ietf.org/doc/html/rfc9000",
+            "https://www.rfc-editor.org/info/rfc9114",
+            "https://datatracker.ietf.org/doc/html/rfc8705",
+            "https://support.mozilla.org/en-US/kb/faq-encrypted-client-hello"
+          ],
+          "actualWordCount": 8126
         }
       ]
     },

@@ -1,0 +1,153 @@
+---
+title: HTTPS 요청은 어떻게 보호되는가
+chapter: Web Trust and TLS
+chapterSlug: web-trust-and-tls
+articleSlug: https-protection-path
+status: draft
+difficulty: intermediate
+wordCountTarget: 6500
+visualKey: tls-handshake-transcript
+branch: content/c03-a02-https-protection-path
+readerQuestion: 브라우저가 HTTPS API를 호출할 때 어느 단계부터 무엇이 보호되고 무엇은 여전히 보이는가?
+zktlsBridge: zkTLS proof가 origin 응답을 주장하려면 TLS record뿐 아니라 URI authority, 서버 identity, transcript binding을 함께 증명해야 한다.
+references:
+  - https://datatracker.ietf.org/doc/html/rfc9110
+  - https://datatracker.ietf.org/doc/html/rfc2818
+  - https://datatracker.ietf.org/doc/html/rfc8446
+  - https://datatracker.ietf.org/doc/html/rfc5280
+  - https://datatracker.ietf.org/doc/html/rfc9525
+  - https://datatracker.ietf.org/doc/html/rfc6066
+  - https://datatracker.ietf.org/doc/html/rfc7301
+  - https://datatracker.ietf.org/doc/html/rfc6797
+---
+
+# HTTPS 요청은 어떻게 보호되는가
+
+## Reader Question
+
+`https://api.example.com/me`를 호출하면 무엇이 정확히 보호되는가? 흔한 답은 "암호화된다"지만, 그 답은 너무 얇다. URL의 scheme과 authority, DNS 조회, TCP 또는 QUIC 연결, TLS ClientHello, 서버 인증서, key schedule, record layer, HTTP 요청 의미론이 순서대로 맞물려야 HTTPS가 된다. 이 중 어떤 값은 네트워크에서 보이고, 어떤 값은 인증만 되며, 어떤 값은 암호화되고, 어떤 값은 애플리케이션 정책으로만 보호된다.
+
+좋은 mental model은 "HTTPS는 자물쇠 아이콘이 아니라 보호 경로"다. 사용자가 입력한 URL이 서버 identity 검증으로 이어지고, handshake가 traffic key를 만들며, HTTP bytes가 TLS record로 봉인된다. 이 경로 중 하나가 끊기면 HTTPS라는 이름은 남아도 원하는 보장은 사라진다.
+
+## Why It Matters
+
+RFC 9110은 `https` URI scheme이 TLS로 보호되는 HTTP 통신을 가리킨다고 설명한다. RFC 2818은 HTTP over TLS를 별도로 정의한 오래된 문서이고, 현대 HTTP 의미론은 RFC 9110 계열에서 정리된다. TLS 1.3을 정의하는 RFC 8446은 handshake가 서버 인증, 키 합의, handshake transcript binding을 만들고 record layer가 application data를 보호하는 구조를 설명한다. RFC 5280은 인증서 경로 검증을, RFC 9525는 TLS에서 service identity를 어떻게 확인할지 다룬다.
+
+이 구분이 중요한 이유는 "HTTPS를 쓴다"는 사실만으로 모든 trust boundary가 사라지지 않기 때문이다. DNS 이름을 어떤 IP로 해석했는지는 별도 문제다. SNI는 ECH가 없으면 ClientHello에 보일 수 있다. TLS를 CDN이나 reverse proxy에서 종료하면 그 지점 뒤쪽은 별도 신뢰 경계다. HSTS가 없으면 첫 접속에서 HTTP downgrade 또는 잘못된 redirect 위험이 남는다. 애플리케이션이 받은 JSON이 서버에서 왔다는 사실과 그 JSON이 정책적으로 최신인지, 사용자에게 보여도 되는지는 또 다른 문제다.
+
+zkTLS에서는 이 복잡성이 그대로 증명 statement로 들어온다. "TLS 응답을 증명한다"는 말은 `api.example.com`이라는 authority, 인증서의 DNS identity, handshake transcript, HTTP response boundary, freshness 조건을 모두 고려해야 의미가 있다.
+
+## Core Model
+
+HTTPS 보호 경로는 다음 순서로 기억하면 된다.
+
+```txt
+URL authority
+  -> name resolution
+  -> transport connection
+  -> TLS ClientHello
+  -> certificate chain and service identity validation
+  -> key schedule and Finished verification
+  -> protected TLS records
+  -> HTTP request and response semantics
+```
+
+`URL authority`는 사용자가 어떤 origin을 의도했는지 정의한다. `name resolution`은 그 이름을 네트워크 주소로 바꾸지만, 전통적인 DNS 자체는 HTTPS 요청 본문처럼 TLS record 안에 들어가지 않는다. `ClientHello`는 지원 버전, cipher suites, SNI, ALPN 같은 협상 입력을 보낸다. SNI는 서버가 적절한 인증서를 선택하는 데 쓰이고, ALPN은 TLS 연결 안에서 HTTP/1.1, HTTP/2 같은 application protocol을 고르는 데 쓰인다.
+
+그 다음 서버는 인증서 chain을 제시한다. 클라이언트는 chain이 신뢰 anchor까지 이어지는지, 유효 기간과 확장이 맞는지, leaf certificate의 subjectAltName이 요청한 service identity와 맞는지 검증한다. 이 검증이 끝났다고 HTTP bytes가 아직 보호된 것은 아니다. handshake가 공유 secret을 만들고 Finished 메시지로 transcript가 양쪽에 일치한다는 사실을 확인해야 한다. 그 후 application data가 TLS record로 나뉘어 암호화와 무결성 보호를 받는다.
+
+보호 상태는 다음처럼 나눌 수 있다.
+
+| 단계 | 보호 상태 | 흔한 오해 |
+|---|---|---|
+| DNS 조회 | 환경에 따라 별도 보호 | HTTPS면 DNS도 자동으로 숨는다고 생각한다. |
+| SNI/ALPN | ClientHello metadata | HTTP path와 body처럼 암호화된다고 생각한다. |
+| 인증서 chain | 서명과 정책으로 검증 | chain valid가 hostname valid와 같다고 생각한다. |
+| TLS records | AEAD로 보호 | record 보호가 HTTP 의미론까지 판단한다고 생각한다. |
+| Application response | 앱 정책 필요 | TLS가 최신성, 권한, business rule을 보장한다고 생각한다. |
+
+## Protocol or System Artifact
+
+작은 trace artifact를 보자.
+
+```txt
+request target:
+  scheme: https
+  authority: api.example.com
+  path: /me
+
+client hello:
+  server_name: api.example.com
+  alpn: h2, http/1.1
+  supported_versions: TLS 1.3, TLS 1.2
+
+server identity:
+  leaf SAN: DNS:api.example.com
+  chain: leaf -> intermediate -> root
+  certificate_verify: signature over handshake transcript
+
+protected data:
+  request headers: encrypted in TLS records
+  response body: encrypted in TLS records
+```
+
+이 artifact에서 `authority`와 `server_name`은 관련 있지만 같은 값이라고 자동 가정하면 안 된다. HTTP 요청의 authority, TLS SNI, 인증서 SAN, verifier가 기대하는 origin은 모두 맞아야 한다. proxy나 CDN이 끼면 edge certificate는 `api.example.com`을 대표할 수 있지만, origin server와 edge 사이 구간은 별도 인증과 암호화 정책을 가져야 한다. 내부 구간이 HTTP라면 외부 사용자는 주소창에서 HTTPS를 보더라도 전체 시스템의 trust boundary는 edge에서 한 번 끊긴다.
+
+## Failure Mode
+
+첫 번째 실패는 certificate chain validation과 hostname matching을 섞는 것이다. 중간 CA와 root까지 서명이 이어져도 leaf certificate의 SAN이 요청한 DNS-ID와 맞지 않으면 서버 identity는 성립하지 않는다. 반대로 이름은 맞아 보여도 chain이 신뢰 anchor까지 이어지지 않으면 클라이언트는 그 public key를 믿을 근거가 없다.
+
+두 번째 실패는 TLS termination을 투명한 것으로 취급하는 것이다. load balancer가 TLS를 종료하고 backend로 plain HTTP를 보내면 외부 네트워크 공격자는 막을 수 있어도 내부 네트워크, 로그 수집기, service mesh misconfiguration은 새로운 attack surface가 된다. 이때 보안 문서가 "end-to-end HTTPS"라고만 쓰면 누가 어느 지점에서 plaintext를 볼 수 있는지 사라진다.
+
+세 번째 실패는 HSTS 없이 "HTTPS로 redirect하니 괜찮다"고 보는 것이다. 첫 접속이 HTTP로 시작되면 공격자는 redirect를 가로채거나 사용자를 다른 origin으로 유도할 수 있다. RFC 6797의 HSTS는 브라우저가 이후 요청을 HTTPS로 강제하도록 돕지만, preload 여부와 subdomain 적용 범위까지 봐야 한다.
+
+네 번째 실패는 HTTP 의미론을 TLS가 해결한다고 착각하는 것이다. TLS는 `GET /balance` 응답이 서버에서 왔다는 채널 보장을 줄 수 있지만, 그 응답이 현재 시점에 유효한지, 사용자가 그 계정에 접근할 권한이 있는지, verifier에게 공개해도 되는지는 애플리케이션과 proof policy의 일이다.
+
+## Minimal Lab or Trace
+
+다음 trace는 같은 URL에서 보호 경로의 각 조각을 확인한다.
+
+```bash
+curl -v https://example.com/
+openssl s_client -connect example.com:443 -servername example.com -alpn h2,http/1.1 -showcerts
+```
+
+관찰 항목은 `subjectAltName`, 인증서 chain, `Protocol`, `Cipher`, `ALPN protocol`, `Verify return code`다. `-servername` 값을 빼거나 다른 이름으로 바꾸면 SNI가 인증서 선택에 어떤 영향을 주는지 볼 수 있다. `curl --resolve example.com:443:IP`를 사용하면 DNS 해석과 TLS hostname 검증을 분리해 실험할 수 있다. IP를 직접 지정해도 URL authority가 `example.com`이면 클라이언트는 여전히 그 이름에 맞는 인증서를 기대한다.
+
+Wireshark에서는 ClientHello의 SNI와 ALPN은 보이지만 HTTP path와 headers는 record 복호화 없이는 보이지 않는다는 점을 확인한다. `SSLKEYLOGFILE`을 써서 실험 세션을 복호화하면 TLS records 안쪽에 HTTP/2 frame이나 HTTP/1.1 message가 들어 있음을 볼 수 있다. 이 실험은 "보이는 metadata"와 "record 안쪽 protected data"의 경계를 직관적으로 보여준다.
+
+## zkTLS Bridge
+
+zkTLS verifier가 원하는 것은 보통 "이 사용자가 특정 origin에서 받은 응답의 특정 field가 조건을 만족한다"는 statement다. 이 statement는 HTTPS 보호 경로의 여러 지점을 포함해야 한다. origin은 URL authority와 certificate identity로 묶이고, certificate public key possession은 handshake transcript와 CertificateVerify로 묶이며, HTTP response bytes는 traffic secret과 record authentication으로 묶인다.
+
+여기서 하나라도 빠지면 증명 의미가 약해진다. record만 증명하면 어떤 origin의 record인지 불분명해질 수 있다. certificate만 증명하면 서버가 어떤 HTTP response를 보냈는지 알 수 없다. HTTP body field만 증명하면 verifier는 그 field가 로컬에서 편집된 JSON인지 TLS로 받은 응답인지 구분하지 못한다. 따라서 zkTLS proof statement는 "origin binding, transcript binding, response boundary, freshness"를 명시해야 한다.
+
+또한 TLS termination proxy가 있는 구조에서는 verifier가 어떤 endpoint를 origin으로 받아들이는지 결정해야 한다. CDN edge가 legitimate endpoint라면 그 사실을 policy에 적어야 하고, backend origin까지의 end-to-end claim을 하려면 별도 evidence가 필요하다.
+
+## Verification Checklist
+
+- `https`를 단순 암호화가 아니라 서버 인증, 기밀성, 무결성의 결합으로 설명했는가?
+- DNS resolution, SNI, ALPN, HTTP path가 각각 어느 위치에서 보이는지 구분했는가?
+- certificate path validation과 service identity matching을 분리했는가?
+- TLS termination proxy나 CDN edge를 별도 trust boundary로 표시했는가?
+- zkTLS proof statement에 origin, transcript, response boundary, freshness 조건이 들어가는가?
+
+## Visual Artifact Brief
+
+- Artifact key: https-protection-path
+- Purpose: HTTPS 요청이 보호되는 경로와 여전히 노출되거나 별도 정책이 필요한 지점을 분리한다.
+- Layout: Browser, DNS, TCP or QUIC, TLS handshake, certificate validation, TLS records, HTTP application을 좌우 swimlane으로 배치한다.
+- Labels: visible metadata, authenticated identity, encrypted record, integrity protected, termination boundary, application policy.
+- Motion idea: 요청 점이 이동하면서 단계별로 색이 바뀐다. DNS와 ClientHello 일부는 반투명, record 안쪽 HTTP는 잠긴 상태로 표시한다.
+- Reduced-motion state: 단계형 정적 다이어그램과 각 단계 보호 상태 배지.
+
+## References
+
+- https://datatracker.ietf.org/doc/html/rfc9110
+- https://datatracker.ietf.org/doc/html/rfc2818
+- https://datatracker.ietf.org/doc/html/rfc8446
+- https://datatracker.ietf.org/doc/html/rfc5280
+- https://datatracker.ietf.org/doc/html/rfc9525
+- https://datatracker.ietf.org/doc/html/rfc6066
+- https://datatracker.ietf.org/doc/html/rfc7301
+- https://datatracker.ietf.org/doc/html/rfc6797

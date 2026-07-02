@@ -1,0 +1,181 @@
+---
+title: TLS 1.2와 TLS 1.3의 구조적 차이
+chapter: Web Trust and TLS
+chapterSlug: web-trust-and-tls
+articleSlug: tls12-vs-tls13
+status: draft
+difficulty: deep
+wordCountTarget: 8200
+visualKey: tls-handshake-transcript
+branch: content/c03-a03-tls12-vs-tls13
+readerQuestion: TLS 1.3은 TLS 1.2의 빠른 버전인가, 아니면 보안 구조가 바뀐 다른 프로토콜인가?
+zktlsBridge: zkTLS 회로와 transcript 검증은 TLS 1.2와 TLS 1.3의 키 스케줄, Finished, record 보호 차이를 버전별로 다뤄야 한다.
+references:
+  - https://datatracker.ietf.org/doc/html/rfc5246
+  - https://datatracker.ietf.org/doc/html/rfc8446
+  - https://datatracker.ietf.org/doc/html/rfc5869
+  - https://datatracker.ietf.org/doc/html/rfc9325
+  - https://datatracker.ietf.org/doc/html/rfc8996
+  - https://datatracker.ietf.org/doc/html/rfc7301
+---
+
+# TLS 1.2와 TLS 1.3의 구조적 차이
+
+## Reader Question
+
+TLS 1.3은 TLS 1.2보다 handshake round trip이 줄어든 버전 정도로 보일 수 있다. 하지만 그 관점은 핵심을 놓친다. TLS 1.3은 오래된 옵션을 제거하고, cipher suite의 의미를 바꾸고, key schedule을 HKDF 중심으로 재구성하고, handshake 메시지의 암호화 범위를 넓혔다. 따라서 TLS 1.2와 1.3의 차이는 "속도"보다 "어떤 조합을 프로토콜이 허용하는가"와 "어떤 값이 transcript에 어떻게 묶이는가"에 있다.
+
+읽을 때의 질문은 다음과 같다. 같은 HTTPS 응답을 받았더라도, 그 응답이 TLS 1.2 record에서 왔는지 TLS 1.3 record에서 왔는지에 따라 검증해야 할 artifact가 어떻게 달라지는가? 이 질문에 답해야 protocol trace, 로그, 보안 정책, zkTLS proof circuit이 같은 단어를 쓰면서 다른 구조를 가리키는 일을 피할 수 있다.
+
+## Why It Matters
+
+RFC 5246은 TLS 1.2를 정의한다. TLS 1.2의 cipher suite 이름은 key exchange, 인증, bulk encryption, MAC, PRF의 의미를 많이 포함한다. 예를 들어 suite 이름 안에 RSA, ECDHE, AES, CBC, GCM, SHA 계열이 함께 들어간다. 이 구조는 유연하지만, 유연성은 곧 policy surface다. 어떤 suite는 forward secrecy를 제공하고, 어떤 suite는 그렇지 않다. 어떤 suite는 AEAD를 쓰고, 어떤 suite는 MAC-then-encrypt 계열 구조를 쓴다. 운영자는 허용 목록을 잘못 잡으면 오래된 조합을 남길 수 있다.
+
+RFC 8446의 TLS 1.3은 이 표면을 줄였다. static RSA와 static DH key exchange를 제거하고, AEAD-only cipher suites로 정리하며, key schedule을 HKDF 기반으로 만든다. cipher suite 이름은 더 이상 인증 방식과 key exchange 방식을 모두 묶지 않고, AEAD algorithm과 HKDF hash 조합에 가깝다. 인증은 Certificate와 CertificateVerify, 키 교환은 key_share와 supported_groups 같은 handshake 확장으로 분리해 본다. 이 차이는 로그 파싱과 보안 리뷰에서 매우 중요하다.
+
+RFC 9325 같은 운용 권고는 TLS와 DTLS를 안전하게 쓰기 위한 설정 방향을 제공한다. RFC 8996은 TLS 1.0과 1.1을 deprecated로 처리한다. 즉 현대 시스템에서 중요한 비교는 "레거시 TLS 전체"와 "TLS 1.2/1.3"이 아니라, TLS 1.2를 쓴다면 어떤 제한을 걸어야 하는가, TLS 1.3을 쓴다면 어떤 새 위험인 0-RTT를 어떻게 다룰 것인가다.
+
+## Core Model
+
+핵심 모델은 "TLS 1.2는 조합 가능한 프레임워크, TLS 1.3은 위험한 조합을 제거하고 transcript 중심으로 정리한 프레임워크"다.
+
+TLS 1.2 full handshake의 전형적인 흐름은 다음과 같다.
+
+```txt
+ClientHello
+  -> ServerHello
+  -> Certificate
+  -> ServerKeyExchange
+  -> ServerHelloDone
+  -> ClientKeyExchange
+  -> ChangeCipherSpec
+  -> Finished
+  -> ChangeCipherSpec
+  -> Finished
+  -> ApplicationData
+```
+
+TLS 1.3 full handshake는 더 짧고, ServerHello 이후 많은 handshake 메시지가 암호화된다.
+
+```txt
+ClientHello + key_share
+  -> ServerHello + key_share
+  -> EncryptedExtensions
+  -> Certificate
+  -> CertificateVerify
+  -> Finished
+  -> Finished
+  -> ApplicationData
+```
+
+메시지 수만 보면 "짧아졌다"가 눈에 띈다. 그러나 구조적 변화는 더 깊다. TLS 1.2에서는 `ChangeCipherSpec`가 암호화 상태 전환을 표시하고, 일부 handshake 메시지가 평문으로 오가며, suite 선택에 따라 record 보호 방식도 달라진다. TLS 1.3에서는 compatibility 이유로 일부 legacy 필드가 남지만 실제 버전 선택은 `supported_versions` 확장에 묶인다. ServerHello 뒤에는 handshake traffic secret이 생기고, Certificate와 CertificateVerify 같은 민감한 handshake 메시지도 암호화된 record 안에 들어간다.
+
+키 스케줄도 다르다. TLS 1.2는 PRF로 master secret과 key block을 만든다. TLS 1.3은 HKDF extract/expand 계열 모델을 통해 early secret, handshake secret, master secret, application traffic secret을 단계적으로 도출한다. 각 단계는 transcript hash와 label에 묶인다. 이 구조 덕분에 어떤 secret이 어떤 메시지까지의 transcript에 묶이는지 더 명확히 추적할 수 있다.
+
+또 하나의 차이는 "협상 실패를 어떻게 읽을 것인가"다. TLS 1.2에서는 클라이언트와 서버가 공통으로 지원하는 cipher suite 목록을 잘못 맞추면 handshake가 실패하거나, 운영자가 약한 suite를 예외로 열어 해결하려는 압력이 생긴다. TLS 1.3에서는 suite 선택 폭이 줄었지만 supported groups, signature algorithms, ALPN, certificate type, PSK mode 같은 확장 조합은 여전히 실패 원인이 된다. 즉 TLS 1.3은 운영자가 생각할 항목을 없앤 것이 아니라, 위험한 조합을 줄이고 판단 위치를 더 명확한 확장과 transcript로 옮긴 것이다.
+
+이 점은 보안 로그에서도 중요하다. "TLS_AES_128_GCM_SHA256으로 연결됨"이라는 TLS 1.3 로그는 record 보호 알고리즘과 hash 계열을 말하지만, 서버 인증서가 RSA인지 ECDSA인지, key exchange group이 무엇인지, ALPN이 무엇인지는 별도 필드에서 찾아야 한다. 반대로 TLS 1.2 로그에서는 suite 이름 하나가 너무 많은 의미를 압축한다. 따라서 정책 엔진은 버전별로 다른 parser를 가져야 하며, 같은 regex로 suite 이름만 읽는 방식은 시간이 지나면서 잘못된 결론을 낸다.
+
+## Protocol or System Artifact
+
+비교 artifact를 표로 정리하면 다음과 같다.
+
+| 축 | TLS 1.2 | TLS 1.3 |
+|---|---|---|
+| 버전 협상 | ClientHello/ServerHello legacy version 중심 | `supported_versions` 확장 중심 |
+| cipher suite 의미 | key exchange, auth, bulk cipher, MAC, PRF를 묶음 | AEAD algorithm과 HKDF hash 중심 |
+| key exchange | RSA, DHE, ECDHE 등 suite와 결합 가능 | key_share 기반 ephemeral DH 계열 |
+| handshake 암호화 | 대체로 많은 handshake metadata가 노출 | ServerHello 이후 많은 handshake 메시지 암호화 |
+| record protection | CBC, stream, AEAD 등 suite 의존 | AEAD-only |
+| 상태 전환 | ChangeCipherSpec 의미 있음 | compatibility 목적의 흔적만 남음 |
+| resumption | session ID 또는 ticket 중심 | PSK, binder, optional 0-RTT |
+
+TLS 1.3의 cipher suite 예시는 `TLS_AES_128_GCM_SHA256`이다. 여기에는 "서명 알고리즘이 RSA인지 ECDSA인지", "key exchange group이 X25519인지 P-256인지"가 들어 있지 않다. 그 정보는 handshake의 certificate, signature_algorithms, supported_groups, key_share 등에서 확인한다. 반면 TLS 1.2의 `TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256` 같은 이름은 ephemeral ECDH, RSA 인증서 서명, AES-GCM, SHA-256 계열을 함께 암시한다.
+
+TLS 1.3 transcript artifact는 다음처럼 생각할 수 있다.
+
+```txt
+transcript_hash(ClientHello ... ServerHello)
+  -> handshake traffic secrets
+transcript_hash(ClientHello ... server Finished)
+  -> Finished verification
+master secret
+  -> application traffic secrets
+  -> record write keys and IVs
+```
+
+이 모델은 디버깅에도 도움이 된다. Finished 검증이 실패했다면 단순히 "키가 틀렸다"가 아니라 transcript bytes, negotiated parameters, key schedule label, hash function, certificate verify input 중 어디가 다른지 봐야 한다.
+
+## Failure Mode
+
+첫 번째 실패는 TLS 1.2 cipher suite 이름을 TLS 1.3에도 같은 방식으로 읽는 것이다. TLS 1.3 로그에서 suite만 보고 "RSA 인증"이라고 판단하면 틀릴 수 있다. 인증은 certificate와 CertificateVerify의 서명 알고리즘을 봐야 한다. key exchange는 key_share group을 봐야 한다. 반대로 TLS 1.2에서는 suite 이름이 많은 정보를 담으므로 허용 목록이 곧 보안 정책이다.
+
+두 번째 실패는 TLS 1.3의 0-RTT를 "TLS 1.3이니까 더 안전한 초기 데이터"로 착각하는 것이다. 0-RTT early data는 latency를 줄이지만 replay 위험을 가진다. RFC 8446은 0-RTT data가 forward secret이 아니며, replay 보호가 일반 1-RTT traffic과 같지 않다는 점을 다룬다. 결제, nonce 소비, 계정 변경, 주문 같은 side effect가 있는 요청을 early data로 허용하면 공격자가 같은 early request를 다른 edge나 시간 창에서 재생할 수 있다.
+
+세 번째 실패는 TLS 1.2를 쓰는 내부 구간을 외부 TLS 1.3과 같은 수준으로 홍보하는 것이다. 예를 들어 브라우저에서 CDN edge까지는 TLS 1.3이지만, edge에서 origin까지 TLS 1.2 또는 plain HTTP라면 전체 시스템의 보안 수준은 경로별로 나눠 설명해야 한다. zkTLS proof가 edge에서 받은 응답을 증명하는지, origin 서버의 응답까지 주장하는지 정책이 달라진다.
+
+네 번째 실패는 downgrade protection을 무시하는 것이다. TLS 1.3은 협상 과정에서 오래된 버전으로 떨어지는 공격을 막기 위한 구조를 갖지만, 중간 장비 호환성 때문에 legacy-looking 값이 남아 있다. parser가 이 값을 단순하게 읽으면 "TLS 1.2로 보인다"거나 "TLS 1.3이 아니다"라고 잘못 판단할 수 있다.
+
+다섯 번째 실패는 resumption을 새 연결과 같은 것으로 보는 것이다. TLS 1.2의 session resumption과 TLS 1.3의 PSK 기반 resumption은 모두 이전 상태를 재사용하지만 transcript와 security property가 다르다. 특히 TLS 1.3 PSK에는 binder 검증과 ticket age 같은 값이 들어가며, early data가 붙으면 replay 판단까지 필요하다. "handshake가 짧았다"는 로그만으로 새 ECDHE handshake인지, PSK resumption인지, 0-RTT까지 포함했는지 구분하지 않으면 incident trace에서 원인 분석이 틀어진다.
+
+여섯 번째 실패는 middlebox compatibility 흔적을 실제 보안 의미로 해석하는 것이다. TLS 1.3은 배포 과정에서 일부 legacy 필드를 유지하고 dummy ChangeCipherSpec를 볼 수 있는 상황도 있다. 이것은 TLS 1.2의 상태 전환 의미와 같지 않다. packet trace를 읽을 때는 "보이는 메시지 이름"보다 그 메시지가 transcript와 key schedule에 어떤 의미를 갖는지 확인해야 한다.
+
+## Minimal Lab or Trace
+
+같은 서버에서 두 버전을 비교하면 구조 차이가 드러난다.
+
+```bash
+openssl s_client -connect example.com:443 -servername example.com -tls1_2 -msg
+openssl s_client -connect example.com:443 -servername example.com -tls1_3 -msg
+```
+
+TLS 1.2 trace에서는 ServerHelloDone, ClientKeyExchange, ChangeCipherSpec를 찾는다. TLS 1.3 trace에서는 supported_versions, key_share, EncryptedExtensions, CertificateVerify, Finished 순서를 찾는다. Wireshark에서 같은 trace를 보면 TLS 1.3은 ServerHello 이후 handshake record가 암호화되어 내부 메시지 해석이 key log 없이는 제한되는 점이 보인다.
+
+다음은 분석 worksheet다.
+
+| 관찰 항목 | TLS 1.2에서 볼 것 | TLS 1.3에서 볼 것 |
+|---|---|---|
+| negotiated version | ServerHello version과 suite | supported_versions extension |
+| key exchange | suite 이름과 ServerKeyExchange | key_share group과 share |
+| authentication | certificate와 suite name | certificate, signature_algorithms, CertificateVerify |
+| record protection | suite에 따른 CBC/GCM 등 | AEAD-only traffic keys |
+| application data start | ChangeCipherSpec/Finished 이후 | Finished 이후, 일부 resumption은 0-RTT 가능 |
+
+0-RTT는 공개 사이트에 무작정 보내는 실험이 적절하지 않다. 별도 test server에서 early data를 켜고 idempotent GET과 state-changing POST를 나누어 replay 가능성을 관찰하는 방식이 안전하다. 실험 결과를 해석할 때는 "0-RTT가 성공했다"가 아니라 "서버가 이 endpoint를 replay-safe로 취급해도 되는가"를 질문해야 한다.
+
+## zkTLS Bridge
+
+zkTLS 회로나 프로토콜이 TLS 1.2와 TLS 1.3을 모두 지원한다고 할 때, 이것은 단순한 버전 플래그 추가가 아니다. TLS 1.2 proof는 handshake transcript, PRF, Finished verify data, 선택된 cipher suite, record MAC 또는 AEAD 처리를 따라가야 한다. TLS 1.3 proof는 HKDF key schedule, transcript hash, CertificateVerify input, Finished key, application traffic secret, per-record nonce derivation을 따라가야 한다.
+
+또한 TLS 1.3은 handshake 메시지 일부가 암호화되므로 외부 관찰자가 볼 수 있는 metadata와 prover가 witness로 들고 있는 값의 경계가 달라진다. selective disclosure에서 어떤 값이 public input이고 어떤 값이 private witness인지 설계할 때 이 차이가 중요하다. verifier가 단지 "TLS 1.3을 썼다"고만 확인하고 key_share, certificate identity, ALPN, response boundary를 확인하지 않으면 origin claim이 약해진다.
+
+0-RTT도 zkTLS에 직접 연결된다. early data로 만들어진 transcript를 정상 요청 증거처럼 받아들이면 replay semantics를 놓칠 수 있다. verifier는 proof가 1-RTT application data인지, early data인지, resumption ticket에 기반한 요청인지 구분해야 한다. side effect 없는 조회라면 허용 가능할 수 있지만, 계정 상태 변경이나 nonce 소비가 포함된 요청이라면 proof policy가 early data를 거부해야 한다.
+
+실무적인 설계 문장으로 바꾸면, zkTLS verifier는 "TLS accepted"라는 boolean이 아니라 versioned evidence bundle을 받아야 한다. 그 bundle에는 negotiated version, transcript hash, server identity evidence, selected application protocol, traffic secret derivation commitment, application data range가 들어간다. TLS 1.2 bundle과 TLS 1.3 bundle은 같은 interface로 감쌀 수는 있지만 내부 검증 규칙은 같지 않다. 이 분리가 없으면 새로운 TLS 기능을 추가할수록 기존 proof가 무엇을 보장했는지 불분명해진다.
+
+## Verification Checklist
+
+- TLS 1.2와 TLS 1.3의 handshake sequence를 메시지 단위로 비교했는가?
+- TLS 1.2 cipher suite가 여러 의미를 묶고 TLS 1.3 cipher suite가 AEAD와 HKDF hash 중심임을 구분했는가?
+- TLS 1.3에서 static RSA와 static DH key exchange가 제거되었다는 점을 언급했는가?
+- HKDF 기반 TLS 1.3 key schedule과 transcript hash binding을 설명했는가?
+- 0-RTT early data의 latency 이점과 replay 위험을 함께 다뤘는가?
+- zkTLS proof가 버전별 transcript와 record artifact를 따로 검증해야 함을 명시했는가?
+
+## Visual Artifact Brief
+
+- Artifact key: tls12-vs-tls13-handshake
+- Purpose: TLS 1.2와 TLS 1.3의 차이를 "짧아진 handshake"가 아니라 구조 변화로 보여준다.
+- Layout: 좌우 swimlane 비교. 왼쪽은 TLS 1.2 메시지 흐름, 오른쪽은 TLS 1.3 메시지 흐름을 두고, 아래에는 cipher suite 의미와 key schedule 차이를 별도 strip으로 둔다.
+- Labels: ClientHello, ServerHello, ServerHelloDone, ChangeCipherSpec, EncryptedExtensions, CertificateVerify, transcript hash, HKDF, 0-RTT replay risk.
+- Motion idea: TLS 1.3 쪽은 ServerHello 이후 영역이 잠금 처리되고, key schedule strip에서 traffic secret이 단계별로 파생된다.
+- Reduced-motion state: 정적 비교 다이어그램과 4개 callout. "suite meaning changed", "handshake encrypted earlier", "HKDF schedule", "0-RTT is replay-sensitive".
+
+## References
+
+- https://datatracker.ietf.org/doc/html/rfc5246
+- https://datatracker.ietf.org/doc/html/rfc8446
+- https://datatracker.ietf.org/doc/html/rfc5869
+- https://datatracker.ietf.org/doc/html/rfc9325
+- https://datatracker.ietf.org/doc/html/rfc8996
+- https://datatracker.ietf.org/doc/html/rfc7301

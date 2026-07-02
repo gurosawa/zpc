@@ -1,0 +1,119 @@
+---
+title: SSL이 아니라 TLS라고 부르는 이유
+chapter: Web Trust and TLS
+chapterSlug: web-trust-and-tls
+articleSlug: ssl-vs-tls
+status: draft
+difficulty: foundation
+wordCountTarget: 4200
+visualKey: tls-record-strip
+branch: content/c03-a01-ssl-vs-tls
+readerQuestion: 왜 아직 SSL 인증서라는 말이 남아 있는데 표준 문서에서는 TLS라고 부르는가?
+zktlsBridge: zkTLS가 증명하는 대상은 SSL이라는 브랜드가 아니라 특정 TLS 버전의 handshake와 transcript 구조다.
+references:
+  - https://datatracker.ietf.org/doc/html/rfc6101
+  - https://datatracker.ietf.org/doc/html/rfc6176
+  - https://datatracker.ietf.org/doc/html/rfc7568
+  - https://datatracker.ietf.org/doc/html/rfc8996
+  - https://datatracker.ietf.org/doc/html/rfc9325
+  - https://datatracker.ietf.org/doc/html/rfc8446
+---
+
+# SSL이 아니라 TLS라고 부르는 이유
+
+## Reader Question
+
+브라우저 주소창, 인증서 판매 페이지, 오래된 운영 문서에는 아직도 "SSL"이라는 말이 남아 있다. 그런데 IETF 표준과 현대 보안 설정 문서에서는 거의 항상 TLS라고 부른다. 이 차이는 단순한 용어 취향이 아니다. "SSL을 켠다"는 말로 생각하면 과거 프로토콜, 인증서 상품명, HTTPS 서비스, TLS 버전 협상, 암호 스위트 정책이 한 덩어리로 뭉친다. 반대로 "TLS를 협상한다"로 생각하면 클라이언트와 서버가 어떤 버전, 어떤 키 교환, 어떤 record 보호 방식을 실제로 선택했는지 물을 수 있다.
+
+기억할 질문은 하나다. 내가 말하는 SSL은 역사적 별명인가, 아니면 실제로 협상 가능한 프로토콜인가? 현대 시스템에서 SSL 2.0과 SSL 3.0은 선택지가 아니다. TLS 1.0과 TLS 1.1도 deprecated로 다뤄야 한다. 그러므로 "SSL 인증서"라는 관용어를 보더라도 실제 검토 항목은 TLS 서버 인증서, TLS 1.2 또는 TLS 1.3 협상, 그리고 HTTPS 위에서의 서비스 identity 검증이다.
+
+## Why It Matters
+
+SSL이라는 단어를 느슨하게 쓰면 레거시 예외가 정상 설정처럼 들어온다. 예를 들어 "구형 파트너 호환성 때문에 SSL을 허용한다"는 문장은 두 가지를 숨긴다. 하나는 정말 SSLv3를 허용하는 위험한 설정인지, 다른 하나는 TLS 1.2만 허용하되 인증서 상품명을 SSL이라고 부르는지다. 전자는 공격면이고 후자는 언어 습관이다.
+
+RFC 6101은 SSL 3.0을 역사 기록으로 남긴 문서다. RFC 6176은 TLS 클라이언트와 서버가 SSL 2.0을 협상하지 말아야 한다고 요구한다. RFC 7568은 SSL 3.0을 사용하지 말아야 한다고 정리한다. RFC 8996은 TLS 1.0과 TLS 1.1을 formally deprecated로 두며 Historic 상태로 옮겼다. RFC 9325는 TLS와 DTLS를 안전하게 쓰기 위한 권고를 제공하면서 오래된 버전을 피하고 TLS 1.2와 TLS 1.3 중심으로 설계할 것을 요구한다. 따라서 표준의 언어로는 SSL이 아니라 TLS가 현재형이다.
+
+zkTLS 문맥에서는 용어가 더 중요하다. zkTLS는 "웹에서 받은 값"을 증명하는 것처럼 보이지만 실제로는 특정 transport security transcript, 특정 서버 인증, 특정 application data record에 대한 주장이다. "SSL 응답을 증명한다"는 말은 증명 회로가 어떤 handshake 구조를 검증하는지 숨긴다. TLS 1.2와 TLS 1.3의 transcript와 키 스케줄은 다르므로 증명 대상도 다르게 모델링해야 한다.
+
+## Core Model
+
+정신 모델은 "SSL은 역사적 계열 이름, TLS는 현재 표준 프로토콜 계열"이다. 계보는 다음처럼 기억하면 된다.
+
+```txt
+SSL 2.0 -> SSL 3.0 -> TLS 1.0 -> TLS 1.1 -> TLS 1.2 -> TLS 1.3
+ forbidden  forbidden  deprecated deprecated deployed   modern baseline
+```
+
+이 타임라인은 "나중 버전이 항상 같은 구조의 패치판"이라는 뜻이 아니다. SSL 3.0은 TLS의 전신이고, TLS 1.0은 그 설계를 표준화하며 이어받았지만, 현대 보안 판단에서는 SSL 계열과 오래된 TLS 계열을 협상 대상에서 제외한다. TLS 1.2는 여전히 많은 시스템의 호환성 기준이고, TLS 1.3은 handshake privacy, 키 스케줄, 암호 스위트 의미, round trip 수를 크게 바꾼 현대 설계다.
+
+또 하나의 모델은 "인증서와 프로토콜을 분리"하는 것이다. 시장에서 "SSL 인증서"라고 부르는 것은 보통 Web PKI의 TLS 서버 인증서를 뜻한다. 인증서는 서버 public key와 DNS identity를 묶는 artifact이고, TLS는 그 인증서를 사용해 handshake를 진행하는 프로토콜이다. 인증서가 있다고 TLS가 안전하게 설정된 것은 아니다. TLS 1.0을 켜 두었거나, 취약한 cipher suite를 허용하거나, hostname 검증을 우회하면 인증서가 있어도 채널 보장은 약해진다.
+
+## Protocol or System Artifact
+
+운영자가 확인해야 할 artifact는 이름이 아니라 협상 결과다.
+
+```txt
+client policy
+  supported_versions: TLS 1.3, TLS 1.2
+  forbidden_versions: SSL 2.0, SSL 3.0, TLS 1.0, TLS 1.1
+
+server endpoint
+  certificate_chain: leaf -> intermediate -> root
+  negotiated_version: TLS 1.3
+  cipher_suite: TLS_AES_128_GCM_SHA256
+  application_protocol: h2
+```
+
+여기서 `certificate_chain`은 "누구와 이야기하는가"를 다룬다. `negotiated_version`과 `cipher_suite`는 "어떤 규칙으로 채널을 보호하는가"를 다룬다. `application_protocol`은 TLS 안쪽에서 HTTP/1.1, HTTP/2 같은 상위 프로토콜을 어떤 방식으로 운반하는지 보여준다. 세 항목을 합쳐야 "HTTPS 요청이 보호된다"는 문장이 기술적으로 의미를 갖는다.
+
+## Failure Mode
+
+대표 실패는 레거시 이름을 레거시 프로토콜 허용으로 번역하는 것이다. 문서에는 "SSL enabled"라고 적혀 있고, 실제 설정은 TLS 1.2만 켠 것이라면 큰 문제는 아니다. 그러나 같은 문구가 SSLv3 fallback, TLS 1.0 허용, 오래된 CBC suite 허용을 뜻한다면 공격자는 downgrade와 padding 관련 공격면을 얻게 된다. 장애 대응 과정에서 "파트너가 SSL만 지원한다"는 말을 검증하지 않고 예외를 열면 이 문제가 반복된다.
+
+두 번째 실패는 TLS 1.2와 TLS 1.3을 같은 검증 대상으로 보는 것이다. TLS 1.3은 `supported_versions` 확장으로 버전을 협상하고, 호환성 때문에 일부 legacy 필드를 유지한다. 표면만 보면 TLS 1.2처럼 보이는 값이 남아 있지만, 실제 선택은 확장과 transcript에 묶여 있다. 로그 파서나 증명 시스템이 legacy 필드만 보고 버전을 판단하면 잘못된 결론을 낼 수 있다.
+
+세 번째 실패는 "SSL 인증서 설치 완료"를 보안 완료로 간주하는 것이다. 인증서가 설치되어도 hostname이 맞지 않거나, chain이 잘못 구성되거나, 클라이언트가 hostname 검증을 비활성화하면 서버 인증은 깨진다. TLS 버전 정책과 인증서 검증은 서로 다른 통제이며 둘 다 확인해야 한다.
+
+## Minimal Lab or Trace
+
+간단한 trace는 같은 host에 대해 버전 협상 결과를 비교하는 것이다.
+
+```bash
+openssl s_client -connect example.com:443 -servername example.com -tls1_2
+openssl s_client -connect example.com:443 -servername example.com -tls1_3
+openssl s_client -connect example.com:443 -servername example.com -tls1
+```
+
+관찰할 것은 성공 여부, `Protocol`, `Cipher`, 인증서 chain, 그리고 ALPN 결과다. 현대 서버라면 TLS 1.2 또는 TLS 1.3은 성공할 수 있지만 TLS 1.0/1.1과 SSLv3는 거부되어야 한다. 실험 환경에서 Wireshark나 `openssl -msg`를 쓰면 ClientHello의 `supported_versions`와 ServerHello의 협상 결과를 볼 수 있다. 이 trace를 운영 표준 문구와 나란히 놓으면 "SSL 허용"이라는 말이 얼마나 부정확한지 바로 드러난다.
+
+## zkTLS Bridge
+
+zkTLS에서 중요한 것은 이름보다 transcript다. verifier가 "사용자가 어느 origin에서 어떤 응답을 받았다"고 믿으려면 증명은 최소한 서버 identity, TLS 버전, handshake transcript, application data binding을 다뤄야 한다. "SSL proof"라고 부르면 이 네 가지가 흐려진다.
+
+특히 TLS 1.2와 TLS 1.3은 proof circuit의 입력 구조가 다를 수 있다. TLS 1.2는 PRF, Finished 검증, record MAC 또는 AEAD 처리를 봐야 하고, TLS 1.3은 HKDF 기반 key schedule과 transcript hash, encrypted handshake, traffic secret을 봐야 한다. 따라서 zkTLS 설계 문서에서는 SSL이라는 관용어를 쓰더라도 실제 artifact 이름은 TLS versioned transcript로 적어야 한다.
+
+## Verification Checklist
+
+- "SSL 인증서"라는 관용어와 실제 TLS 프로토콜 설정을 분리했는가?
+- SSL 2.0과 SSL 3.0을 현대 선택지처럼 쓰지 않았는가?
+- TLS 1.0과 TLS 1.1의 deprecated 상태를 RFC 8996 또는 RFC 9325 기준으로 확인했는가?
+- TLS 1.2와 TLS 1.3의 협상 결과를 로그나 trace에서 구분했는가?
+- zkTLS proof가 어떤 TLS 버전의 transcript를 대상으로 하는지 명시했는가?
+
+## Visual Artifact Brief
+
+- Artifact key: tls-lineage-not-ssl
+- Purpose: SSL이라는 이름이 왜 현재형 표준명이 아닌지 계보와 상태로 설명한다.
+- Layout: SSL 2.0부터 TLS 1.3까지 가로 타임라인을 두고 각 노드 아래에 forbidden, deprecated, deployed, modern baseline 배지를 둔다.
+- Labels: SSL 2.0, SSL 3.0, TLS 1.0, TLS 1.1, TLS 1.2, TLS 1.3, certificate naming, negotiated protocol.
+- Motion idea: 레거시 구간은 회색으로 흐려지고 TLS 1.2와 TLS 1.3 노드만 handshake trace와 연결된다.
+- Reduced-motion state: 정적 타임라인과 상태 배지, 우측에 "certificate name is not protocol version" callout.
+
+## References
+
+- https://datatracker.ietf.org/doc/html/rfc6101
+- https://datatracker.ietf.org/doc/html/rfc6176
+- https://datatracker.ietf.org/doc/html/rfc7568
+- https://datatracker.ietf.org/doc/html/rfc8996
+- https://datatracker.ietf.org/doc/html/rfc9325
+- https://datatracker.ietf.org/doc/html/rfc8446

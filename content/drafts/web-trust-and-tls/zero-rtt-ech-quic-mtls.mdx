@@ -1,0 +1,203 @@
+---
+title: 0-RTT, ECH, QUIC, mTLS
+chapter: Web Trust and TLS
+chapterSlug: web-trust-and-tls
+articleSlug: zero-rtt-ech-quic-mtls
+status: draft
+difficulty: deep
+wordCountTarget: 8400
+visualKey: tunnel-encapsulation-stack
+branch: content/c03-a06-zero-rtt-ech-quic-mtls
+readerQuestion: 0-RTT, ECH, QUIC, mTLS는 모두 최신 TLS 기능인가, 아니면 서로 다른 위험을 다루는 별도 도구인가?
+zktlsBridge: zkTLS는 0-RTT replay, ECH의 metadata 은닉, QUIC의 capture 단위, mTLS client identity 노출을 proof policy에서 구분해야 한다.
+references:
+  - https://datatracker.ietf.org/doc/html/rfc8446
+  - https://www.rfc-editor.org/info/rfc9849
+  - https://datatracker.ietf.org/doc/html/rfc9848
+  - https://www.rfc-editor.org/info/rfc9934
+  - https://datatracker.ietf.org/doc/html/rfc9001
+  - https://datatracker.ietf.org/doc/html/rfc9000
+  - https://www.rfc-editor.org/info/rfc9114
+  - https://datatracker.ietf.org/doc/html/rfc8705
+  - https://support.mozilla.org/en-US/kb/faq-encrypted-client-hello
+---
+
+# 0-RTT, ECH, QUIC, mTLS
+
+## Reader Question
+
+0-RTT, ECH, QUIC, mTLS는 종종 "최신 TLS 기능"처럼 한 문장에 묶인다. 하지만 이 네 가지는 같은 문제를 풀지 않는다. 0-RTT는 지연 시간을 줄이지만 replay 위험을 남긴다. ECH는 ClientHello 안의 민감한 metadata, 특히 SNI 계열 정보를 숨기는 방향이다. QUIC은 TLS 1.3 handshake를 TCP가 아니라 QUIC transport 안에 통합한다. mTLS는 서버 인증에 더해 client certificate possession을 TLS layer에서 확인한다.
+
+따라서 reader question은 "켜면 더 안전한가?"가 아니라 "무엇을 해결하고 어떤 새 경계를 만드는가?"다. 각 기능의 threat model이 다르기 때문에 같은 정책으로 묶으면 실패한다. 0-RTT는 application semantics를 봐야 하고, ECH는 DNS와 anonymity set을 봐야 하며, QUIC은 packet space와 transport parameter를 봐야 하고, mTLS는 client identity와 application user identity를 분리해야 한다.
+
+## Why It Matters
+
+TLS 생태계가 발전할수록 "TLS를 쓴다"는 말은 더 많은 변형을 포함한다. RFC 8446은 TLS 1.3의 0-RTT와 anti-replay 고려사항을 다룬다. ECH는 RFC 9849로 정리된 TLS Encrypted Client Hello와, DNS Service Bindings로 bootstrap하는 RFC 9848을 함께 봐야 한다. QUIC은 RFC 9001에서 TLS를 QUIC 보안에 사용하는 방식을 정의하고, RFC 9000은 transport 자체를, RFC 9114는 HTTP/3를 정의한다. mTLS는 기본 TLS client certificate 흐름과 더불어 OAuth 2.0에서 RFC 8705의 mutual TLS client authentication과 certificate-bound access token으로 확장된다.
+
+이 자료들이 말하는 공통점은 "새 기능은 새 보안 보장을 추가하지만 새 실패 조건도 만든다"는 것이다. 0-RTT는 빠르지만 replay-safe하지 않다. ECH는 ClientHello privacy를 개선하지만 DNS, fallback, deployment consistency가 같이 맞아야 한다. QUIC은 TLS record가 TCP stream 위에 그대로 있는 구조가 아니므로 기존 패킷 캡처와 proof 도구가 그대로 동작하지 않는다. mTLS는 client certificate로 강한 client authentication을 만들 수 있지만, 사용자 로그인과 device credential, OAuth token binding을 혼동하면 권한 모델이 깨진다.
+
+zkTLS 프로젝트가 이 장을 필요로 하는 이유도 여기에 있다. proof system은 "TLS로 받았다"는 추상 문장을 넘어 어떤 TLS 변형에서 어떤 metadata가 공개되고, 어떤 요청이 replay될 수 있고, 어떤 client identity가 transcript에 묶이는지 판단해야 한다.
+
+## Core Model
+
+네 기능을 네 축으로 나누면 이해가 쉽다.
+
+| 기능 | 해결하려는 문제 | 새 위험 또는 설계 조건 |
+|---|---|---|
+| 0-RTT | 재접속 latency 감소 | replay, forward secrecy 약화, endpoint idempotency |
+| ECH | ClientHello metadata privacy | DNS bootstrap, fallback, anonymity set, deployment consistency |
+| QUIC | transport와 TLS 1.3 통합, connection migration | TCP 기반 record 관찰 불가, packet space, transport parameter binding |
+| mTLS | client certificate possession proof | user identity 혼동, certificate lifecycle, token binding 검증 |
+
+0-RTT는 이전 handshake에서 받은 session ticket 또는 PSK를 사용해 첫 flight에 early application data를 보낸다. 이 data는 빠르게 도착하지만 일반 1-RTT data와 같은 replay 성질을 갖지 않는다. 서버와 애플리케이션은 early data로 받아도 되는 endpoint를 제한해야 한다.
+
+ECH는 ClientHello를 바깥과 안쪽으로 나누는 모델이다. ClientHelloOuter는 public name과 ECH 확장을 담고, ClientHelloInner는 실제 SNI와 민감한 협상 정보를 담아 암호화한다. 그러나 ECH만으로 모든 metadata가 사라지는 것은 아니다. DNS HTTPS/SVCB record로 ECHConfig를 얻는 과정, 접속 IP, timing, certificate behavior, fallback behavior가 privacy에 영향을 준다.
+
+QUIC은 TLS 1.3 handshake 메시지를 QUIC CRYPTO frames로 운반한다. TLS record layer가 TCP stream 위에 그대로 보이는 것이 아니라, QUIC packet space와 encryption level이 Initial, Handshake, 0-RTT, 1-RTT로 나뉜다. HTTP/3는 QUIC 위에서 동작하므로 기존 "TLS record 안의 HTTP/2 frame" 모델과 다르다.
+
+mTLS는 서버가 CertificateRequest를 보내고 client가 certificate와 CertificateVerify를 제공하는 구조다. 이것은 client가 private key를 소유했다는 강한 신호지만, 곧바로 "사람 사용자 로그인"을 뜻하지 않는다. client certificate는 device, workload, application client, enterprise identity일 수 있다.
+
+## Protocol or System Artifact
+
+0-RTT artifact:
+
+```txt
+NewSessionTicket
+  ticket
+  ticket_age_add
+  ticket_nonce
+  max_early_data_size
+
+ClientHello
+  pre_shared_key
+  psk_key_exchange_modes
+  early_data
+  binder
+
+EarlyData
+  replay-sensitive application bytes
+```
+
+서버는 ticket과 binder로 이전 세션 기반 PSK를 확인하고 early data를 수락할지 결정한다. 그러나 application layer는 이 요청이 replay되어도 안전한지 별도로 판단해야 한다.
+
+ECH artifact:
+
+```txt
+DNS HTTPS/SVCB
+  ech=ECHConfigList
+
+ClientHelloOuter
+  public_name
+  ech extension
+
+ClientHelloInner
+  real server name
+  sensitive extensions
+```
+
+ECH는 "SNI를 숨긴다"로만 기억하면 부족하다. 클라이언트가 ECHConfig를 어떻게 얻는지, 실패 시 fallback을 어떻게 처리하는지, 같은 public name 아래에 충분한 anonymity set이 있는지 봐야 한다.
+
+QUIC artifact:
+
+```txt
+QUIC packet spaces
+  Initial
+  Handshake
+  0-RTT
+  1-RTT
+
+TLS messages
+  carried in QUIC CRYPTO frames
+
+HTTP/3
+  carried in QUIC streams
+```
+
+QUIC에서 TLS는 transport 아래로 사라지지 않는다. 다만 record layer가 TCP 위에 그대로 있는 형태가 아니므로 capture와 proof 단위가 달라진다.
+
+mTLS artifact:
+
+```txt
+Server
+  CertificateRequest
+
+Client
+  Certificate
+  CertificateVerify
+  Finished
+
+OAuth certificate-bound token
+  cnf claim or certificate thumbprint binding
+```
+
+OAuth mTLS에서는 certificate로 client를 인증하거나 access token을 certificate에 묶는다. 이 경우 resource server는 token만 보는 것이 아니라 제시된 client certificate와 token binding을 함께 검증해야 한다.
+
+## Failure Mode
+
+0-RTT의 대표 실패는 replay다. 사용자가 `POST /transfer`를 early data로 보냈고 edge cluster가 anti-replay state를 완전히 공유하지 못하면 공격자는 같은 early data를 다른 edge나 다른 시간 창에서 재전송할 수 있다. TLS layer가 record authentication을 성공시켜도 application semantics는 깨진다. 안전한 설계는 early data를 idempotent 조회에 제한하거나, application nonce와 replay cache를 별도로 둔다.
+
+ECH의 실패는 privacy gap이다. ClientHelloInner가 암호화되어도 DNS가 평문이고, 접속 IP가 특정 origin 하나만 가리키며, fallback이 실패할 때 실제 이름을 드러내면 공격자는 여전히 origin을 추론할 수 있다. 또한 ECH fronting 구조에서 public name과 backend deployment가 일관되지 않으면 어떤 사이트는 ECH를 쓰고 어떤 사이트는 쓰지 않는 패턴 자체가 fingerprint가 된다.
+
+QUIC의 실패는 관찰 모델 착각이다. 기존 TLS/TCP proxy가 TLS records를 기준으로 검사하던 가정은 QUIC에 그대로 적용되지 않는다. middlebox가 UDP를 차단하거나, qlog와 key log 없이 packet space를 해석하려 하거나, 0-RTT transport parameter 호환성을 무시하면 성능과 보안 모두에 문제가 생긴다. HTTP/3 SETTINGS와 transport parameter가 이전 연결과 호환되지 않는데 early data를 수락하면 초기 요청 해석이 어긋날 수 있다.
+
+mTLS의 실패는 identity confusion이다. client certificate가 있다는 사실을 곧바로 user authorization으로 연결하면 device 또는 workload credential이 사람 권한으로 상승할 수 있다. 반대로 OAuth certificate-bound access token을 쓰면서 resource server가 token의 certificate thumbprint binding을 확인하지 않으면 bearer token 탈취 방어가 무력화된다. 인증서 갱신, 폐기, private key 보호, intermediate trust도 운영 범위에 들어간다.
+
+공통 실패는 "최신 기능이므로 안전하다"는 결론이다. 각 기능은 특정 축을 개선한다. 0-RTT는 latency, ECH는 ClientHello privacy, QUIC은 transport integration, mTLS는 client authentication을 다룬다. 개선한 축 밖의 위험은 자동으로 사라지지 않는다.
+
+## Minimal Lab or Trace
+
+0-RTT trace는 public production endpoint가 아니라 로컬 테스트 서버에서 한다. early data를 켠 서버를 만들고 `GET /status`와 `POST /charge`를 나눠 본다. 같은 early request가 replay될 때 서버가 어떻게 처리하는지 로그에 request id, ticket id, endpoint idempotency 판정을 남긴다. 목표는 공격을 수행하는 것이 아니라 replay-sensitive endpoint가 왜 early data를 거부해야 하는지 확인하는 것이다.
+
+ECH trace는 DNS HTTPS record에서 시작한다.
+
+```bash
+dig HTTPS example.com
+```
+
+응답에 `ech=` SvcParam이 있는지 보고, ECH 지원 브라우저의 네트워크 진단 또는 테스트 사이트에서 ClientHello metadata가 어떻게 달라지는지 확인한다. 이때 "SNI가 안 보인다"와 "origin을 추론할 수 없다"를 같은 말로 쓰지 않는다. 접속 IP, DNS path, public name, certificate behavior를 함께 기록한다.
+
+QUIC trace는 browser net-export, qlog, 또는 QUIC 지원 client를 사용한다. 관찰 항목은 Initial, Handshake, 0-RTT, 1-RTT packet space, TLS CRYPTO frame, HTTP/3 stream이다. TLS key log만으로 TCP record처럼 보는 방식과 다르다는 점을 worksheet에 적는다.
+
+mTLS trace는 local CA와 client certificate를 만든 뒤 서버가 client certificate를 요구하도록 구성한다. client certificate 없이 요청할 때와 있을 때, certificate는 있지만 application role mapping이 없을 때를 구분해 로그를 남긴다. OAuth mTLS를 실험한다면 access token의 certificate binding과 실제 TLS client certificate thumbprint가 일치하는지 확인한다.
+
+## zkTLS Bridge
+
+zkTLS 관점에서 0-RTT는 proof의 semantic safety 문제다. early data로 만들어진 transcript가 cryptographically valid해도 replay 가능한 요청이면 verifier가 "사용자가 지금 정상적으로 수행한 요청"이라고 받아들이기 어렵다. proof policy는 early data 여부를 공개하거나, early data를 거부하거나, endpoint가 idempotent임을 별도로 요구해야 한다.
+
+ECH는 privacy와 origin evidence의 균형 문제를 만든다. ClientHello metadata가 숨겨지면 네트워크 관찰자에게는 좋지만, verifier가 어떤 origin에 대한 proof인지 확인하려면 certificate identity와 transcript evidence를 어떻게 공개할지 설계해야 한다. ECH를 쓰는 zkTLS는 "관찰자에게 숨김"과 "verifier에게 필요한 origin binding 공개" 사이의 경계를 분명히 해야 한다.
+
+QUIC은 capture 단위를 바꾼다. TLS/TCP 기반 zkTLS 설계가 record layer를 직접 다뤘다면 QUIC에서는 TLS messages가 QUIC CRYPTO frames로 운반되고, application data는 QUIC streams와 HTTP/3 frames에 걸쳐 나타난다. proof generator는 packet number protection, encryption levels, stream reassembly, HTTP/3 framing을 고려해야 한다. "TLS record를 증명한다"는 기존 표현이 QUIC에서는 바로 맞지 않는다.
+
+mTLS는 selective disclosure에 client identity를 끌어들인다. client certificate가 transcript에 포함되면 proof가 서버 응답뿐 아니라 client credential possession도 드러낼 수 있다. 어떤 사용자는 client certificate identity를 숨기면서 서버 응답 field만 증명하고 싶을 수 있고, 어떤 enterprise verifier는 client certificate-bound token까지 확인하고 싶을 수 있다. 둘은 다른 privacy policy다.
+
+## Verification Checklist
+
+- 0-RTT early data가 일반 1-RTT application data와 같은 replay 보장을 갖지 않는다고 설명했는가?
+- early data를 허용하는 endpoint가 idempotent 또는 replay-safe인지 application layer에서 판단하는가?
+- ECH의 본문 RFC와 DNS bootstrap RFC를 구분했는가?
+- ECH가 SNI만 숨겨도 DNS, IP, fallback, anonymity set 문제가 남는다고 표시했는가?
+- QUIC이 TLS 1.3을 쓰지만 TCP 위 TLS record 모델과 capture 단위가 다르다고 설명했는가?
+- mTLS가 user login이 아니라 client certificate possession proof임을 구분했는가?
+- OAuth certificate-bound token을 쓰는 경우 token과 TLS client certificate binding을 함께 검증하는가?
+- zkTLS proof policy가 early data, ECH origin evidence, QUIC framing, client identity 공개 범위를 다루는가?
+
+## Visual Artifact Brief
+
+- Artifact key: advanced-tls-feature-threat-map
+- Purpose: 0-RTT, ECH, QUIC, mTLS를 하나의 "최신 기능" 묶음이 아니라 서로 다른 보안 축과 실패 조건으로 분해한다.
+- Layout: 4분면 matrix. 각 카드에는 solved problem, new risk, protocol artifact, zkTLS implication을 넣는다. 하단에는 TLS baseline에서 네 기능으로 갈라지는 branch line을 둔다.
+- Labels: 0-RTT replay, ECH ClientHello privacy, QUIC packet spaces, HTTP/3 streams, mTLS client cert, certificate-bound token, origin binding.
+- Motion idea: ClientHello가 0-RTT, ECH, QUIC, mTLS 옵션에 따라 네 경로로 분기하고 각 경로 옆에 risk badge가 켜진다.
+- Reduced-motion state: 정적 feature-risk matrix와 zkTLS policy checklist column.
+
+## References
+
+- https://datatracker.ietf.org/doc/html/rfc8446
+- https://www.rfc-editor.org/info/rfc9849
+- https://datatracker.ietf.org/doc/html/rfc9848
+- https://www.rfc-editor.org/info/rfc9934
+- https://datatracker.ietf.org/doc/html/rfc9001
+- https://datatracker.ietf.org/doc/html/rfc9000
+- https://www.rfc-editor.org/info/rfc9114
+- https://datatracker.ietf.org/doc/html/rfc8705
+- https://support.mozilla.org/en-US/kb/faq-encrypted-client-hello

@@ -1,0 +1,171 @@
+---
+title: TLS record layer와 AEAD
+chapter: Web Trust and TLS
+chapterSlug: web-trust-and-tls
+articleSlug: tls-record-layer
+status: draft
+difficulty: deep
+wordCountTarget: 8200
+visualKey: tls-record-strip
+branch: content/c03-a04-tls-record-layer
+readerQuestion: TLS에서 실제 애플리케이션 바이트는 어떤 record 단위로 잘리고 AEAD로 어떻게 보호되는가?
+zktlsBridge: zkTLS가 HTTP 응답 일부를 증명하려면 TLS record 경계, nonce, AAD, inner content type, traffic secret 관계를 정확히 따라야 한다.
+references:
+  - https://datatracker.ietf.org/doc/html/rfc8446
+  - https://datatracker.ietf.org/doc/html/rfc5116
+  - https://datatracker.ietf.org/doc/html/rfc8439
+  - https://datatracker.ietf.org/doc/html/rfc8452
+  - https://csrc.nist.gov/pubs/sp/800/38/d/final
+  - https://csrc.nist.gov/pubs/sp/800/52/r2/final
+---
+
+# TLS record layer와 AEAD
+
+## Reader Question
+
+TLS 연결이 "암호화되었다"는 말은 실제로 어떤 바이트 단위에서 성립하는가? HTTP 응답 전체가 하나의 큰 암호문으로 보호되는 것이 아니다. TLS는 handshake와 application data를 record라는 작은 조각으로 나누고, 각 record를 키, nonce, AAD, plaintext로 구성된 AEAD 입력에 넣어 봉인한다. 따라서 TLS record layer를 이해하지 못하면 "서버가 이 JSON을 보냈다"는 말을 검증 가능한 구조로 바꾸기 어렵다.
+
+핵심 질문은 다음과 같다. record header 중 어떤 부분은 보이고 어떤 부분은 인증되는가? nonce는 매 record마다 random으로 뽑히는가, 아니면 sequence number에서 파생되는가? content type은 암호문 밖에 있는가 안에 있는가? record 하나를 변조하면 어떤 오류가 나야 하는가? 이 질문들은 모두 zkTLS에서 proof witness와 public statement를 나눌 때 직접 등장한다.
+
+## Why It Matters
+
+TLS 1.3의 record layer는 AEAD를 전제로 한다. RFC 8446은 TLSCiphertext 구조, TLSInnerPlaintext, record payload protection, per-record nonce 계산, sequence number 관리를 정의한다. RFC 5116은 AEAD 알고리즘의 일반 인터페이스를 `key`, `nonce`, `plaintext`, `associated data`로 모델링한다. NIST SP 800-38D는 GCM과 GMAC의 사용을 다루고, RFC 8439는 ChaCha20-Poly1305, RFC 8452는 AES-GCM-SIV 계열을 설명한다. 실제 TLS 1.3 표준 cipher suite는 AEAD를 사용하며, record layer는 그 보장을 프로토콜 구조에 붙인다.
+
+"세션 키가 있다"라는 생각은 충분하지 않다. 같은 key와 nonce 쌍이 재사용되면 AEAD의 보장이 무너질 수 있다. record length 제한을 잘못 처리하면 parser와 상태 머신이 흔들릴 수 있다. decryption failure를 세밀하게 노출하면 oracle 표면이 생긴다. padding을 보안 경계처럼 믿으면 traffic analysis 완화를 confidentiality와 혼동한다.
+
+zkTLS에서는 더 구체적이다. proof는 HTTP 응답 문자열만 증명하지 않는다. 그 문자열이 어떤 TLS application traffic secret으로 복호화되는 record payload에서 나왔는지, record authentication이 성공했는지, record 경계와 HTTP message boundary를 어떻게 연결했는지를 다뤄야 한다.
+
+## Core Model
+
+record layer는 "순번이 붙은 봉인 봉투"로 기억하면 된다.
+
+```txt
+TLSInnerPlaintext
+  content || content_type || zeros
+
+AEAD input
+  key: traffic write key
+  nonce: static write IV XOR padded sequence number
+  aad: TLSCiphertext header
+  plaintext: TLSInnerPlaintext
+
+TLSCiphertext
+  opaque_type || legacy_record_version || length || encrypted_record
+```
+
+TLS 1.3에서 encrypted record의 외부 content type은 호환성을 위해 `application_data(23)`처럼 보인다. 하지만 실제 inner type은 암호문 안쪽의 TLSInnerPlaintext 끝부분에서 복호화 후 읽는다. 즉 외부 관찰자는 이 record가 handshake인지 alert인지 application data인지 완전히 알 수 없다. padding이 붙으면 끝의 zero bytes를 제거한 뒤 마지막 non-zero byte가 실제 content type이 된다.
+
+nonce도 오해하기 쉽다. TLS 1.3 record nonce는 매번 RNG에서 새로 뽑는 값이 아니다. 각 방향의 sequence number를 64-bit로 관리하고, 이것을 write IV 길이에 맞춰 left-pad한 뒤 static write IV와 XOR한다. key update가 일어나면 새 key와 IV가 파생되고 sequence number는 0으로 돌아간다. 이 구조는 구현자가 sequence number를 정확히 유지해야 한다는 뜻이다.
+
+AAD는 record header다. header는 암호화되지는 않지만 인증에는 포함된다. 공격자가 header의 length나 type을 바꾸면 AEAD tag 검증이 실패해야 한다. 이것이 "보이는 값"과 "수정 가능한 값"이 같지 않다는 점을 보여준다.
+
+record layer는 ordering도 포함한다. sequence number가 wire에 직접 실리지는 않지만 양쪽 endpoint는 같은 순서로 record를 처리해야 같은 nonce를 계산한다. TCP 기반 TLS에서는 transport가 순서를 제공하지만, TLS 구현은 read direction과 write direction의 sequence number를 별도로 관리한다. client write key와 server write key가 다르고, client sequence와 server sequence도 다르다. 한쪽 방향에서 record를 하나 더 소비하거나 건너뛰었다고 잘못 판단하면 이후 모든 nonce가 어긋나 decryption failure가 이어진다.
+
+또한 TLS record는 보안 경계이면서 성능 경계다. 작은 record를 너무 많이 보내면 overhead가 커지고, 큰 record는 latency와 buffering에 영향을 준다. 보안 설계자는 이 성능 최적화가 proof semantics를 바꾸지 않도록 해야 한다. 예를 들어 같은 HTTP response라도 서버 설정, TLS library, congestion 상태에 따라 record segmentation은 달라질 수 있다. 그러므로 verifier가 record 개수나 크기를 business claim의 일부로 믿어서는 안 된다. 믿어야 할 것은 record authentication이 성공한 후 재조립된 application bytes와 그 bytes에 대한 parser 결과다.
+
+## Protocol or System Artifact
+
+TLS 1.3 record artifact를 단순화하면 다음과 같다.
+
+```txt
+struct TLSCiphertext {
+  ContentType opaque_type = application_data;
+  ProtocolVersion legacy_record_version = 0x0303;
+  uint16 length;
+  opaque encrypted_record[TLSCiphertext.length];
+}
+
+TLSInnerPlaintext = content || type || padding
+AAD = opaque_type || legacy_record_version || length
+nonce = write_iv XOR pad64(sequence_number)
+ciphertext = AEAD-Seal(write_key, nonce, AAD, TLSInnerPlaintext)
+```
+
+여기서 `opaque_type`과 `legacy_record_version`은 프로토콜 호환성의 흔적을 품고 있다. TLS 1.3을 쓰더라도 outer version은 0x0303처럼 보인다. 그러므로 버전 판정은 record header만 보고 해서는 안 된다. handshake의 supported_versions와 transcript를 봐야 한다.
+
+record length도 artifact의 일부다. TLS는 plaintext fragment 크기와 ciphertext expansion에 제한을 둔다. application data가 큰 경우 여러 record로 나뉜다. HTTP/2나 HTTP/3 frame 경계와 TLS record 경계는 같지 않을 수 있다. JSON field 하나가 record 하나에 정확히 들어간다고 기대하면 proof slicing에서 오류가 난다.
+
+간단한 mapping은 다음과 같다.
+
+| 값 | 위치 | 보호 의미 |
+|---|---|---|
+| outer type | ciphertext header | 보이지만 AAD로 인증된다. |
+| length | ciphertext header | 보이지만 AAD로 인증된다. |
+| inner content type | encrypted plaintext | 복호화 후 알 수 있다. |
+| sequence number | wire에 직접 없음 | nonce 계산 상태로만 존재한다. |
+| traffic secret | key schedule 결과 | record key와 IV를 파생한다. |
+| HTTP bytes | TLSInnerPlaintext content | AEAD로 기밀성과 무결성 보호를 받는다. |
+
+## Failure Mode
+
+첫 번째 실패는 nonce 또는 sequence number 관리 오류다. AEAD는 key와 nonce 조합의 uniqueness에 의존한다. 구현이 재전송, key update, connection resume, write 방향 분리를 잘못 처리해 같은 key/nonce 쌍을 재사용하면 GCM류 보장은 심각하게 훼손될 수 있다. TLS 1.3의 nonce는 random이 아니므로 "RNG가 좋으면 된다"는 답이 맞지 않는다. 상태 관리가 핵심이다.
+
+두 번째 실패는 record 경계와 HTTP 경계를 혼동하는 것이다. 서버가 `Content-Length: 10000`인 응답을 보냈다고 해서 TLS record 하나가 10000 bytes를 담는 것은 아니다. 여러 record로 쪼개질 수 있고, HTTP/2 frame 경계는 다시 다르다. zkTLS selective disclosure가 JSON path 단위로 값을 공개하려면 record들을 복호화한 뒤 HTTP message와 encoding을 재구성해야 한다. record 단위에서 substring을 자르면 multi-byte 문자, compression, chunking, frame boundary에서 오류가 날 수 있다.
+
+세 번째 실패는 decryption failure를 너무 자세히 노출하는 것이다. TLS alert 수준에서는 `bad_record_mac` 같은 오류로 처리되어야 할 상황을 구현이 padding error, tag mismatch, length mismatch, inner type error로 구분해 외부에 노출하면 oracle이 될 수 있다. 현대 AEAD 구조는 오래된 padding oracle 문제를 크게 줄였지만, 구현자가 오류 차이를 side channel로 만들면 다시 공격면이 생긴다.
+
+네 번째 실패는 padding의 역할을 과대평가하는 것이다. TLS 1.3 record padding은 traffic analysis를 어느 정도 어렵게 만들 수 있지만, application 의미를 숨기는 만능 장치가 아니다. record 크기, timing, request pattern, connection reuse는 여전히 metadata다. privacy-preserving proof 설계에서는 padding이 아니라 selective disclosure, commitment, policy minimization을 별도로 설계해야 한다.
+
+다섯 번째 실패는 key update를 무시하는 것이다. 긴 연결에서 key update가 발생하면 이후 record의 traffic secret, key, IV, sequence number가 바뀐다. trace parser나 proof generator가 초기 traffic secret만으로 모든 record를 복호화하려 하면 어느 순간부터 실패한다. 실패를 서버 변조로 오해하지 않으려면 key update state machine을 추적해야 한다.
+
+여섯 번째 실패는 record content type을 외부 header에서 읽는 것이다. TLS 1.3 encrypted record의 outer type은 항상 application_data처럼 보일 수 있다. 실제 handshake, alert, application data 구분은 TLSInnerPlaintext를 복호화하고 padding을 제거한 뒤 읽어야 한다. 구현이 outer type만 보고 "이 record는 application data"라고 판단하면 close_notify alert나 post-handshake authentication 메시지를 잘못 해석할 수 있다. zkTLS parser에서도 이 문제는 곧바로 public claim 오염으로 이어진다.
+
+일곱 번째 실패는 compression, chunking, HTTP/2 framing 같은 상위 계층 변환을 record layer가 해결한다고 생각하는 것이다. TLS는 bytes를 보호한다. 그 bytes가 chunked HTTP/1.1 body인지, HTTP/2 DATA frame인지, gzip으로 압축된 JSON인지는 상위 parser가 해석해야 한다. selective disclosure 시스템은 TLS record 인증 다음에 content encoding과 application framing을 별도 단계로 모델링해야 한다.
+
+## Minimal Lab or Trace
+
+실험은 안전한 public HTTPS 요청을 복호화 trace로 보는 방식이 적절하다.
+
+```bash
+$ export SSLKEYLOGFILE=/tmp/tls.keys
+curl https://example.com/ --output /tmp/example.html
+```
+
+브라우저나 curl이 key log를 지원하는 환경에서 Wireshark에 key log file을 넣으면 TLS 1.3 record 안쪽을 볼 수 있다. 관찰 포인트는 다음이다.
+
+1. wire에는 TLSCiphertext header와 encrypted_record가 보인다.
+2. key log를 넣기 전에는 HTTP path와 body가 보이지 않는다.
+3. key log를 넣으면 여러 TLS records가 하나의 HTTP response로 재조립되는 것을 볼 수 있다.
+4. outer content type이 application_data처럼 보여도 inner type은 복호화 후 결정된다.
+
+두 번째 trace는 변조 실험이다. 로컬 테스트 서버와 프록시를 두고 ciphertext의 한 바이트를 바꾸면 record decryption이 실패해야 한다. 결과는 "깨진 JSON"이 아니라 TLS layer의 authentication failure여야 한다. 이것은 AEAD가 기밀성뿐 아니라 record 무결성을 제공한다는 점을 보여준다.
+
+세 번째 trace는 큰 응답을 받는 것이다. 100KB JSON을 내려주는 로컬 endpoint를 만들고 packet capture를 보면 하나의 HTTP response가 여러 TLS records로 나뉜다. 여기서 JSON field boundary가 TLS record boundary와 무관하다는 사실을 확인할 수 있다.
+
+## zkTLS Bridge
+
+zkTLS에서 record layer는 증명 구조의 바닥이다. verifier가 "응답 body의 `tier` field가 `gold`다"라고 믿으려면, prover는 적어도 다음 관계를 설득해야 한다. 첫째, handshake transcript에서 traffic secret이 파생되었다. 둘째, 특정 server application traffic key와 nonce로 record authentication이 성공했다. 셋째, 복호화된 plaintext 조각들이 올바른 순서로 HTTP response를 만든다. 넷째, 공개된 field는 그 response에서 나온 것이고 나머지 민감한 field는 숨겨졌다.
+
+이 중 record 경계와 nonce를 생략하면 proof가 약해진다. 예를 들어 같은 ciphertext 조각을 다른 context에 붙이는 replay-like 혼동을 막으려면 sequence number와 transcript binding이 필요하다. HTTP parser만 증명하고 TLS record 인증을 빼면 로컬 JSON 조작을 배제하지 못한다. TLS record만 증명하고 HTTP boundary를 빼면 verifier는 공개 field가 어느 header 또는 body 위치에서 왔는지 알기 어렵다.
+
+또한 TLS 1.3의 inner content type은 암호문 안에 있으므로, proof가 application data만 대상으로 삼는다면 handshake나 alert record를 잘못 포함하지 않도록 구분해야 한다. padding이 있을 때는 실제 content 끝과 padding을 올바르게 제거해야 한다. 이 작은 디테일들이 zkTLS 회로의 constraint와 verifier policy로 연결된다.
+
+실무적으로는 proof pipeline을 네 단계로 쪼개는 것이 안전하다. 첫째, transcript에서 traffic secret을 도출했다는 관계를 검증한다. 둘째, record sequence와 nonce, AAD, ciphertext tag 검증을 수행한다. 셋째, 복호화된 application bytes를 HTTP protocol parser로 재조립한다. 넷째, 공개할 predicate와 숨길 witness를 application schema 기준으로 나눈다. 이 순서를 바꾸면 TLS 보장과 애플리케이션 보장이 섞인다. 예를 들어 JSON predicate를 먼저 계산하고 나중에 record 인증을 붙이면 조작된 JSON이 proof 대상에 들어갈 수 있다.
+
+## Verification Checklist
+
+- TLS 1.3 encrypted record의 outer type과 inner content type을 구분했는가?
+- AEAD AAD가 record header를 인증하지만 암호화하지 않는다는 점을 설명했는가?
+- per-record nonce가 random이 아니라 sequence number와 write IV에서 파생됨을 확인했는가?
+- key update 시 key, IV, sequence number 상태가 바뀐다는 점을 반영했는가?
+- record boundary와 HTTP message boundary가 다를 수 있음을 표시했는가?
+- decryption failure를 세분화해 외부에 노출하지 않는 실패 모드를 설명했는가?
+- zkTLS proof가 record authentication과 HTTP parsing을 함께 다뤄야 함을 명시했는가?
+
+## Visual Artifact Brief
+
+- Artifact key: tls-record-aead-envelope
+- Purpose: TLS record가 AEAD 봉투로 바뀌는 과정을 key, nonce, AAD, plaintext 관계로 설명한다.
+- Layout: 좌측에 TLSInnerPlaintext(content, inner type, padding), 중앙에 AEAD Seal, 우측에 TLSCiphertext header와 encrypted_record를 배치한다. 하단에는 sequence number와 write IV를 XOR해 nonce를 만드는 rail을 둔다.
+- Labels: content, inner type, padding, AAD header, write key, write IV, sequence number, nonce, encrypted record, bad_record_mac.
+- Motion idea: record counter가 증가할 때마다 nonce rail이 바뀌고, plaintext 봉투가 ciphertext로 접힌다.
+- Reduced-motion state: 세 단계 정적 다이어그램과 하단 nonce 계산식.
+
+## References
+
+- https://datatracker.ietf.org/doc/html/rfc8446
+- https://datatracker.ietf.org/doc/html/rfc5116
+- https://datatracker.ietf.org/doc/html/rfc8439
+- https://datatracker.ietf.org/doc/html/rfc8452
+- https://csrc.nist.gov/pubs/sp/800/38/d/final
+- https://csrc.nist.gov/pubs/sp/800/52/r2/final
