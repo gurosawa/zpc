@@ -1,0 +1,1450 @@
+{
+  "version": "p4-content-roadmap",
+  "currentPlanningBranch": "docs/p4-content-roadmap",
+  "branchSequence": [
+    "docs/p4-content-roadmap",
+    "feature/p4a-content-metadata-hardening",
+    "feature/p4b-editorial-home-integration",
+    "feature/p4c-article-template-system",
+    "content/c01-a01-cia-triad",
+    "content/c01-a02-asset-threat-vulnerability",
+    "content/c02-a04-hmac-tag-verification",
+    "content/c03-a04-tls-record-layer",
+    "feature/p5a-content-review-dashboard",
+    "feature/p5b-visual-artifact-expansion",
+    "feature/p5c-organic-motion-polish"
+  ],
+  "chapters": [
+    {
+      "id": "c01",
+      "order": 1,
+      "title": "SECURITY THINKING",
+      "slug": "security-thinking",
+      "status": "planned",
+      "visualKey": "risk-matrix",
+      "guidingQuestion": "보안 판단은 어떤 자산, 경계, 실패 조건을 기준으로 성립하는가?",
+      "articles": [
+        {
+          "id": "c01-a01",
+          "chapterId": "c01",
+          "order": 1,
+          "title": "CIA는 왜 아직 유효한가",
+          "slug": "cia-triad",
+          "branch": "content/c01-a01-cia-triad",
+          "status": "planned",
+          "difficulty": "foundation",
+          "wordCountTarget": 4200,
+          "visualKey": "risk-matrix",
+          "readerQuestion": "기밀성, 무결성, 가용성은 현대 TLS와 zkTLS 시스템에서도 어떤 판단 축으로 남는가?",
+          "whyItMatters": "TLS는 세 속성을 통신 채널에서 다루고, zkTLS는 그중 무결성과 출처를 제3자 검증으로 확장한다.",
+          "coreModel": "보안 목표는 기능 목록이 아니라 보호하려는 주장과 실패 비용을 분류하는 좌표계다.",
+          "protocolOrSystemArtifact": "CIA risk matrix with TLS channel and proof claim columns",
+          "failureMode": "가용성이나 무결성 요구를 빠뜨리면 암호화된 데이터도 오래된 응답, 위조된 주장, 장애에 취약해진다.",
+          "minimalLabOrTrace": "같은 응답 JSON을 기밀성, 무결성, 가용성 관점으로 분해하는 표",
+          "zktlsBridge": "zkTLS 증명은 원본 공개를 줄이면서도 특정 TLS 응답의 무결성과 출처 주장을 보존해야 한다.",
+          "verificationChecklist": [
+            "보호 목표를 CIA 중 어느 축으로 설명할 수 있는가?",
+            "TLS가 보호하는 축과 zkTLS가 추가로 증명하는 축을 구분했는가?",
+            "암호화만으로 해결되지 않는 실패 조건을 적었는가?"
+          ],
+          "references": [
+            "https://www.nist.gov/cyberframework",
+            "https://csrc.nist.gov/pubs/sp/800/30/r1/final"
+          ]
+        },
+        {
+          "id": "c01-a02",
+          "chapterId": "c01",
+          "order": 2,
+          "title": "자산·위협·취약점·위험의 관계",
+          "slug": "asset-threat-vulnerability-risk",
+          "branch": "content/c01-a02-asset-threat-vulnerability",
+          "status": "planned",
+          "difficulty": "foundation",
+          "wordCountTarget": 4600,
+          "visualKey": "risk-matrix",
+          "readerQuestion": "자산, 위협, 취약점, 위험은 같은 말이 아니라 어떤 순서로 연결되는가?",
+          "whyItMatters": "zkTLS 설계에서는 데이터 원본, transcript, proof key, verifier policy가 서로 다른 자산과 위험을 가진다.",
+          "coreModel": "위험은 자산 가치, 위협 사건, 취약점, 영향, 가능성이 결합된 판단이다.",
+          "protocolOrSystemArtifact": "asset-threat-vulnerability-risk mapping table",
+          "failureMode": "취약점을 위협으로, 자산을 기능으로 혼동하면 완화책이 엉뚱한 위치에 놓인다.",
+          "minimalLabOrTrace": "회원 등급 증명 use case에서 자산과 위협 사건을 분리하는 표",
+          "zktlsBridge": "proof pipeline의 각 단계가 어떤 자산을 만들고 노출하는지 알아야 최소 공개 경계를 잡을 수 있다.",
+          "verificationChecklist": [
+            "자산과 위협 사건을 별도 열로 분리했는가?",
+            "위험 완화가 취약점이 있는 위치에 배치됐는가?",
+            "zkTLS transcript와 proof artifact를 별도 자산으로 보았는가?"
+          ],
+          "references": [
+            "https://csrc.nist.gov/pubs/sp/800/30/r1/final",
+            "https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final"
+          ]
+        },
+        {
+          "id": "c01-a03",
+          "chapterId": "c01",
+          "order": 3,
+          "title": "Trust boundary와 attack surface",
+          "slug": "trust-boundary-attack-surface",
+          "branch": "content/c01-a03-trust-boundary-attack-surface",
+          "status": "planned",
+          "difficulty": "intermediate",
+          "wordCountTarget": 6200,
+          "visualKey": "trust-boundary-map",
+          "readerQuestion": "신뢰 경계와 공격 표면은 시스템 다이어그램에서 어떻게 드러나는가?",
+          "whyItMatters": "proxy, notary, browser extension, verifier는 각각 다른 신뢰 경계를 만든다.",
+          "coreModel": "신뢰 경계는 데이터와 권한이 다른 주체로 넘어가는 선이고, 공격 표면은 그 선을 통과하는 조작 가능한 입력이다.",
+          "protocolOrSystemArtifact": "trust boundary map for client, server, notary, verifier",
+          "failureMode": "notary가 볼 수 있는 데이터와 verifier가 검증하는 데이터를 혼동하면 개인정보 노출과 위조 방어가 동시에 약해진다.",
+          "minimalLabOrTrace": "Fetch-Prove-Verify 흐름에서 경계선을 색인하는 시퀀스 표",
+          "zktlsBridge": "zkTLS의 핵심 비교는 어느 경계에서 TLS secret과 transcript가 관찰되는지에 달려 있다.",
+          "verificationChecklist": [
+            "각 경계의 소유자와 입력을 명시했는가?",
+            "공격자가 조작 가능한 표면을 따로 표시했는가?",
+            "proxy 방식과 MPC 방식의 경계 차이를 설명했는가?"
+          ],
+          "references": [
+            "https://csrc.nist.gov/pubs/sp/800/154/ipd",
+            "https://tlsnotary.org/docs/intro/"
+          ]
+        },
+        {
+          "id": "c01-a04",
+          "chapterId": "c01",
+          "order": 4,
+          "title": "인증·인가·감사의 차이",
+          "slug": "authentication-authorization-audit",
+          "branch": "content/c01-a04-authentication-authorization-audit",
+          "status": "planned",
+          "difficulty": "foundation",
+          "wordCountTarget": 4400,
+          "visualKey": "api-authz-object-graph",
+          "readerQuestion": "인증, 인가, 감사는 왜 같은 로그인 흐름 안에서도 서로 다른 통제인가?",
+          "whyItMatters": "API 보안과 zkTLS 검증은 사용자가 누구인지, 무엇을 할 수 있는지, 무엇을 증명했는지를 분리해야 한다.",
+          "coreModel": "인증은 주체 확인, 인가는 객체 접근 결정, 감사는 이후 검증 가능한 기록이다.",
+          "protocolOrSystemArtifact": "subject-object-action audit graph",
+          "failureMode": "로그인 성공을 객체 접근 권한으로 착각하면 BOLA와 과다 공개가 발생한다.",
+          "minimalLabOrTrace": "profile/{id} API 요청에서 subject, object, action, log event를 분해하는 trace",
+          "zktlsBridge": "zkTLS proof는 사용자의 인증 상태를 대신하지 않고 특정 응답과 조건의 검증 기록을 만든다.",
+          "verificationChecklist": [
+            "인증 결과와 객체 권한 검사를 분리했는가?",
+            "감사 로그가 검증 가능한 이벤트를 담는가?",
+            "zkTLS proof를 세션 권한과 혼동하지 않았는가?"
+          ],
+          "references": [
+            "https://owasp.org/www-project-api-security/",
+            "https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final"
+          ]
+        },
+        {
+          "id": "c01-a05",
+          "chapterId": "c01",
+          "order": 5,
+          "title": "Threat modeling 입문",
+          "slug": "threat-modeling-intro",
+          "branch": "content/c01-a05-threat-modeling-intro",
+          "status": "planned",
+          "difficulty": "intermediate",
+          "wordCountTarget": 6400,
+          "visualKey": "trust-boundary-map",
+          "readerQuestion": "기능 구현 전에 어떤 질문을 던져야 공격 경로를 줄일 수 있는가?",
+          "whyItMatters": "zkTLS는 암호 프로토콜과 제품 UX가 만나는 영역이라 설계 전 위협 모델이 없으면 신뢰 가정이 숨어버린다.",
+          "coreModel": "보호할 데이터, 공격자 능력, 경계, 완화책, 잔여 위험을 반복적으로 갱신한다.",
+          "protocolOrSystemArtifact": "threat model worksheet for a proof request",
+          "failureMode": "공격자 능력을 낮게 잡으면 replay, selective disclosure bypass, verifier confusion을 놓친다.",
+          "minimalLabOrTrace": "toy proof request를 STRIDE식 질문으로 분해하는 worksheet",
+          "zktlsBridge": "각 zkTLS article은 trust assumption을 명시하는 위협 모델로 연결되어야 한다.",
+          "verificationChecklist": [
+            "공격자 능력과 제외 범위를 적었는가?",
+            "완화책이 실제 경계에 배치됐는가?",
+            "잔여 위험을 숨기지 않았는가?"
+          ],
+          "references": [
+            "https://csrc.nist.gov/pubs/sp/800/154/ipd",
+            "https://csrc.nist.gov/pubs/sp/800/30/r1/final"
+          ]
+        },
+        {
+          "id": "c01-a06",
+          "chapterId": "c01",
+          "order": 6,
+          "title": "보안 통제는 어떻게 실패하는가",
+          "slug": "security-control-failure-modes",
+          "branch": "content/c01-a06-security-control-failure-modes",
+          "status": "planned",
+          "difficulty": "deep",
+          "wordCountTarget": 7800,
+          "visualKey": "risk-matrix",
+          "readerQuestion": "통제는 존재하는데도 시스템이 깨지는 이유는 무엇인가?",
+          "whyItMatters": "증명 시스템은 암호가 맞아도 정책, 키 관리, 로그, 배포 경로가 실패하면 신뢰를 잃는다.",
+          "coreModel": "통제 실패는 부재, 우회, 오설정, 관측 불가, 운영 부채로 나뉜다.",
+          "protocolOrSystemArtifact": "control failure mode matrix",
+          "failureMode": "검증자는 proof만 확인하고 입력 출처, 회로 버전, 정책 버전을 확인하지 않아 잘못된 주장을 받아들인다.",
+          "minimalLabOrTrace": "동일한 claim을 policy version mismatch로 실패시키는 표",
+          "zktlsBridge": "zkTLS 운영은 proof verification과 함께 source, circuit, policy provenance까지 확인해야 한다.",
+          "verificationChecklist": [
+            "통제 실패 유형을 하나 이상 사례로 설명했는가?",
+            "관측 가능한 증거와 운영 가정을 분리했는가?",
+            "검증자가 확인할 수 없는 항목을 Known gap으로 남겼는가?"
+          ],
+          "references": [
+            "https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final",
+            "https://www.cisa.gov/securebydesign"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "c02",
+      "order": 2,
+      "title": "CRYPTOGRAPHIC PRIMITIVES",
+      "slug": "cryptographic-primitives",
+      "status": "planned",
+      "visualKey": "crypto-strip",
+      "guidingQuestion": "TLS와 zkTLS가 의존하는 암호 재료는 어떤 보장과 한계를 가지는가?",
+      "articles": [
+        {
+          "id": "c02-a01",
+          "chapterId": "c02",
+          "order": 1,
+          "title": "난수와 entropy",
+          "slug": "randomness-entropy",
+          "branch": "content/c02-a01-randomness-entropy",
+          "status": "planned",
+          "difficulty": "foundation",
+          "wordCountTarget": 4500,
+          "visualKey": "crypto-strip",
+          "readerQuestion": "암호 시스템에서 예측 불가능성은 어디에서 오고 어디에서 무너지는가?",
+          "whyItMatters": "키, nonce, salt, proof randomness는 낮은 entropy에서 반복과 위조 위험을 만든다.",
+          "coreModel": "난수는 값 자체가 아니라 공격자가 예측할 수 없는 상태 공간이다.",
+          "protocolOrSystemArtifact": "entropy source to key material strip",
+          "failureMode": "nonce 재사용이나 약한 seed가 AEAD tag와 proof binding을 약화한다.",
+          "minimalLabOrTrace": "반복 nonce와 fresh nonce를 비교하는 toy table",
+          "zktlsBridge": "zkTLS proof가 transcript와 claim을 묶을 때 randomness 품질이 replay와 linkage 위험을 좌우한다.",
+          "verificationChecklist": [
+            "nonce, salt, key의 역할을 구분했는가?",
+            "예측 가능성과 중복 위험을 따로 설명했는가?",
+            "proof 생성의 randomness 요구를 언급했는가?"
+          ],
+          "references": [
+            "https://csrc.nist.gov/pubs/sp/800/57/pt1/r5/final"
+          ]
+        },
+        {
+          "id": "c02-a02",
+          "chapterId": "c02",
+          "order": 2,
+          "title": "대칭키 암호와 AEAD",
+          "slug": "symmetric-key-aead",
+          "branch": "content/c02-a02-symmetric-key-aead",
+          "status": "planned",
+          "difficulty": "intermediate",
+          "wordCountTarget": 6500,
+          "visualKey": "crypto-strip",
+          "readerQuestion": "AES-GCM 같은 AEAD는 암호화와 무결성 보장을 어떻게 함께 제공하는가?",
+          "whyItMatters": "TLS record layer는 application data를 AEAD로 보호하고, zkTLS는 그 보호된 응답의 출처를 다룬다.",
+          "coreModel": "AEAD는 nonce, plaintext, associated data, ciphertext, tag를 하나의 검증 단위로 묶는다.",
+          "protocolOrSystemArtifact": "AEAD record strip with AAD and tag",
+          "failureMode": "tag 검증을 생략하거나 nonce를 재사용하면 암호문이 있어도 변조 탐지가 깨진다.",
+          "minimalLabOrTrace": "AAD가 바뀌면 tag 검증이 실패하는 pseudo-code",
+          "zktlsBridge": "TLS record의 AEAD tag가 transcript claim의 무결성 출발점이다.",
+          "verificationChecklist": [
+            "암호화와 인증을 분리해 설명했는가?",
+            "AAD와 tag의 검증 범위를 명시했는가?",
+            "TLS record layer와 연결했는가?"
+          ],
+          "references": [
+            "https://csrc.nist.gov/pubs/fips/197/final",
+            "https://csrc.nist.gov/pubs/sp/800/38/d/final"
+          ]
+        },
+        {
+          "id": "c02-a03",
+          "chapterId": "c02",
+          "order": 3,
+          "title": "해시 함수와 충돌 저항성",
+          "slug": "hash-functions-collision-resistance",
+          "branch": "content/c02-a03-hash-functions-collision-resistance",
+          "status": "planned",
+          "difficulty": "foundation",
+          "wordCountTarget": 5200,
+          "visualKey": "hash-chain",
+          "readerQuestion": "해시는 왜 지문처럼 쓰이지만 원본의 의미를 보장하지는 않는가?",
+          "whyItMatters": "transcript digest, commitment, Merkle proof는 해시의 충돌 저항성과 도메인 분리에 의존한다.",
+          "coreModel": "해시는 임의 길이 입력을 고정 길이 digest로 압축하지만, 안전성은 사용 맥락과 충돌 비용에 묶인다.",
+          "protocolOrSystemArtifact": "hash chain and domain separator diagram",
+          "failureMode": "서로 다른 맥락을 같은 해시 입력 형식에 넣으면 binding ambiguity가 생긴다.",
+          "minimalLabOrTrace": "도메인 prefix가 없는 commitment와 있는 commitment를 비교하는 pseudo-code",
+          "zktlsBridge": "선택 공개 claim은 원본 transcript digest와 공개 필드를 안전하게 결합해야 한다.",
+          "verificationChecklist": [
+            "preimage, second preimage, collision을 구분했는가?",
+            "도메인 분리 필요성을 설명했는가?",
+            "Merkle proof나 commitment와 연결했는가?"
+          ],
+          "references": [
+            "https://csrc.nist.gov/pubs/fips/180-4/upd1/final",
+            "https://datatracker.ietf.org/doc/html/rfc9162"
+          ]
+        },
+        {
+          "id": "c02-a04",
+          "chapterId": "c02",
+          "order": 4,
+          "title": "MAC, HMAC, tag 검증",
+          "slug": "hmac-tag-verification",
+          "branch": "content/c02-a04-hmac-tag-verification",
+          "status": "planned",
+          "difficulty": "intermediate",
+          "wordCountTarget": 6200,
+          "visualKey": "crypto-strip",
+          "readerQuestion": "MAC과 HMAC은 메시지 무결성을 어떤 신뢰 관계 안에서 검증하는가?",
+          "whyItMatters": "TLS Finished, HKDF, AEAD tag 이해에는 key가 있는 hash 검증 모델이 필요하다.",
+          "coreModel": "MAC은 공유 비밀을 가진 당사자만 만들 수 있는 tag로 메시지 변조를 검출한다.",
+          "protocolOrSystemArtifact": "message, key, tag verification strip",
+          "failureMode": "일반 hash를 MAC처럼 쓰거나 constant-time 비교를 놓치면 위조나 side-channel이 생긴다.",
+          "minimalLabOrTrace": "HMAC 생성과 tag mismatch 실패를 보여주는 pseudo-code",
+          "zktlsBridge": "zkTLS는 TLS가 이미 검증한 tag와 transcript를 제3자 claim으로 안전하게 옮기는 문제를 다룬다.",
+          "verificationChecklist": [
+            "MAC과 hash의 키 사용 차이를 설명했는가?",
+            "tag 검증 실패 경로를 명시했는가?",
+            "HKDF나 TLS Finished와 연결했는가?"
+          ],
+          "references": [
+            "https://csrc.nist.gov/pubs/fips/198-1/final",
+            "https://csrc.nist.gov/pubs/sp/800/224/ipd",
+            "https://datatracker.ietf.org/doc/html/rfc5869"
+          ]
+        },
+        {
+          "id": "c02-a05",
+          "chapterId": "c02",
+          "order": 5,
+          "title": "공개키, 서명, 키 교환",
+          "slug": "public-key-signatures-key-exchange",
+          "branch": "content/c02-a05-public-key-signatures-key-exchange",
+          "status": "planned",
+          "difficulty": "intermediate",
+          "wordCountTarget": 6800,
+          "visualKey": "crypto-strip",
+          "readerQuestion": "공개키 암호, 전자서명, 키 교환은 TLS handshake에서 어떻게 다른 역할을 맡는가?",
+          "whyItMatters": "서버 인증, session key 합의, proof artifact 서명은 모두 공개키 원리를 다르게 사용한다.",
+          "coreModel": "공개키는 모두에게 공개되고 개인키는 소유자에게 남으며, 사용 목적은 암호화, 서명, 키 합의로 나뉜다.",
+          "protocolOrSystemArtifact": "certificate signature and ephemeral key exchange flow",
+          "failureMode": "서명 키와 키 교환 키의 용도를 섞으면 인증은 됐지만 세션 보장이 약한 설계가 된다.",
+          "minimalLabOrTrace": "static certificate key와 ephemeral DH share를 분리한 handshake trace",
+          "zktlsBridge": "zkTLS provenance는 서버 인증서와 TLS key schedule이 만든 출처 신호에 기대어 시작한다.",
+          "verificationChecklist": [
+            "서명과 키 교환의 목표를 분리했는가?",
+            "ephemeral key의 forward secrecy 역할을 설명했는가?",
+            "certificate chain과 연결했는가?"
+          ],
+          "references": [
+            "https://datatracker.ietf.org/doc/html/rfc8446",
+            "https://datatracker.ietf.org/doc/html/rfc5280"
+          ]
+        },
+        {
+          "id": "c02-a06",
+          "chapterId": "c02",
+          "order": 6,
+          "title": "키 관리와 crypto period",
+          "slug": "key-management-crypto-period",
+          "branch": "content/c02-a06-key-management-crypto-period",
+          "status": "planned",
+          "difficulty": "deep",
+          "wordCountTarget": 7800,
+          "visualKey": "risk-matrix",
+          "readerQuestion": "좋은 알고리즘을 써도 키 생성, 저장, 회전, 폐기가 틀리면 왜 실패하는가?",
+          "whyItMatters": "zkTLS verifier key, proving key, notary credential, signing key는 모두 lifecycle 관리가 필요하다.",
+          "coreModel": "키는 생성부터 폐기까지 상태와 사용 기간이 있는 운영 자산이다.",
+          "protocolOrSystemArtifact": "key lifecycle and crypto period timeline",
+          "failureMode": "오래된 proving key나 폐기되지 않은 signing key가 이전 proof를 계속 신뢰하게 만든다.",
+          "minimalLabOrTrace": "key version, validFrom, validTo, revokedAt 필드를 가진 metadata table",
+          "zktlsBridge": "proof verification은 cryptographic proof뿐 아니라 어떤 키 버전으로 만들어졌는지를 확인해야 한다.",
+          "verificationChecklist": [
+            "키 상태와 사용 기간을 명시했는가?",
+            "회전과 폐기 시 검증자가 볼 증거를 적었는가?",
+            "proof artifact의 key version을 포함했는가?"
+          ],
+          "references": [
+            "https://csrc.nist.gov/pubs/sp/800/57/pt1/r5/final"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "c03",
+      "order": 3,
+      "title": "WEB TRUST AND TLS",
+      "slug": "web-trust-and-tls",
+      "status": "planned",
+      "visualKey": "tls-record-strip",
+      "guidingQuestion": "HTTPS 신뢰는 TLS handshake, certificate chain, record layer에서 어떻게 만들어지는가?",
+      "articles": [
+        {
+          "id": "c03-a01",
+          "chapterId": "c03",
+          "order": 1,
+          "title": "SSL이 아니라 TLS라고 부르는 이유",
+          "slug": "ssl-vs-tls",
+          "branch": "content/c03-a01-ssl-vs-tls",
+          "status": "planned",
+          "difficulty": "foundation",
+          "wordCountTarget": 4200,
+          "visualKey": "tls-record-strip",
+          "readerQuestion": "SSL이라는 이름이 아직 쓰이지만 표준과 구현에서는 왜 TLS가 정확한 표현인가?",
+          "whyItMatters": "낡은 용어는 낡은 프로토콜 버전, cipher suite, 보안 보장을 혼동하게 만든다.",
+          "coreModel": "SSL은 역사적 명칭이고 현대 HTTPS 보안 모델은 TLS 버전과 profile로 설명해야 한다.",
+          "protocolOrSystemArtifact": "SSL to TLS version timeline",
+          "failureMode": "문서에서 SSL을 뭉뚱그려 쓰면 TLS 1.2, TLS 1.3, deprecated protocol risk가 섞인다.",
+          "minimalLabOrTrace": "프로토콜 버전과 보안 상태를 분리한 compatibility table",
+          "zktlsBridge": "zkTLS는 실제 TLS transcript를 다루므로 어떤 TLS 버전의 transcript인지 명확해야 한다.",
+          "verificationChecklist": [
+            "SSL과 TLS를 역사와 표준 용어로 구분했는가?",
+            "지원 중단된 버전과 현재 표준을 구분했는가?",
+            "zkTLS transcript version을 언급했는가?"
+          ],
+          "references": [
+            "https://datatracker.ietf.org/doc/html/rfc8446",
+            "https://datatracker.ietf.org/doc/html/rfc5246"
+          ]
+        },
+        {
+          "id": "c03-a02",
+          "chapterId": "c03",
+          "order": 2,
+          "title": "HTTPS 요청은 어떻게 보호되는가",
+          "slug": "https-protection-path",
+          "branch": "content/c03-a02-https-protection-path",
+          "status": "planned",
+          "difficulty": "intermediate",
+          "wordCountTarget": 6500,
+          "visualKey": "tls-handshake-transcript",
+          "readerQuestion": "브라우저의 HTTPS 요청은 handshake부터 application data까지 어떤 층에서 보호되는가?",
+          "whyItMatters": "zkTLS는 HTTP 응답을 증명하지만 출처와 무결성의 근거는 아래 TLS 계층에 있다.",
+          "coreModel": "HTTP 의미는 application layer에 있고 보호 보장은 TLS handshake와 record layer에서 온다.",
+          "protocolOrSystemArtifact": "HTTPS request to TLS record trace",
+          "failureMode": "HTTP body만 복사하면 TLS 출처, certificate validation, record integrity가 사라진다.",
+          "minimalLabOrTrace": "GET request가 encrypted record로 바뀌는 계층별 trace",
+          "zktlsBridge": "proof statement는 HTTP 필드뿐 아니라 그 필드가 TLS로 보호된 세션에서 왔다는 경로를 요구한다.",
+          "verificationChecklist": [
+            "HTTP와 TLS의 역할을 분리했는가?",
+            "certificate validation과 record protection을 둘 다 설명했는가?",
+            "copy-paste proof의 한계를 언급했는가?"
+          ],
+          "references": [
+            "https://datatracker.ietf.org/doc/html/rfc8446",
+            "https://datatracker.ietf.org/doc/html/rfc5280"
+          ]
+        },
+        {
+          "id": "c03-a03",
+          "chapterId": "c03",
+          "order": 3,
+          "title": "TLS 1.2와 TLS 1.3의 구조적 차이",
+          "slug": "tls12-vs-tls13",
+          "branch": "content/c03-a03-tls12-vs-tls13",
+          "status": "planned",
+          "difficulty": "deep",
+          "wordCountTarget": 8200,
+          "visualKey": "tls-handshake-transcript",
+          "readerQuestion": "TLS 1.3은 TLS 1.2에서 무엇을 제거하고 어떤 transcript/key schedule 구조를 바꿨는가?",
+          "whyItMatters": "DECO, TLSNotary, MPC-TLS 논의는 TLS 버전별 handshake 구조와 암호화 시점을 알아야 비교된다.",
+          "coreModel": "TLS 1.3은 negotiation 표면을 줄이고 HKDF 기반 key schedule과 더 이른 handshake encryption을 사용한다.",
+          "protocolOrSystemArtifact": "TLS 1.2 vs TLS 1.3 handshake lane diagram",
+          "failureMode": "TLS 1.2 전제의 proof 기법을 TLS 1.3에 그대로 옮기면 메시지 가시성과 키 파생 단계가 맞지 않는다.",
+          "minimalLabOrTrace": "ClientHello부터 Finished까지 버전별 메시지 visibility table",
+          "zktlsBridge": "zkTLS 설계는 어떤 handshake 메시지를 누가 보고 어떤 secret share를 다루는지 버전별로 달라진다.",
+          "verificationChecklist": [
+            "TLS 1.2와 TLS 1.3의 handshake 차이를 그림으로 나타냈는가?",
+            "HKDF key schedule을 언급했는가?",
+            "zkTLS 프로토콜별 TLS 버전 가정을 표시했는가?"
+          ],
+          "references": [
+            "https://datatracker.ietf.org/doc/html/rfc5246",
+            "https://datatracker.ietf.org/doc/html/rfc8446",
+            "https://datatracker.ietf.org/doc/html/rfc5869"
+          ]
+        },
+        {
+          "id": "c03-a04",
+          "chapterId": "c03",
+          "order": 4,
+          "title": "TLS record layer와 AEAD",
+          "slug": "tls-record-layer",
+          "branch": "content/c03-a04-tls-record-layer",
+          "status": "planned",
+          "difficulty": "deep",
+          "wordCountTarget": 8200,
+          "visualKey": "tls-record-strip",
+          "readerQuestion": "TLS record layer는 application data를 어떤 단위로 암호화하고 인증하는가?",
+          "whyItMatters": "zkTLS proof는 응답 JSON이 추상 텍스트가 아니라 TLS record와 transcript에서 온 사실을 다룬다.",
+          "coreModel": "record layer는 content type, version, length, encrypted fragment, authentication tag로 보호 단위를 만든다.",
+          "protocolOrSystemArtifact": "TLS record strip with ciphertext and tag",
+          "failureMode": "record boundary, padding, tag 검증을 무시하면 선택 공개 대상이 실제 보호 단위와 어긋난다.",
+          "minimalLabOrTrace": "응답 문자열이 여러 record로 분할되는 toy packet trace",
+          "zktlsBridge": "TLS response provenance는 record layer의 AEAD 검증과 transcript binding 위에 세워진다.",
+          "verificationChecklist": [
+            "record와 HTTP response boundary를 구분했는가?",
+            "AEAD tag와 AAD 범위를 설명했는가?",
+            "선택 공개 필드가 record 보호 단위와 어떻게 연결되는지 적었는가?"
+          ],
+          "references": [
+            "https://datatracker.ietf.org/doc/html/rfc8446",
+            "https://csrc.nist.gov/pubs/sp/800/38/d/final"
+          ]
+        },
+        {
+          "id": "c03-a05",
+          "chapterId": "c03",
+          "order": 5,
+          "title": "PKI, X.509, certificate chain",
+          "slug": "pki-x509-certificate-chain",
+          "branch": "content/c03-a05-pki-x509-certificate-chain",
+          "status": "planned",
+          "difficulty": "deep",
+          "wordCountTarget": 7600,
+          "visualKey": "transcript-receipt",
+          "readerQuestion": "브라우저는 서버 인증서를 어떤 chain과 policy로 신뢰하는가?",
+          "whyItMatters": "TLS 응답 출처 주장은 certificate chain 검증 없이 성립하지 않는다.",
+          "coreModel": "end-entity certificate는 intermediate와 root trust anchor로 이어지는 검증 경로를 가진다.",
+          "protocolOrSystemArtifact": "X.509 certificate path and validation receipt",
+          "failureMode": "도메인 이름, 유효 기간, revocation, chain validation을 빼면 올바른 TLS 서버 출처를 주장할 수 없다.",
+          "minimalLabOrTrace": "subject, issuer, SAN, validity, signature를 나누는 certificate table",
+          "zktlsBridge": "zkTLS verifier는 proof가 어느 origin의 TLS 세션에서 왔는지 certificate validation 맥락을 보존해야 한다.",
+          "verificationChecklist": [
+            "certificate chain과 trust anchor를 구분했는가?",
+            "도메인 이름 검증을 포함했는가?",
+            "proof receipt에 origin metadata가 필요한 이유를 설명했는가?"
+          ],
+          "references": [
+            "https://datatracker.ietf.org/doc/html/rfc5280",
+            "https://datatracker.ietf.org/doc/html/rfc9162"
+          ]
+        },
+        {
+          "id": "c03-a06",
+          "chapterId": "c03",
+          "order": 6,
+          "title": "0-RTT, ECH, QUIC, mTLS",
+          "slug": "zero-rtt-ech-quic-mtls",
+          "branch": "content/c03-a06-zero-rtt-ech-quic-mtls",
+          "status": "planned",
+          "difficulty": "deep",
+          "wordCountTarget": 8400,
+          "visualKey": "tunnel-encapsulation-stack",
+          "readerQuestion": "현대 TLS 주변 기능은 성능, privacy, 양방향 인증에서 어떤 trade-off를 만드는가?",
+          "whyItMatters": "zkTLS 구현은 0-RTT replay, ECH metadata visibility, QUIC transport, mTLS client identity를 고려해야 한다.",
+          "coreModel": "TLS 생태계는 handshake latency, metadata privacy, transport integration, client authentication을 독립 축으로 확장한다.",
+          "protocolOrSystemArtifact": "modern TLS feature stack",
+          "failureMode": "0-RTT 데이터를 idempotency 없이 받거나 ECH가 숨기는 metadata를 검증 경로로 가정하면 설계가 깨진다.",
+          "minimalLabOrTrace": "feature별 보호 대상과 남는 metadata를 비교하는 table",
+          "zktlsBridge": "zkTLS는 어떤 TLS feature가 transcript 관측성과 verifier policy에 영향을 주는지 명확히 해야 한다.",
+          "verificationChecklist": [
+            "0-RTT replay caveat를 설명했는가?",
+            "ECH와 QUIC의 역할을 구분했는가?",
+            "mTLS가 사용자 claim과 어떻게 다를 수 있는지 적었는가?"
+          ],
+          "references": [
+            "https://datatracker.ietf.org/doc/html/rfc8446",
+            "https://datatracker.ietf.org/doc/html/rfc9001",
+            "https://datatracker.ietf.org/doc/rfc9849/"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "c04",
+      "order": 4,
+      "title": "NETWORK TUNNELS AND IDENTITY PLANES",
+      "slug": "network-tunnels-and-identity-planes",
+      "status": "planned",
+      "visualKey": "tunnel-encapsulation-stack",
+      "guidingQuestion": "네트워크 터널과 identity plane은 어떤 것을 숨기고 어떤 신뢰를 새로 만든다?",
+      "articles": [
+        {
+          "id": "c04-a01",
+          "chapterId": "c04",
+          "order": 1,
+          "title": "VPN은 무엇을 숨기고 무엇을 못 숨기나",
+          "slug": "vpn-privacy-boundaries",
+          "branch": "content/c04-a01-vpn-privacy-boundaries",
+          "status": "planned",
+          "difficulty": "foundation",
+          "wordCountTarget": 4600,
+          "visualKey": "tunnel-encapsulation-stack",
+          "readerQuestion": "VPN은 네트워크 관찰자, VPN 사업자, 목적지 서버 사이에서 어떤 metadata를 이동시키는가?",
+          "whyItMatters": "zkTLS와 VPN은 모두 trust boundary를 바꾸지만, 데이터 provenance 증명 문제를 해결하는 방식은 다르다.",
+          "coreModel": "VPN은 tunnel endpoint 사이의 경로를 보호하지만 목적지 서비스의 데이터 진위 증명을 자동으로 만들지는 않는다.",
+          "protocolOrSystemArtifact": "client, VPN gateway, destination visibility stack",
+          "failureMode": "VPN 사용을 end-to-end application provenance로 착각하면 목적지 데이터 증명과 privacy 모델이 섞인다.",
+          "minimalLabOrTrace": "ISP, VPN gateway, server가 각각 볼 수 있는 필드를 비교하는 table",
+          "zktlsBridge": "zkTLS는 경로 은닉이 아니라 특정 TLS 응답의 출처와 선택 공개 claim을 검증한다.",
+          "verificationChecklist": [
+            "VPN이 숨기는 대상과 새로 신뢰하는 대상을 분리했는가?",
+            "TLS와 VPN의 보호 계층을 구분했는가?",
+            "zkTLS provenance와 비교했는가?"
+          ],
+          "references": [
+            "https://datatracker.ietf.org/doc/html/rfc4301",
+            "https://www.wireguard.com/"
+          ]
+        },
+        {
+          "id": "c04-a02",
+          "chapterId": "c04",
+          "order": 2,
+          "title": "IPsec, IKEv2, ESP",
+          "slug": "ipsec-ikev2-esp",
+          "branch": "content/c04-a02-ipsec-ikev2-esp",
+          "status": "planned",
+          "difficulty": "deep",
+          "wordCountTarget": 8200,
+          "visualKey": "tunnel-encapsulation-stack",
+          "readerQuestion": "IPsec suite에서 IKEv2와 ESP는 각각 어떤 보안 협상과 데이터 보호를 맡는가?",
+          "whyItMatters": "네트워크 계층 보안은 TLS와 다른 위치에서 identity, key agreement, packet protection을 제공한다.",
+          "coreModel": "IKEv2는 Security Association을 만들고 ESP는 IP packet 보호 서비스를 제공한다.",
+          "protocolOrSystemArtifact": "IKEv2 negotiation and ESP packet encapsulation stack",
+          "failureMode": "SA lifetime, peer authentication, anti-replay를 놓치면 터널은 열려도 신뢰 모델이 약해진다.",
+          "minimalLabOrTrace": "IKE_SA_INIT, IKE_AUTH, ESP packet 필드를 비교하는 trace",
+          "zktlsBridge": "IPsec은 경로 보호를 설명하고, zkTLS는 application data provenance가 별도 문제임을 대비시킨다.",
+          "verificationChecklist": [
+            "IKEv2와 ESP 역할을 구분했는가?",
+            "SA와 key lifetime을 설명했는가?",
+            "TLS 기반 provenance와 차이를 적었는가?"
+          ],
+          "references": [
+            "https://datatracker.ietf.org/doc/html/rfc7296",
+            "https://www.rfc-editor.org/info/rfc4303/"
+          ]
+        },
+        {
+          "id": "c04-a03",
+          "chapterId": "c04",
+          "order": 3,
+          "title": "WireGuard와 modern VPN",
+          "slug": "wireguard-modern-vpn",
+          "branch": "content/c04-a03-wireguard-modern-vpn",
+          "status": "planned",
+          "difficulty": "intermediate",
+          "wordCountTarget": 6600,
+          "visualKey": "tunnel-encapsulation-stack",
+          "readerQuestion": "WireGuard는 왜 작은 프로토콜 표면과 고정된 암호 suite를 강조하는가?",
+          "whyItMatters": "현대 보안 설계는 협상 가능성을 줄이고 구현 감사 가능성을 높이는 방향을 반복한다.",
+          "coreModel": "WireGuard는 peer public key 중심의 간단한 터널 모델과 Noise 기반 handshake를 사용한다.",
+          "protocolOrSystemArtifact": "WireGuard peer key and tunnel packet diagram",
+          "failureMode": "allowed IP와 peer identity를 혼동하면 라우팅과 접근 제어가 예상과 달라진다.",
+          "minimalLabOrTrace": "peer public key, allowed IP, endpoint를 분리하는 config table",
+          "zktlsBridge": "zkTLS에서도 프로토콜 옵션 표면을 줄이고 trust assumption을 명시하는 것이 검증성을 높인다.",
+          "verificationChecklist": [
+            "WireGuard의 peer key model을 설명했는가?",
+            "라우팅과 인증의 차이를 분리했는가?",
+            "프로토콜 단순성이 zkTLS 설계에 주는 교훈을 적었는가?"
+          ],
+          "references": [
+            "https://www.wireguard.com/protocol/",
+            "https://www.wireguard.com/papers/wireguard.pdf"
+          ]
+        },
+        {
+          "id": "c04-a04",
+          "chapterId": "c04",
+          "order": 4,
+          "title": "DNS, DoH, DoT, ECH",
+          "slug": "dns-doh-dot-ech",
+          "branch": "content/c04-a04-dns-doh-dot-ech",
+          "status": "planned",
+          "difficulty": "intermediate",
+          "wordCountTarget": 6800,
+          "visualKey": "trust-layer-stack",
+          "readerQuestion": "DNS privacy와 TLS ECH는 destination metadata를 어디까지 줄이는가?",
+          "whyItMatters": "zkTLS는 response provenance를 다루지만, resolver와 SNI metadata는 별도 privacy surface다.",
+          "coreModel": "DoH/DoT는 DNS query transport를 보호하고 ECH는 ClientHello의 민감한 일부를 암호화한다.",
+          "protocolOrSystemArtifact": "DNS query to ECH connection privacy stack",
+          "failureMode": "DNS 암호화를 destination anonymity로 과장하면 resolver trust와 IP metadata가 남는 사실을 놓친다.",
+          "minimalLabOrTrace": "clear DNS, DoT, DoH, ECH별 관측 가능한 metadata table",
+          "zktlsBridge": "zkTLS verifier는 HTTPS origin proof와 네트워크 metadata privacy를 별도 요구사항으로 취급해야 한다.",
+          "verificationChecklist": [
+            "DoH와 DoT transport 차이를 설명했는가?",
+            "ECH가 숨기는 것과 남기는 것을 구분했는가?",
+            "provenance와 metadata privacy를 분리했는가?"
+          ],
+          "references": [
+            "https://datatracker.ietf.org/doc/html/rfc8484",
+            "https://datatracker.ietf.org/doc/html/rfc7858",
+            "https://datatracker.ietf.org/doc/rfc9849/"
+          ]
+        },
+        {
+          "id": "c04-a05",
+          "chapterId": "c04",
+          "order": 5,
+          "title": "Zero Trust Network Access",
+          "slug": "zero-trust-network-access",
+          "branch": "content/c04-a05-zero-trust-network-access",
+          "status": "planned",
+          "difficulty": "intermediate",
+          "wordCountTarget": 6800,
+          "visualKey": "trust-boundary-map",
+          "readerQuestion": "Zero Trust는 네트워크 위치 대신 어떤 신호로 접근 결정을 내리는가?",
+          "whyItMatters": "zkTLS verifier도 proof, subject, device, policy context를 결합해 claim 수용 여부를 판단한다.",
+          "coreModel": "Zero Trust는 implicit trust를 줄이고 resource별 continuous evaluation을 요구한다.",
+          "protocolOrSystemArtifact": "policy decision point and resource access flow",
+          "failureMode": "VPN 내부망 진입을 곧 신뢰로 간주하면 lateral movement와 overbroad access가 생긴다.",
+          "minimalLabOrTrace": "subject, device posture, resource, policy decision을 분리하는 table",
+          "zktlsBridge": "zkTLS claim도 context 없는 사실 조각이 아니라 verifier policy 안에서 평가되어야 한다.",
+          "verificationChecklist": [
+            "implicit trust 제거를 설명했는가?",
+            "PDP/PEP 또는 정책 평가 지점을 표시했는가?",
+            "zkTLS verifier policy와 연결했는가?"
+          ],
+          "references": [
+            "https://csrc.nist.gov/pubs/sp/800/207/final"
+          ]
+        },
+        {
+          "id": "c04-a06",
+          "chapterId": "c04",
+          "order": 6,
+          "title": "Service mesh와 mTLS",
+          "slug": "service-mesh-mtls",
+          "branch": "content/c04-a06-service-mesh-mtls",
+          "status": "planned",
+          "difficulty": "intermediate",
+          "wordCountTarget": 6500,
+          "visualKey": "trust-layer-stack",
+          "readerQuestion": "서비스 간 mTLS는 workload identity와 network encryption을 어떻게 묶는가?",
+          "whyItMatters": "내부 서비스 신뢰 모델은 사용자-facing TLS와 다르며, proof verifier도 service identity를 확인해야 한다.",
+          "coreModel": "mTLS는 양쪽 endpoint가 certificate로 서로를 인증하고 session을 암호화한다.",
+          "protocolOrSystemArtifact": "service mesh sidecar and mTLS certificate flow",
+          "failureMode": "service account, certificate rotation, policy scope가 어긋나면 내부 호출이 과도하게 신뢰된다.",
+          "minimalLabOrTrace": "caller workload, callee workload, certificate, policy를 분리하는 mesh trace",
+          "zktlsBridge": "zkTLS verification service도 내부 호출에서는 mTLS와 workload identity로 보호되어야 한다.",
+          "verificationChecklist": [
+            "server TLS와 mTLS 차이를 설명했는가?",
+            "workload identity와 certificate rotation을 언급했는가?",
+            "verifier service 보호와 연결했는가?"
+          ],
+          "references": [
+            "https://datatracker.ietf.org/doc/html/rfc8446",
+            "https://kubernetes.io/docs/concepts/security/"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "c05",
+      "order": 5,
+      "title": "APPLICATION AND API SECURITY",
+      "slug": "application-and-api-security",
+      "status": "planned",
+      "visualKey": "api-authz-object-graph",
+      "guidingQuestion": "애플리케이션과 API의 실패는 zkTLS claim의 신뢰성을 어떻게 흔드는가?",
+      "articles": [
+        {
+          "id": "c05-a01",
+          "chapterId": "c05",
+          "order": 1,
+          "title": "OWASP Top 10 최신판 읽는 법",
+          "slug": "owasp-top-10-reading",
+          "branch": "content/c05-a01-owasp-top-10-reading",
+          "status": "planned",
+          "difficulty": "foundation",
+          "wordCountTarget": 5000,
+          "visualKey": "risk-matrix",
+          "readerQuestion": "OWASP Top 10은 순위표가 아니라 어떤 위험 언어로 읽어야 하는가?",
+          "whyItMatters": "zkTLS가 증명하는 데이터가 취약한 앱에서 온다면 출처는 맞아도 business claim은 왜곡될 수 있다.",
+          "coreModel": "Top 10은 취약점 이름보다 위험 범주, 발생 조건, 영향, 방어 방향을 읽는 문서다.",
+          "protocolOrSystemArtifact": "OWASP category to zkTLS claim risk matrix",
+          "failureMode": "최신 항목을 확인하지 않고 오래된 순위를 쓰면 교육 자료와 threat model이 모두 낡는다.",
+          "minimalLabOrTrace": "OWASP 2025 category와 zkTLS relevance를 매핑하는 table",
+          "zktlsBridge": "zkTLS proof는 application risk를 제거하지 않으므로 claim source의 앱 보안 맥락을 함께 평가해야 한다.",
+          "verificationChecklist": [
+            "OWASP 최신 released version을 확인했는가?",
+            "범주를 단답형 정의가 아니라 위험 모델로 설명했는가?",
+            "zkTLS claim 품질과 연결했는가?"
+          ],
+          "references": [
+            "https://owasp.org/www-project-top-ten/"
+          ]
+        },
+        {
+          "id": "c05-a02",
+          "chapterId": "c05",
+          "order": 2,
+          "title": "Broken Access Control과 BOLA",
+          "slug": "broken-access-control-bola",
+          "branch": "content/c05-a02-broken-access-control-bola",
+          "status": "planned",
+          "difficulty": "deep",
+          "wordCountTarget": 8000,
+          "visualKey": "api-authz-object-graph",
+          "readerQuestion": "사용자가 로그인했는데도 왜 다른 객체에 접근할 수 있는가?",
+          "whyItMatters": "API가 잘못된 객체 데이터를 반환하면 zkTLS는 그 잘못된 응답의 출처만 증명할 수 있다.",
+          "coreModel": "권한 결정은 user session이 아니라 object, action, tenant, policy를 함께 검증해야 한다.",
+          "protocolOrSystemArtifact": "API subject-object authorization graph",
+          "failureMode": "object id를 바꿔도 ownership 검사가 없으면 BOLA가 발생한다.",
+          "minimalLabOrTrace": "GET /accounts/{id} 요청에서 tenant ownership check를 표시한 trace",
+          "zktlsBridge": "zkTLS verifier는 proof된 응답이 application authorization bug의 결과일 수 있음을 threat model에 넣어야 한다.",
+          "verificationChecklist": [
+            "BOLA와 일반 access control을 구분했는가?",
+            "객체 단위 권한 검사를 trace에 표시했는가?",
+            "proof가 앱 버그를 고치지 못한다는 점을 적었는가?"
+          ],
+          "references": [
+            "https://owasp.org/www-project-api-security/",
+            "https://owasp.org/www-project-top-ten/"
+          ]
+        },
+        {
+          "id": "c05-a03",
+          "chapterId": "c05",
+          "order": 3,
+          "title": "Injection과 output encoding",
+          "slug": "injection-output-encoding",
+          "branch": "content/c05-a03-injection-output-encoding",
+          "status": "planned",
+          "difficulty": "intermediate",
+          "wordCountTarget": 6600,
+          "visualKey": "api-authz-object-graph",
+          "readerQuestion": "Injection은 입력 검증 문제가 아니라 interpreter boundary 문제라는 말은 무슨 뜻인가?",
+          "whyItMatters": "증명 대상 응답이 injection으로 오염되면 TLS 출처가 맞아도 의미론적 신뢰가 사라진다.",
+          "coreModel": "코드와 데이터를 구분하지 못하는 interpreter 경계에서 injection이 발생한다.",
+          "protocolOrSystemArtifact": "input to interpreter boundary diagram",
+          "failureMode": "escaping, parameterization, output encoding의 위치를 혼동하면 한 경계는 막고 다른 경계는 열어둔다.",
+          "minimalLabOrTrace": "SQL parameterization과 HTML output encoding을 비교하는 pseudo-code",
+          "zktlsBridge": "zkTLS는 오염된 response의 provenance를 증명할 수 있으므로 source application의 data integrity도 고려해야 한다.",
+          "verificationChecklist": [
+            "입력 검증과 output encoding의 위치를 구분했는가?",
+            "interpreter boundary를 표시했는가?",
+            "오염된 응답 proof의 위험을 설명했는가?"
+          ],
+          "references": [
+            "https://owasp.org/www-project-top-ten/"
+          ]
+        },
+        {
+          "id": "c05-a04",
+          "chapterId": "c05",
+          "order": 4,
+          "title": "Authentication, session, token 실패",
+          "slug": "authentication-session-token-failures",
+          "branch": "content/c05-a04-authentication-session-token-failures",
+          "status": "planned",
+          "difficulty": "deep",
+          "wordCountTarget": 7800,
+          "visualKey": "transcript-receipt",
+          "readerQuestion": "세션과 토큰은 어떤 수명, 저장 위치, binding을 잃을 때 깨지는가?",
+          "whyItMatters": "zkTLS 증명은 사용자 consent와 session-derived response를 다루므로 session handling 실패와 직접 연결된다.",
+          "coreModel": "토큰은 bearer capability이며 저장, 만료, rotation, audience, binding이 안전성을 결정한다.",
+          "protocolOrSystemArtifact": "session token lifecycle receipt",
+          "failureMode": "토큰 탈취, 너무 긴 TTL, audience 혼동, logout invalidation 누락이 권한 남용으로 이어진다.",
+          "minimalLabOrTrace": "issuedAt, expiresAt, audience, revokedAt을 가진 token lifecycle table",
+          "zktlsBridge": "zkTLS proof flow는 사용자 세션을 외부로 넘기지 않고 consent와 최소 공개만 가져가야 한다.",
+          "verificationChecklist": [
+            "토큰을 bearer capability로 설명했는가?",
+            "저장 위치와 TTL을 다뤘는가?",
+            "zkTLS proof 요청에서 토큰 노출 금지를 명시했는가?"
+          ],
+          "references": [
+            "https://owasp.org/www-project-top-ten/",
+            "https://owasp.org/www-project-api-security/"
+          ]
+        },
+        {
+          "id": "c05-a05",
+          "chapterId": "c05",
+          "order": 5,
+          "title": "API inventory, shadow API, rate limit",
+          "slug": "api-inventory-shadow-api-rate-limit",
+          "branch": "content/c05-a05-api-inventory-shadow-api-rate-limit",
+          "status": "planned",
+          "difficulty": "intermediate",
+          "wordCountTarget": 6200,
+          "visualKey": "api-authz-object-graph",
+          "readerQuestion": "보이지 않는 API와 제한 없는 호출은 왜 인증된 시스템에서도 위험한가?",
+          "whyItMatters": "증명 대상 API가 문서화되지 않았거나 rate limit이 없으면 abuse와 data scraping 위험이 커진다.",
+          "coreModel": "API 보안은 endpoint inventory, ownership, schema, authz, quota, monitoring을 같이 관리한다.",
+          "protocolOrSystemArtifact": "API inventory and shadow endpoint map",
+          "failureMode": "deprecated endpoint가 남아 있거나 proof bot이 반복 호출하면 데이터 노출과 서비스 장애가 생긴다.",
+          "minimalLabOrTrace": "public, internal, deprecated endpoint를 분류하는 inventory table",
+          "zktlsBridge": "zkTLS client와 verifier는 proof 대상 endpoint의 사용량, consent, rate policy를 존중해야 한다.",
+          "verificationChecklist": [
+            "shadow API 정의와 발견 방식을 설명했는가?",
+            "rate limit과 abuse monitoring을 포함했는가?",
+            "proof fetch 단계의 호출 정책을 연결했는가?"
+          ],
+          "references": [
+            "https://owasp.org/www-project-api-security/"
+          ]
+        },
+        {
+          "id": "c05-a06",
+          "chapterId": "c05",
+          "order": 6,
+          "title": "Logging, alerting, exceptional conditions",
+          "slug": "logging-alerting-exceptional-conditions",
+          "branch": "content/c05-a06-logging-alerting-exceptional-conditions",
+          "status": "planned",
+          "difficulty": "intermediate",
+          "wordCountTarget": 6200,
+          "visualKey": "risk-matrix",
+          "readerQuestion": "예외 상황과 실패 로그는 어떻게 보안 통제의 일부가 되는가?",
+          "whyItMatters": "zkTLS proof verification 실패, policy mismatch, replay 시도는 추적 가능한 이벤트가 되어야 한다.",
+          "coreModel": "로그는 디버그 문자열이 아니라 detection, response, audit을 위한 structured evidence다.",
+          "protocolOrSystemArtifact": "verification event log schema",
+          "failureMode": "성공 로그만 남기고 실패 이유를 구조화하지 않으면 공격과 운영 장애를 구분하지 못한다.",
+          "minimalLabOrTrace": "proof_verification_failed 이벤트의 필드 설계 table",
+          "zktlsBridge": "zkTLS verifier는 proof id, policy version, result, reason code를 남겨야 claim audit이 가능하다.",
+          "verificationChecklist": [
+            "성공과 실패 이벤트를 모두 설계했는가?",
+            "민감정보를 로그에 넣지 않는 규칙을 적었는가?",
+            "proof id와 policy version을 포함했는가?"
+          ],
+          "references": [
+            "https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final",
+            "https://owasp.org/www-project-top-ten/"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "c06",
+      "order": 6,
+      "title": "SECURE SYSTEMS AND SUPPLY CHAIN",
+      "slug": "secure-systems-and-supply-chain",
+      "status": "planned",
+      "visualKey": "supply-chain-provenance",
+      "guidingQuestion": "소프트웨어 공급망과 운영 보안은 proof system의 신뢰를 어떻게 뒷받침하는가?",
+      "articles": [
+        {
+          "id": "c06-a01",
+          "chapterId": "c06",
+          "order": 1,
+          "title": "Secure by Design",
+          "slug": "secure-by-design",
+          "branch": "content/c06-a01-secure-by-design",
+          "status": "planned",
+          "difficulty": "foundation",
+          "wordCountTarget": 5200,
+          "visualKey": "supply-chain-provenance",
+          "readerQuestion": "secure by design은 기능 위에 보안을 덧붙이는 방식과 무엇이 다른가?",
+          "whyItMatters": "zkTLS 제품은 사용자 consent, secret handling, verifier policy를 기본 설계에서 다뤄야 한다.",
+          "coreModel": "제조자와 서비스 운영자가 고객 보안 결과를 제품 요구사항으로 소유한다.",
+          "protocolOrSystemArtifact": "security outcome ownership matrix",
+          "failureMode": "opt-in 보안, 불투명한 취약점 처리, insecure default가 proof 사용자에게 위험을 전가한다.",
+          "minimalLabOrTrace": "feature requirement를 secure default와 observable outcome으로 바꾸는 table",
+          "zktlsBridge": "zkTLS UX는 proof 생성 전에 consent, redaction, policy default가 안전해야 한다.",
+          "verificationChecklist": [
+            "secure default와 secure option을 구분했는가?",
+            "고객 보안 결과를 요구사항으로 적었는가?",
+            "zkTLS consent와 redaction default를 연결했는가?"
+          ],
+          "references": [
+            "https://www.cisa.gov/securebydesign",
+            "https://csrc.nist.gov/pubs/sp/800/218/final"
+          ]
+        },
+        {
+          "id": "c06-a02",
+          "chapterId": "c06",
+          "order": 2,
+          "title": "Dependency risk와 SBOM",
+          "slug": "dependency-risk-sbom",
+          "branch": "content/c06-a02-dependency-risk-sbom",
+          "status": "planned",
+          "difficulty": "intermediate",
+          "wordCountTarget": 6800,
+          "visualKey": "supply-chain-provenance",
+          "readerQuestion": "SBOM은 취약점을 자동으로 없애지 않는데도 왜 중요한가?",
+          "whyItMatters": "proof verifier와 circuit tooling은 dependency chain의 취약점과 provenance에 영향을 받는다.",
+          "coreModel": "SBOM은 구성 요소, 버전, 식별자, 관계를 기록해 취약점 대응과 provenance 추적의 기반을 만든다.",
+          "protocolOrSystemArtifact": "component dependency and SBOM relationship graph",
+          "failureMode": "component identity가 없으면 취약점 공지가 나와도 어떤 proof build가 영향받는지 모른다.",
+          "minimalLabOrTrace": "package, version, supplier, hash, relationship을 가진 SBOM row example",
+          "zktlsBridge": "zkTLS verifier는 circuit, prover, verifier binary의 dependency provenance를 추적할 수 있어야 한다.",
+          "verificationChecklist": [
+            "SBOM을 보안 보장 자체로 과장하지 않았는가?",
+            "component identity와 relationship을 포함했는가?",
+            "proof build 영향 분석과 연결했는가?"
+          ],
+          "references": [
+            "https://www.cisa.gov/resources-tools/resources/2025-minimum-elements-software-bill-materials-sbom",
+            "https://csrc.nist.gov/pubs/sp/800/218/final"
+          ]
+        },
+        {
+          "id": "c06-a03",
+          "chapterId": "c06",
+          "order": 3,
+          "title": "Secrets management",
+          "slug": "secrets-management",
+          "branch": "content/c06-a03-secrets-management",
+          "status": "planned",
+          "difficulty": "deep",
+          "wordCountTarget": 7400,
+          "visualKey": "risk-matrix",
+          "readerQuestion": "secret은 환경 변수에 숨기는 값이 아니라 어떤 lifecycle을 가진 운영 자산인가?",
+          "whyItMatters": "API token, notary credential, signing key, deployment secret이 새면 proof system의 출처와 권한이 무너진다.",
+          "coreModel": "secret은 생성, 저장, 접근 제어, 회전, 감사, 폐기의 lifecycle로 관리한다.",
+          "protocolOrSystemArtifact": "secret lifecycle and access audit table",
+          "failureMode": "CI 로그, client bundle, long-lived token, broad scope가 secret exposure를 만든다.",
+          "minimalLabOrTrace": "secret name, scope, owner, rotation period, lastUsedAt metadata table",
+          "zktlsBridge": "zkTLS proof fetch와 verification service는 user token을 저장하지 않고 최소 권한 secret만 다뤄야 한다.",
+          "verificationChecklist": [
+            "secret 저장 위치와 접근 권한을 분리했는가?",
+            "회전과 감사 이벤트를 포함했는가?",
+            "사용자 세션 토큰 저장 금지를 명시했는가?"
+          ],
+          "references": [
+            "https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html",
+            "https://csrc.nist.gov/pubs/sp/800/57/pt1/r5/final"
+          ]
+        },
+        {
+          "id": "c06-a04",
+          "chapterId": "c06",
+          "order": 4,
+          "title": "CI/CD signing, provenance, attestation",
+          "slug": "cicd-provenance-attestation",
+          "branch": "content/c06-a04-cicd-provenance-attestation",
+          "status": "planned",
+          "difficulty": "deep",
+          "wordCountTarget": 8200,
+          "visualKey": "supply-chain-provenance",
+          "readerQuestion": "빌드 산출물이 어디서 어떻게 만들어졌는지를 검증하려면 어떤 attestation이 필요한가?",
+          "whyItMatters": "zkTLS verifier는 proof artifact뿐 아니라 verifier binary와 circuit build provenance도 신뢰해야 한다.",
+          "coreModel": "provenance attestation은 build platform, source, parameters, artifact digest를 서명된 증거로 묶는다.",
+          "protocolOrSystemArtifact": "SLSA provenance chain",
+          "failureMode": "빌드 재현성과 서명 검증 없이 배포하면 악성 verifier나 오래된 circuit이 섞일 수 있다.",
+          "minimalLabOrTrace": "source repo, builder id, artifact digest, signature를 가진 attestation skeleton",
+          "zktlsBridge": "proof verification 결과는 어떤 verifier와 circuit provenance로 검증됐는지 함께 추적되어야 한다.",
+          "verificationChecklist": [
+            "artifact digest와 source ref를 포함했는가?",
+            "builder identity와 signature를 분리했는가?",
+            "circuit/prover/verifier provenance를 연결했는가?"
+          ],
+          "references": [
+            "https://slsa.dev/spec/v1.0/provenance",
+            "https://openssf.org/slsa-tooling/"
+          ]
+        },
+        {
+          "id": "c06-a05",
+          "chapterId": "c06",
+          "order": 5,
+          "title": "Container / Kubernetes security posture",
+          "slug": "container-kubernetes-security-posture",
+          "branch": "content/c06-a05-container-kubernetes-security-posture",
+          "status": "planned",
+          "difficulty": "deep",
+          "wordCountTarget": 8000,
+          "visualKey": "trust-boundary-map",
+          "readerQuestion": "컨테이너와 Kubernetes 환경에서 runtime boundary는 어디서 깨지는가?",
+          "whyItMatters": "proof service와 verifier API가 cloud-native로 운영되면 pod identity, network policy, secret, admission control이 신뢰 기반이다.",
+          "coreModel": "컨테이너 보안은 image provenance, workload identity, least privilege, runtime isolation, cluster policy의 조합이다.",
+          "protocolOrSystemArtifact": "cluster trust boundary and workload identity map",
+          "failureMode": "privileged container, broad service account, exposed secret, missing network policy가 verifier compromise로 이어진다.",
+          "minimalLabOrTrace": "pod, service account, secret, network policy 관계를 나타내는 table",
+          "zktlsBridge": "zkTLS verifier 운영 환경은 proof correctness만큼 workload compromise 방어가 중요하다.",
+          "verificationChecklist": [
+            "image와 runtime boundary를 분리했는가?",
+            "service account 권한을 확인했는가?",
+            "verifier compromise 영향을 설명했는가?"
+          ],
+          "references": [
+            "https://kubernetes.io/docs/concepts/security/security-checklist/",
+            "https://kubernetes.io/docs/concepts/security/"
+          ]
+        },
+        {
+          "id": "c06-a06",
+          "chapterId": "c06",
+          "order": 6,
+          "title": "Memory safety와 Rust 전환",
+          "slug": "memory-safety-rust-transition",
+          "branch": "content/c06-a06-memory-safety-rust-transition",
+          "status": "planned",
+          "difficulty": "intermediate",
+          "wordCountTarget": 6200,
+          "visualKey": "trust-boundary-map",
+          "readerQuestion": "memory-safe language 전환은 암호/네트워크 시스템에서 어떤 취약점 class를 줄이는가?",
+          "whyItMatters": "TLS, parser, verifier, WASM runtime은 memory corruption이 proof system 신뢰를 직접 흔드는 영역이다.",
+          "coreModel": "memory safety는 bounds, lifetime, ownership, concurrency 오류를 언어와 tooling으로 줄이는 전략이다.",
+          "protocolOrSystemArtifact": "unsafe boundary and memory-safe migration map",
+          "failureMode": "FFI, unsafe block, parser bug, buffer lifetime 오류가 verifier bypass나 crash로 이어진다.",
+          "minimalLabOrTrace": "unsafe boundary inventory와 migration priority table",
+          "zktlsBridge": "zkTLS verifier와 transcript parser는 memory-safe implementation 또는 명시된 unsafe audit boundary가 필요하다.",
+          "verificationChecklist": [
+            "memory safety와 logic correctness를 구분했는가?",
+            "unsafe boundary inventory를 포함했는가?",
+            "transcript parser와 verifier risk를 연결했는가?"
+          ],
+          "references": [
+            "https://www.cisa.gov/case-memory-safe-roadmaps",
+            "https://www.cisa.gov/resources-tools/resources/memory-safe-languages-reducing-vulnerabilities-modern-software-development"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "c07",
+      "order": 7,
+      "title": "PRIVACY-PRESERVING PROOF SYSTEMS",
+      "slug": "privacy-preserving-proof-systems",
+      "status": "planned",
+      "visualKey": "witness-public-circuit",
+      "guidingQuestion": "원본을 공개하지 않고도 검증 가능한 주장을 만들려면 어떤 증명 도구가 필요한가?",
+      "articles": [
+        {
+          "id": "c07-a01",
+          "chapterId": "c07",
+          "order": 1,
+          "title": "Commitment와 selective disclosure",
+          "slug": "commitment-selective-disclosure",
+          "branch": "content/c07-a01-commitment-selective-disclosure",
+          "status": "planned",
+          "difficulty": "foundation",
+          "wordCountTarget": 5200,
+          "visualKey": "witness-public-circuit",
+          "readerQuestion": "값을 숨긴 채 나중에 같은 값임을 열어 보이는 구조는 왜 필요한가?",
+          "whyItMatters": "zkTLS는 응답 전체를 공개하지 않고 특정 필드나 조건만 검증 가능하게 만들어야 한다.",
+          "coreModel": "commitment는 hiding과 binding을 분리하고 selective disclosure는 공개 범위를 정책으로 제한한다.",
+          "protocolOrSystemArtifact": "commit-open and redacted transcript receipt",
+          "failureMode": "salt, domain, field path가 약하면 서로 다른 값이나 맥락이 같은 claim처럼 묶인다.",
+          "minimalLabOrTrace": "field path와 salt를 넣은 commitment pseudo-code",
+          "zktlsBridge": "선택 공개 proof는 원본 TLS 응답과 공개 claim 사이의 binding을 안전하게 표현해야 한다.",
+          "verificationChecklist": [
+            "hiding과 binding을 구분했는가?",
+            "field path와 domain separation을 포함했는가?",
+            "선택 공개 정책과 연결했는가?"
+          ],
+          "references": [
+            "https://www.w3.org/TR/vc-data-model-2.0/",
+            "https://datatracker.ietf.org/doc/html/rfc9162"
+          ]
+        },
+        {
+          "id": "c07-a02",
+          "chapterId": "c07",
+          "order": 2,
+          "title": "Merkle proof와 inclusion claim",
+          "slug": "merkle-proof-inclusion-claim",
+          "branch": "content/c07-a02-merkle-proof-inclusion-claim",
+          "status": "planned",
+          "difficulty": "intermediate",
+          "wordCountTarget": 6400,
+          "visualKey": "hash-chain",
+          "readerQuestion": "어떤 값이 큰 집합에 포함됐다는 사실을 작은 경로로 어떻게 증명하는가?",
+          "whyItMatters": "response field, certificate log, credential claim을 전체 공개 없이 포함 증명으로 다룰 수 있다.",
+          "coreModel": "Merkle proof는 leaf hash와 sibling path를 root commitment에 접어 넣는 inclusion proof다.",
+          "protocolOrSystemArtifact": "Merkle branch path from leaf to root",
+          "failureMode": "leaf canonicalization과 순서 규칙이 불명확하면 같은 데이터도 다른 root를 만들거나 proof가 모호해진다.",
+          "minimalLabOrTrace": "leaf, sibling, direction, root를 가진 proof table",
+          "zktlsBridge": "zkTLS selective disclosure는 응답 필드가 committed transcript 구조 안에 포함됨을 보여주는 패턴을 빌릴 수 있다.",
+          "verificationChecklist": [
+            "leaf canonicalization 규칙을 명시했는가?",
+            "sibling direction을 포함했는가?",
+            "root가 어떤 데이터 universe를 대표하는지 적었는가?"
+          ],
+          "references": [
+            "https://datatracker.ietf.org/doc/html/rfc9162",
+            "https://certificate.transparency.dev/howctworks/"
+          ]
+        },
+        {
+          "id": "c07-a03",
+          "chapterId": "c07",
+          "order": 3,
+          "title": "영지식 증명의 completeness, soundness, zero-knowledge",
+          "slug": "zk-proof-properties",
+          "branch": "content/c07-a03-zk-proof-properties",
+          "status": "planned",
+          "difficulty": "intermediate",
+          "wordCountTarget": 6800,
+          "visualKey": "witness-public-circuit",
+          "readerQuestion": "영지식 증명은 무엇을 보장하고 무엇을 보장하지 않는가?",
+          "whyItMatters": "zkTLS에서 ZK는 출처, 계산, 공개 범위를 모두 자동으로 해결하는 마법이 아니다.",
+          "coreModel": "completeness는 참인 statement 수용, soundness는 거짓 statement 거부, zero-knowledge는 추가 정보 누출 제한이다.",
+          "protocolOrSystemArtifact": "witness, public input, circuit, proof, verifier model",
+          "failureMode": "statement가 잘못 정의되면 완벽한 proof도 엉뚱한 사실을 증명한다.",
+          "minimalLabOrTrace": "private witness와 public claim을 분리한 toy circuit table",
+          "zktlsBridge": "zkTLS는 TLS provenance statement와 app predicate를 정확히 회로화해야 한다.",
+          "verificationChecklist": [
+            "세 속성을 각각 한 문장으로 구분했는가?",
+            "statement 설계 실패를 설명했는가?",
+            "TLS provenance와 app predicate를 분리했는가?"
+          ],
+          "references": [
+            "https://www.wisdom.weizmann.ac.il/~oded/gmw1.html"
+          ]
+        },
+        {
+          "id": "c07-a04",
+          "chapterId": "c07",
+          "order": 4,
+          "title": "SNARK vs STARK trade-off",
+          "slug": "snark-stark-tradeoff",
+          "branch": "content/c07-a04-snark-stark-tradeoff",
+          "status": "planned",
+          "difficulty": "deep",
+          "wordCountTarget": 8200,
+          "visualKey": "circuit-grid",
+          "readerQuestion": "SNARK와 STARK는 proof size, verification, setup, post-quantum 성격에서 어떻게 갈라지는가?",
+          "whyItMatters": "zkTLS 증명을 브라우저, 서버, 온체인 중 어디에서 만들고 검증할지에 따라 proof system 선택이 달라진다.",
+          "coreModel": "proof system 선택은 circuit shape, prover cost, verifier cost, setup trust, proof size, ecosystem trade-off다.",
+          "protocolOrSystemArtifact": "SNARK/STARK trade-off matrix",
+          "failureMode": "작은 proof size만 보고 선택하면 proving latency, memory, trusted setup, verifier target을 놓친다.",
+          "minimalLabOrTrace": "browser prover, server prover, on-chain verifier별 선택 matrix",
+          "zktlsBridge": "zkTLS product는 proof system을 user latency와 verifier environment에 맞춰 선택해야 한다.",
+          "verificationChecklist": [
+            "setup trust와 verifier cost를 포함했는가?",
+            "prover environment를 명시했는가?",
+            "zkTLS UX latency와 연결했는가?"
+          ],
+          "references": [
+            "https://eprint.iacr.org/2018/046",
+            "https://eprint.iacr.org/2016/260"
+          ]
+        },
+        {
+          "id": "c07-a05",
+          "chapterId": "c07",
+          "order": 5,
+          "title": "MPC와 garbled circuit",
+          "slug": "mpc-garbled-circuit",
+          "branch": "content/c07-a05-mpc-garbled-circuit",
+          "status": "planned",
+          "difficulty": "deep",
+          "wordCountTarget": 8400,
+          "visualKey": "circuit-grid",
+          "readerQuestion": "여러 참여자가 입력을 숨긴 채 공동 계산을 한다는 것은 실제 프로토콜에서 어떤 비용을 만드는가?",
+          "whyItMatters": "MPC-TLS와 TLSNotary는 TLS secret을 단일 참여자에게 몰아주지 않기 위해 MPC를 사용한다.",
+          "coreModel": "MPC는 입력 share, communication round, adversary model, output policy의 조합이다.",
+          "protocolOrSystemArtifact": "two-party garbled circuit and share exchange diagram",
+          "failureMode": "malicious model, abort, latency, bandwidth를 무시하면 production 프로토콜이 실제 환경에서 실패한다.",
+          "minimalLabOrTrace": "Prover share와 Verifier share가 tag check 회로로 들어가는 trace",
+          "zktlsBridge": "MPC-TLS는 prover가 TLS session key를 단독으로 소유하지 못하게 해 response forgery를 줄이려 한다.",
+          "verificationChecklist": [
+            "semi-honest와 malicious 가정을 구분했는가?",
+            "communication cost를 언급했는가?",
+            "TLSNotary의 MPC-TLS 동기와 연결했는가?"
+          ],
+          "references": [
+            "https://tlsnotary.org/docs/protocol/mpc-tls/",
+            "https://tlsnotary.org/docs/faq/"
+          ]
+        },
+        {
+          "id": "c07-a06",
+          "chapterId": "c07",
+          "order": 6,
+          "title": "Verifiable credentials와 anonymous credentials",
+          "slug": "verifiable-anonymous-credentials",
+          "branch": "content/c07-a06-verifiable-anonymous-credentials",
+          "status": "planned",
+          "difficulty": "deep",
+          "wordCountTarget": 8000,
+          "visualKey": "transcript-receipt",
+          "readerQuestion": "credential claim을 검증하면서 holder의 불필요한 속성을 숨기는 모델은 어떻게 작동하는가?",
+          "whyItMatters": "zkTLS는 웹 데이터에서 credential-like claim을 만들 수 있지만 issuer, holder, verifier 모델과 다르다.",
+          "coreModel": "VC는 issuer, holder, verifier 사이의 claim container이고 selective disclosure는 presentation 단계의 privacy control이다.",
+          "protocolOrSystemArtifact": "issuer-holder-verifier credential flow",
+          "failureMode": "credential issuer trust와 TLS origin provenance를 혼동하면 누가 어떤 주장을 보증하는지 흐려진다.",
+          "minimalLabOrTrace": "VC claim, presentation, proof, verifier policy를 분리한 table",
+          "zktlsBridge": "zkTLS proof는 TLS origin에서 읽은 값을 credential ecosystem으로 옮기는 bridge가 될 수 있다.",
+          "verificationChecklist": [
+            "issuer, holder, verifier 역할을 구분했는가?",
+            "selective disclosure와 derived predicate를 설명했는가?",
+            "TLS origin provenance와 credential issuer trust를 분리했는가?"
+          ],
+          "references": [
+            "https://www.w3.org/TR/vc-data-model-2.0/",
+            "https://www.w3.org/TR/vc-overview/"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "c08",
+      "order": 8,
+      "title": "ZKTLS ARCHITECTURES AND LABS",
+      "slug": "zktls-architectures-and-labs",
+      "status": "planned",
+      "visualKey": "proof-pipeline",
+      "guidingQuestion": "zkTLS는 TLS 데이터 provenance 문제를 어떤 protocol architecture와 lab trace로 다루는가?",
+      "articles": [
+        {
+          "id": "c08-a01",
+          "chapterId": "c08",
+          "order": 1,
+          "title": "zkTLS가 해결하는 provenance 문제",
+          "slug": "zktls-provenance-problem",
+          "branch": "content/c08-a01-zktls-provenance-problem",
+          "status": "planned",
+          "difficulty": "foundation",
+          "wordCountTarget": 5400,
+          "visualKey": "transcript-receipt",
+          "readerQuestion": "왜 TLS로 받은 웹 데이터를 그대로 복사해서는 제3자에게 강하게 증명할 수 없는가?",
+          "whyItMatters": "zkTLS의 출발점은 private web data를 origin integrity와 최소 공개로 다른 시스템에 전달하는 문제다.",
+          "coreModel": "provenance proof는 source origin, session integrity, selected claim, verifier policy를 결합한다.",
+          "protocolOrSystemArtifact": "transcript receipt with redacted fields",
+          "failureMode": "스크린샷, JSON 복사본, bearer token 공유는 출처와 무결성 또는 privacy를 충분히 보장하지 못한다.",
+          "minimalLabOrTrace": "copy, screenshot, proxy, zkTLS proof를 비교하는 evidence table",
+          "zktlsBridge": "이 article이 전체 가이드의 최종 문제 설정이며 앞선 보안/TLS/암호 장을 묶는다.",
+          "verificationChecklist": [
+            "provenance와 privacy 요구를 함께 설명했는가?",
+            "대안의 실패 모드를 비교했는가?",
+            "source origin과 selected claim을 분리했는가?"
+          ],
+          "references": [
+            "https://arxiv.org/abs/1909.00938",
+            "https://tlsnotary.org/"
+          ]
+        },
+        {
+          "id": "c08-a02",
+          "chapterId": "c08",
+          "order": 2,
+          "title": "Proxy 방식과 신뢰 가정",
+          "slug": "zktls-proxy-trust-assumptions",
+          "branch": "content/c08-a02-zktls-proxy-trust-assumptions",
+          "status": "planned",
+          "difficulty": "intermediate",
+          "wordCountTarget": 7000,
+          "visualKey": "proof-pipeline",
+          "readerQuestion": "proxy 기반 zkTLS는 어떤 단순성을 얻고 어떤 신뢰를 새로 요구하는가?",
+          "whyItMatters": "proxy 방식은 구현과 성능 장점이 있지만 관찰자와 privacy 경계가 커진다.",
+          "coreModel": "proxy는 client와 server 사이 또는 proof flow 중간에서 transcript material을 관찰하거나 검증 보조 자료를 만든다.",
+          "protocolOrSystemArtifact": "proxy observer trust boundary flow",
+          "failureMode": "proxy가 볼 수 있는 응답과 credential을 과소평가하면 privacy guarantee가 과장된다.",
+          "minimalLabOrTrace": "client, proxy, server, verifier별 관측 가능 데이터 table",
+          "zktlsBridge": "proxy 접근은 zkTLS architecture spectrum의 한쪽 끝으로, MPC-TLS와 비교해야 한다.",
+          "verificationChecklist": [
+            "proxy가 보는 데이터를 명시했는가?",
+            "성능과 privacy trade-off를 적었는가?",
+            "MPC 방식과 비교 축을 만들었는가?"
+          ],
+          "references": [
+            "https://tlsnotary.org/docs/intro/",
+            "https://www.deco.works/"
+          ]
+        },
+        {
+          "id": "c08-a03",
+          "chapterId": "c08",
+          "order": 3,
+          "title": "MPC-TLS와 TLSNotary",
+          "slug": "mpc-tls-tlsnotary",
+          "branch": "content/c08-a03-mpc-tls-tlsnotary",
+          "status": "planned",
+          "difficulty": "deep",
+          "wordCountTarget": 8800,
+          "visualKey": "proof-pipeline",
+          "readerQuestion": "TLSNotary의 MPC-TLS는 prover가 response를 위조하지 못하게 어떤 역할 분리를 만드는가?",
+          "whyItMatters": "TLSNotary는 zkTLS 구현계에서 중요한 기준점이며 proxy mode와 MPC mode의 trade-off를 모두 보여준다.",
+          "coreModel": "Prover와 Verifier가 TLS session 관련 계산을 나누어 수행해 단일 주체가 전체 session secret을 통제하지 않게 한다.",
+          "protocolOrSystemArtifact": "MPC-TLS prover, verifier, server flow",
+          "failureMode": "online verifier requirement, bandwidth, abort, selective disclosure policy를 무시하면 UX와 보안 모델이 깨진다.",
+          "minimalLabOrTrace": "MPC-TLS phase와 attestation phase를 나누는 sequence trace",
+          "zktlsBridge": "TLSNotary는 TLS response provenance를 실제 developer가 다룰 수 있는 protocol API로 만든다.",
+          "verificationChecklist": [
+            "Prover, Verifier, Server 역할을 분리했는가?",
+            "online verifier와 MPC cost를 설명했는가?",
+            "forgery 방지 논리를 ZK만으로 설명하지 않았는가?"
+          ],
+          "references": [
+            "https://tlsnotary.org/docs/protocol/mpc-tls/",
+            "https://tlsnotary.org/docs/faq/"
+          ]
+        },
+        {
+          "id": "c08-a04",
+          "chapterId": "c08",
+          "order": 4,
+          "title": "DECO 계열 설계",
+          "slug": "deco-design-lineage",
+          "branch": "content/c08-a04-deco-design-lineage",
+          "status": "planned",
+          "difficulty": "deep",
+          "wordCountTarget": 9000,
+          "visualKey": "proof-pipeline",
+          "readerQuestion": "DECO는 TLS 데이터를 oracle과 zero-knowledge claim으로 옮기기 위해 어떤 구조를 제안했는가?",
+          "whyItMatters": "DECO는 TLS provenance, selective disclosure, oracle use case를 연결한 대표 연구다.",
+          "coreModel": "사용자가 TLS로 얻은 데이터를 웹 서비스 수정 없이 provenance와 predicate proof로 제3자에게 전달한다.",
+          "protocolOrSystemArtifact": "DECO prover, oracle, verifier architecture flow",
+          "failureMode": "논문의 TLS 버전 가정과 현대 TLS 1.3/ECH 환경을 분리하지 않으면 구현 가능성을 과장한다.",
+          "minimalLabOrTrace": "DECO use case와 trust assumption을 나누는 comparison table",
+          "zktlsBridge": "DECO는 zkTLS라는 문제 영역의 연구적 뿌리를 보여주는 핵심 자료다.",
+          "verificationChecklist": [
+            "DECO의 provenance 목표를 설명했는가?",
+            "논문 가정과 현재 protocol 환경을 구분했는가?",
+            "TLSNotary와 비교할 축을 만들었는가?"
+          ],
+          "references": [
+            "https://arxiv.org/abs/1909.00938",
+            "https://research.chain.link/deco.pdf",
+            "https://www.deco.works/"
+          ]
+        },
+        {
+          "id": "c08-a05",
+          "chapterId": "c08",
+          "order": 5,
+          "title": "Fetch-Prove-Verify pipeline",
+          "slug": "fetch-prove-verify-pipeline",
+          "branch": "content/c08-a05-fetch-prove-verify-pipeline",
+          "status": "planned",
+          "difficulty": "lab",
+          "wordCountTarget": 9000,
+          "visualKey": "proof-pipeline",
+          "readerQuestion": "zkTLS product flow는 사용자가 데이터를 가져오고 증명하고 검증받는 과정을 어떻게 분리해야 하는가?",
+          "whyItMatters": "frontend, content, verifier, policy, proof artifact가 모두 같은 pipeline vocabulary를 공유해야 한다.",
+          "coreModel": "Fetch는 origin data acquisition, Prove는 predicate와 proof artifact 생성, Verify는 policy 기반 acceptance다.",
+          "protocolOrSystemArtifact": "request to TLS session to transcript to proof to verifier pipeline",
+          "failureMode": "단계별 owner와 artifact를 구분하지 않으면 UI는 proof status를 보여주지만 실제 검증 기준은 비어 있다.",
+          "minimalLabOrTrace": "로컬 더미 response로 public claim과 private witness를 분리하는 lab trace",
+          "zktlsBridge": "이 pipeline은 모든 article의 zkTLS bridge를 실제 구현 흐름으로 모으는 공통 언어다.",
+          "verificationChecklist": [
+            "Fetch, Prove, Verify owner를 구분했는가?",
+            "각 단계 artifact와 failure reason을 적었는가?",
+            "Gemini visual slot의 proof pipeline key와 연결했는가?"
+          ],
+          "references": [
+            "https://tlsnotary.org/docs/intro/",
+            "https://arxiv.org/abs/1909.00938"
+          ]
+        },
+        {
+          "id": "c08-a06",
+          "chapterId": "c08",
+          "order": 6,
+          "title": "Toy circuit에서 production risk까지",
+          "slug": "toy-circuit-production-risk",
+          "branch": "content/c08-a06-toy-circuit-production-risk",
+          "status": "planned",
+          "difficulty": "lab",
+          "wordCountTarget": 9600,
+          "visualKey": "circuit-grid",
+          "readerQuestion": "교육용 회로와 production proof system 사이에는 어떤 보안·성능·운영 간극이 있는가?",
+          "whyItMatters": "브라우저 lab은 이해를 돕지만 실제 zkTLS product에는 circuit audit, key management, provenance, monitoring이 필요하다.",
+          "coreModel": "toy circuit은 predicate shape를 설명하고 production circuit은 soundness, performance, audit, upgrade path를 요구한다.",
+          "protocolOrSystemArtifact": "toy circuit to production risk grid",
+          "failureMode": "toy example을 production guarantee처럼 제시하면 user와 verifier가 proof의 한계를 오해한다.",
+          "minimalLabOrTrace": "membershipTier == gold toy predicate를 circuit risk checklist로 확장하는 table",
+          "zktlsBridge": "zkTLS labs는 반드시 실제 서비스 데이터, secret, account token을 쓰지 않는 안전한 경계를 유지해야 한다.",
+          "verificationChecklist": [
+            "toy와 production 보장을 구분했는가?",
+            "circuit audit와 key lifecycle을 언급했는가?",
+            "실제 계정/토큰 사용 금지를 명시했는가?"
+          ],
+          "references": [
+            "https://csrc.nist.gov/pubs/sp/800/218/final",
+            "https://slsa.dev/spec/v1.0/provenance",
+            "https://tlsnotary.org/docs/intro/"
+          ]
+        }
+      ]
+    }
+  ]
+}
