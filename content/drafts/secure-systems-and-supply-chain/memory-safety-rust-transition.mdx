@@ -1,0 +1,243 @@
+---
+title: Memory safety와 Rust 전환
+chapter: Secure Systems and Supply Chain
+chapterSlug: secure-systems-and-supply-chain
+articleSlug: memory-safety-rust-transition
+status: draft
+difficulty: intermediate
+wordCountTarget: 6200
+visualKey: trust-boundary-map
+branch: content/c06-a06-memory-safety-rust-transition
+readerQuestion: memory-safe language 전환은 암호/네트워크 시스템에서 어떤 취약점 class를 줄이는가?
+zktlsBridge: zkTLS verifier와 transcript parser는 memory-safe implementation 또는 명시된 unsafe audit boundary가 필요하다.
+references:
+  - https://www.cisa.gov/case-memory-safe-roadmaps
+  - https://www.cisa.gov/resources-tools/resources/memory-safe-languages-reducing-vulnerabilities-modern-software-development
+  - https://media.defense.gov/2025/Jun/23/2003742198/-1/-1/0/CSI_MEMORY_SAFE_LANGUAGES_REDUCING_VULNERABILITIES_IN_MODERN_SOFTWARE_DEVELOPMENT.PDF
+  - https://www.cisa.gov/news-events/news/urgent-need-memory-safety-software-products
+  - https://www.rust-lang.org/learn
+  - https://doc.rust-lang.org/book/ch04-00-understanding-ownership.html
+  - https://doc.rust-lang.org/book/ch20-01-unsafe-rust.html
+  - https://doc.rust-lang.org/reference/unsafe-keyword.html
+  - https://doc.rust-lang.org/nomicon/ffi.html
+---
+
+# Memory safety와 Rust 전환
+
+## Reader Question
+
+memory-safe language 전환은 "Rust로 다시 쓰면 모든 보안 문제가 사라진다"는 뜻인가? 아니다. memory safety는 buffer overflow, use-after-free, dangling pointer, data race, uninitialized memory 같은 memory misuse class를 줄이는 전략이다. logic bug, access control failure, cryptographic misuse, side channel, unsafe FFI는 별도로 다뤄야 한다.
+
+NSA와 CISA의 2025 Cybersecurity Information Sheet는 memory safe languages가 language-level protection, library support, tooling, developer training을 통해 memory-related vulnerability를 줄이는 방향을 제시한다. CISA의 memory safe roadmap 자료는 제조자가 memory safety 전환 계획을 고객에게 설명하고 보안 결과를 소유해야 한다는 Secure by Design 관점과 연결된다.
+
+## Why It Matters
+
+TLS parser, certificate parser, JSON canonicalizer, transcript redaction engine, verifier runtime, WASM host, cryptographic library는 attacker-controlled bytes를 자주 다룬다. 이런 component에서 memory corruption이 생기면 crash만이 아니라 remote code execution, data leak, verifier bypass로 이어질 수 있다. proof system이 아무리 sound해도 parser가 취약하면 proof statement가 공격자 입력에 의해 달라질 수 있다.
+
+Rust는 ownership, borrowing, lifetime, type system을 통해 많은 memory safety 문제를 compile time에 줄인다. 그러나 Rust에도 `unsafe`가 있다. Rust Reference는 `unsafe`가 추가 safety condition을 만들거나, programmer가 특정 safety obligation을 만족했다고 주장하는 위치라고 설명한다. 즉 Rust 전환의 핵심은 "unsafe가 없다"가 아니라 "unsafe boundary가 작고 문서화되고 audit 가능하다"다.
+
+Rust Book은 ownership을 Rust가 garbage collector 없이 memory safety guarantee를 제공하는 핵심 feature로 설명하고, unsafe Rust 장에서는 compiler가 보장하지 못하는 몇 가지 operation을 작은 boundary 안에 격리하라고 설명한다. 이 점이 전환 계획에서 중요하다. "Rust로 작성됨"이라는 badge보다 safe abstraction, unsafe block 위치, FFI wrapper contract가 더 강한 증거다.
+
+zkTLS에서는 transcript parser와 verifier가 특히 중요하다. 외부 origin의 HTTP response, certificate, proof bytes, public input, policy file을 처리하기 때문이다. 이 경계에 C/C++ parser가 있고 fuzzing과 sandbox가 약하면 memory-safe 전환 우선순위가 높다.
+
+## Core Model
+
+memory safety mental model:
+
+```txt
+memory bug class
+  -> exploit surface
+  -> language guarantee
+  -> unsafe boundary
+  -> migration priority
+```
+
+bug class:
+
+| class | risk |
+|---|---|
+| buffer overflow | adjacent memory overwrite |
+| use-after-free | stale pointer reuse |
+| dangling pointer | invalid object access |
+| data race | inconsistent memory state |
+| uninitialized read | unexpected data exposure |
+
+language guarantee는 class를 줄인다. 하지만 guarantee 밖의 boundary가 남는다.
+
+```txt
+safe Rust:
+  compiler-enforced ownership
+  borrowing checks
+  type and bounds checks
+
+unsafe Rust:
+  raw pointer dereference
+  FFI
+  unsafe trait contract
+  unchecked indexing
+
+non-Rust boundary:
+  C library
+  OS API
+  hardware
+  JIT or WASM host
+```
+
+전환 우선순위는 risk에 따라 정한다. network-facing parser, crypto-adjacent code, privilege boundary, file format parser, browser extension native module, verifier server처럼 attacker input을 높은 권한으로 처리하는 component가 먼저다.
+
+## Protocol or System Artifact
+
+unsafe boundary inventory:
+
+| component | input | memory risk | plan |
+|---|---|---|---|
+| TLS transcript parser | origin bytes | parser bug | Rust rewrite |
+| JSON extractor | API response | bounds bug | safe parser |
+| native verifier | proof bytes | FFI risk | isolate unsafe |
+| WASM host | user proof | sandbox escape | runtime audit |
+| C crypto binding | secrets | misuse and FFI | wrapper audit |
+
+Rust `unsafe` review item:
+
+```txt
+unsafe block:
+  why needed
+  safety invariant
+  caller obligation
+  test coverage
+  fuzz target
+  owner
+```
+
+memory-safe roadmap artifact:
+
+```txt
+phase 1:
+  new code in MSL
+
+phase 2:
+  high-risk parser rewrite
+
+phase 3:
+  unsafe boundary audit
+
+phase 4:
+  legacy FFI isolation
+
+phase 5:
+  metrics and disclosure
+```
+
+이 roadmap은 전면 rewrite 선언보다 실용적이다. NSA/CISA 자료도 MSL adoption이 모든 상황에서 즉시 가능한 것은 아니며, legacy code와 performance, integration constraint를 고려해야 한다는 balanced view를 제시한다.
+
+## Failure Mode
+
+첫 번째 실패는 memory safety를 logic correctness로 착각하는 것이다. Rust로 쓴 verifier도 wrong policy를 accept할 수 있고, access control을 잘못 구현할 수 있으며, cryptographic nonce를 재사용할 수 있다. memory safety는 중요한 vulnerability class를 줄이지만, proof statement 설계와 protocol correctness를 대체하지 않는다.
+
+두 번째 실패는 `unsafe`를 숨기는 것이다. Rust codebase 안에 작은 unsafe block이 있어도 그 안에서는 compiler guarantee가 약해진다. unsafe block마다 safety invariant와 audit owner가 있어야 한다. "Rust로 썼다"는 말만으로는 충분하지 않다.
+
+세 번째 실패는 FFI boundary를 방치하는 것이다. Rust가 C library를 호출하면 memory safety guarantee가 외부 library contract에 의존한다. pointer lifetime, buffer length, ownership transfer, thread safety가 문서화되지 않으면 wrapper가 취약해진다.
+
+네 번째 실패는 parser를 low priority로 두는 것이다. parser는 attacker-controlled input을 구조화된 data로 바꾸는 trust boundary다. TLS transcript, certificate chain, JSON response, proof file, policy document parser는 높은 우선순위를 가져야 한다.
+
+다섯 번째 실패는 dependency memory safety를 보지 않는 것이다. application code가 Rust라도 native dependency, build script, proc macro, WASM runtime, compression library가 memory-unsafe일 수 있다. SBOM과 unsafe boundary inventory가 연결되어야 한다.
+
+여섯 번째 실패는 crash-only 평가다. memory bug는 crash뿐 아니라 secret disclosure, verifier decision corruption, RCE, sandbox escape를 만들 수 있다. zkTLS에서는 crash도 availability issue지만, decision corruption은 trust issue다.
+
+일곱 번째 실패는 migration metric을 line count로 잡는 것이다. 전체 코드 중 Rust 비율이 높아도 attacker-controlled parser가 C FFI에 남아 있으면 위험은 크게 줄지 않는다. metric은 high-risk boundary coverage, unsafe block count, fuzz target coverage, memory-unsafe dependency count처럼 exploit surface에 연결되어야 한다.
+
+## Minimal Lab or Trace
+
+작은 lab은 unsafe boundary inventory로 시작한다.
+
+```txt
+1. list parser components
+2. list FFI calls
+3. list unsafe blocks
+4. map attacker-controlled inputs
+5. assign owner
+6. add fuzz targets
+7. define migration phase
+```
+
+trace table:
+
+| input | component | boundary | action |
+|---|---|---|---|
+| proof bytes | verifier parser | unsafe FFI | isolate |
+| HTTP response | JSON extractor | safe Rust | fuzz |
+| cert chain | x509 parser | dependency | review |
+| policy file | policy parser | safe Rust | schema test |
+
+negative test:
+
+```txt
+malformed proof:
+  reject safely
+  no crash
+  no secret leak
+
+oversized response:
+  bounded memory
+  clear error
+
+invalid UTF-8:
+  parser rejects
+  log safe reason
+```
+
+이 lab은 Rust 전환 여부보다 boundary visibility를 만든다. 어디가 safe code이고 어디가 unsafe contract인지 알아야 전환 계획이 의미를 갖는다.
+
+## zkTLS Bridge
+
+zkTLS verifier와 transcript parser는 proof system의 해석 경계다. response bytes를 field로 나누고, transcript digest를 확인하고, proof public input을 parsing하고, policy predicate를 적용한다. 이 경계에서 memory corruption이 나면 cryptographic verification 이전 또는 이후의 application logic이 깨질 수 있다.
+
+따라서 zkTLS implementation guide는 다음 원칙을 가져야 한다.
+
+```txt
+preferred:
+  memory-safe parser
+  bounded allocation
+  fuzzed input boundary
+  explicit unsafe inventory
+
+required if unsafe:
+  small wrapper
+  documented invariant
+  code review
+  test and fuzz target
+  sandbox when possible
+```
+
+Rust 전환은 proof soundness를 증명하지 않는다. 하지만 attacker-controlled bytes를 다루는 component의 exploitability를 낮춰 proof system을 운영 가능한 보안 수준으로 끌어올린다. 특히 verifier service가 multi-tenant proof uploads를 받는다면 memory safety는 privacy-preserving proof 이전의 기본 runtime 조건이다.
+
+## Verification Checklist
+
+- memory safety와 logic correctness를 구분했는가?
+- buffer overflow, use-after-free, data race, uninitialized read 같은 class를 설명했는가?
+- CISA/NSA memory safe language guidance를 최신 자료로 확인했는가?
+- Rust의 `unsafe`가 proof obligation을 만든다는 점을 설명했는가?
+- parser, FFI, native dependency, WASM runtime을 unsafe boundary inventory에 넣었는가?
+- zkTLS transcript parser와 verifier decision corruption risk를 연결했는가?
+- 전면 rewrite가 아니라 risk-based migration roadmap을 제시했는가?
+
+## Visual Artifact Brief
+
+- Artifact key: memory-safe-boundary-migration-map
+- Purpose: memory-safe 전환을 언어 선택이 아니라 unsafe boundary와 migration priority로 설명한다.
+- Layout: 좌측에는 input surfaces, 중앙에는 parser/verifier/runtime components, 우측에는 safe Rust, unsafe Rust, FFI, legacy C boundary를 색으로 나눈다.
+- Labels: buffer overflow, use-after-free, data race, unsafe block, FFI, parser, fuzz target, migration phase.
+- Motion idea: high-risk parser가 legacy boundary에서 safe Rust lane으로 이동하고 unsafe wrapper는 작아지는 animation.
+- Reduced-motion state: unsafe boundary inventory와 migration phase table.
+
+## References
+
+- [CISA The Case for Memory Safe Roadmaps](https://www.cisa.gov/case-memory-safe-roadmaps)
+- [CISA Memory Safe Languages](https://www.cisa.gov/resources-tools/resources/memory-safe-languages-reducing-vulnerabilities-modern-software-development)
+- [NSA/CISA Memory Safe Languages PDF](https://media.defense.gov/2025/Jun/23/2003742198/-1/-1/0/CSI_MEMORY_SAFE_LANGUAGES_REDUCING_VULNERABILITIES_IN_MODERN_SOFTWARE_DEVELOPMENT.PDF)
+- [CISA Urgent Need for Memory Safety](https://www.cisa.gov/news-events/news/urgent-need-memory-safety-software-products)
+- [Rust Learn](https://www.rust-lang.org/learn)
+- [Rust Book: Understanding Ownership](https://doc.rust-lang.org/book/ch04-00-understanding-ownership.html)
+- [Rust Book: Unsafe Rust](https://doc.rust-lang.org/book/ch20-01-unsafe-rust.html)
+- [Rust Reference: unsafe keyword](https://doc.rust-lang.org/reference/unsafe-keyword.html)
+- [Rustonomicon: FFI](https://doc.rust-lang.org/nomicon/ffi.html)

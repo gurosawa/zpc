@@ -1,0 +1,277 @@
+---
+title: CI/CD signing, provenance, attestation
+chapter: Secure Systems and Supply Chain
+chapterSlug: secure-systems-and-supply-chain
+articleSlug: cicd-provenance-attestation
+status: draft
+difficulty: deep
+wordCountTarget: 8200
+visualKey: supply-chain-provenance
+branch: content/c06-a04-cicd-provenance-attestation
+readerQuestion: 빌드 산출물이 어디서 어떻게 만들어졌는지를 검증하려면 어떤 attestation이 필요한가?
+zktlsBridge: proof verification 결과는 어떤 verifier와 circuit provenance로 검증됐는지 함께 추적되어야 한다.
+references:
+  - https://slsa.dev/spec/v1.2/
+  - https://slsa.dev/spec/v1.2/provenance
+  - https://slsa.dev/spec/v1.2/build-provenance
+  - https://slsa.dev/spec/v1.2/verifying-artifacts
+  - https://slsa.dev/spec/v1.2/distributing-provenance
+  - https://slsa.dev/spec/v1.2/verification_summary
+  - https://github.com/in-toto/attestation
+  - https://docs.sigstore.dev/quickstart/quickstart-cosign/
+  - https://docs.sigstore.dev/cosign/verifying/verify/
+  - https://docs.sigstore.dev/cosign/verifying/attestation/
+  - https://csrc.nist.gov/pubs/sp/800/218/final
+---
+
+# CI/CD signing, provenance, attestation
+
+## Reader Question
+
+빌드 산출물이 서명되어 있으면 안전한가? 서명은 필요하지만 충분하지 않다. 무엇을 서명했는지, 누가 빌드했는지, 어떤 source와 dependency에서 만들어졌는지, 어떤 policy로 검증했는지가 함께 있어야 한다. provenance attestation은 artifact digest와 build context를 묶는 증거다.
+
+SLSA 공식 문서는 v1.2를 current specification으로 안내한다. roadmap의 초기 reference가 v1.0이더라도, 최신 원고에서는 v1.2를 기준으로 다루는 것이 맞다. SLSA v1.2는 build track, source track, provenance, verification summary attestation을 구분한다. provenance는 artifact가 어디서, 언제, 어떻게 만들어졌는지 추적하는 verifiable information이다.
+
+## Why It Matters
+
+zkTLS verifier는 proof artifact만 검증하지 않는다. verifier binary, circuit, parser, proving key, verification key, WASM runtime, container image가 모두 신뢰 기반이다. 공격자가 CI/CD에서 verifier binary를 바꾸거나, 오래된 circuit을 재배포하거나, malicious dependency를 build에 넣으면 proof result가 신뢰를 잃는다.
+
+Signing은 artifact가 특정 key로 서명되었음을 보여준다. Provenance는 artifact가 특정 builder, source, parameters, dependency로 만들어졌음을 보여준다. Attestation은 이 정보를 machine-readable statement로 전달한다. Verification summary attestation은 어떤 verifier가 어떤 policy로 artifact를 검증했는지 요약한다. 이 네 가지를 구분해야 한다.
+
+Sigstore Cosign 같은 도구는 artifact 서명과 검증 workflow를 제공한다. in-toto Attestation Framework는 software supply chain에서 검증 가능한 claim을 만들기 위한 statement 구조를 제공한다. SLSA provenance는 in-toto statement의 predicate로 표현될 수 있다.
+
+## Core Model
+
+CI/CD trust chain:
+
+```txt
+source
+  -> build platform
+  -> artifact digest
+  -> provenance
+  -> signature
+  -> verification policy
+  -> deployment decision
+```
+
+각 단계는 다른 질문에 답한다.
+
+| artifact | 질문 |
+|---|---|
+| source ref | 어떤 commit과 repo인가? |
+| build platform | 누가 build를 실행했는가? |
+| artifact digest | 정확히 어떤 bytes인가? |
+| provenance | 어떤 입력과 과정인가? |
+| signature | 누가 statement를 보증했는가? |
+| policy | 어떤 조건을 만족해야 배포되는가? |
+
+SLSA provenance model에서는 `subject`가 output artifact를 가리키고, `buildDefinition`이 build type과 external parameters를 담으며, `runDetails`가 builder와 invocation metadata를 담는다. `builder.id`는 trusted build platform boundary를 나타낸다. verifier는 signer만 보는 것이 아니라 signer-builder pair와 policy expectation을 함께 확인해야 한다.
+
+## Protocol or System Artifact
+
+간단한 provenance skeleton:
+
+```json
+{
+  "_type": "in-toto Statement v1",
+  "subject": [
+    {
+      "name": "verifier-image",
+      "digest": {
+        "sha256": "..."
+      }
+    }
+  ],
+  "predicateType": "slsa provenance v1",
+  "predicate": {
+    "buildDefinition": {
+      "buildType": "..."
+    },
+    "runDetails": {
+      "builder": {
+        "id": "..."
+      }
+    }
+  }
+}
+```
+
+이 skeleton에서 긴 값보다 중요한 것은 관계다. subject digest가 배포하려는 artifact와 같아야 하고, builder id가 신뢰하는 build platform이어야 하며, external parameters가 예상 source ref와 맞아야 한다. SLSA v1.2의 VSA는 verifier, policy, input attestations, verification result, verified levels를 전달할 수 있다.
+
+provenance 배포 방식도 policy의 일부다. attestation이 registry에 artifact와 함께 붙어 있는지, 별도 transparency log나 metadata store에 있는지, deployment gate가 어느 위치에서 읽는지 정해야 한다. SLSA의 distributing provenance와 verifying artifacts guidance를 분리해 읽어야 하는 이유가 여기에 있다. provenance가 만들어졌지만 admission controller가 읽지 못하면 운영상 없는 것과 비슷하다.
+
+Cosign verification flow:
+
+```txt
+input:
+  image digest
+  signature
+  certificate or key
+  policy expectations
+
+check:
+  signature valid
+  identity expected
+  issuer expected
+  digest matches
+  attestation policy passes
+```
+
+배포 policy는 tag보다 digest를 기준으로 해야 한다. tag는 mutable할 수 있다. `latest`가 서명되어 있어도 오늘의 latest와 어제의 latest는 다를 수 있다.
+
+deployment gate는 최소한 네 입력을 함께 비교한다.
+
+```txt
+artifact digest
+  exact bytes to deploy
+
+provenance subject
+  digest in statement
+
+identity policy
+  signer and builder
+
+release policy
+  source, branch, workflow
+```
+
+이 비교는 "서명이 유효하다"보다 엄격하다. 서명 유효성은 statement가 바뀌지 않았다는 뜻이고, release policy는 그 statement가 이 환경에서 허용되는지를 결정한다.
+
+또 하나의 artifact는 promotion record다. staging에서 검증된 digest가 production으로 승격될 때 다시 build하면 안 된다. 같은 source ref라도 build 시간이 달라지고 dependency registry 상태가 달라질 수 있다. production deploy는 staging에서 검증한 digest와 provenance를 다시 확인해야 하며, rebuild가 필요하면 새로운 provenance와 새로운 policy decision을 만들어야 한다.
+
+## Failure Mode
+
+첫 번째 실패는 tag signing만 믿는 것이다. `verifier:latest`가 서명되었다는 사실보다 `sha256:...` digest가 어떤 source와 builder에서 왔는지가 중요하다. mutable tag를 admission policy에서 허용하면 공격자는 같은 tag에 다른 bytes를 넣을 수 있다.
+
+두 번째 실패는 signer만 보고 builder를 보지 않는 것이다. SLSA는 builder identity와 signer-builder pair를 중요하게 다룬다. 같은 signer가 여러 builder의 provenance를 만들 수 있으므로, verifier는 특정 signer가 특정 builder에 대해 서명한 provenance만 받아야 한다.
+
+세 번째 실패는 self-hosted runner trust boundary를 숨기는 것이다. GitHub-hosted runner와 self-hosted runner는 같은 trust base가 아니다. self-hosted runner가 compromised되면 build inputs와 outputs, provenance generation이 영향을 받을 수 있다. builder id는 이 차이를 반영해야 한다.
+
+네 번째 실패는 provenance가 secret을 담는 것이다. build args, environment, internal parameters에 token이 들어가면 attestation이 secret leak surface가 된다. provenance는 검증에 필요한 context를 담아야 하지만, credential 원문을 담아서는 안 된다.
+
+다섯 번째 실패는 verified once, trusted forever다. policy가 바뀌고, dependency advisory가 나오고, builder가 compromise될 수 있다. VSA와 deployment record는 time, policy digest, verifier version을 남겨야 한다. 오래된 verification result를 새로운 policy로 착각하면 안 된다.
+
+여섯 번째 실패는 circuit provenance를 application release와 분리하는 것이다. zkTLS verifier binary가 새로 배포되어도 circuit artifact가 오래된 상태면 proof statement가 달라질 수 있다. verifier, circuit, proving key, verification key는 함께 versioned되어야 한다.
+
+일곱 번째 실패는 policy 없는 attestation 수집이다. 조직이 SBOM, provenance, signature를 모두 생성해도 deploy 단계에서 어떤 predicate type, builder id, source repository, branch protection, review rule을 기대하는지 코드화하지 않으면 사람이 dashboard를 보고 판단하게 된다. 공급망 증거는 사람이 읽는 보고서가 아니라 배포 결정을 막거나 허용하는 machine input이어야 한다.
+
+여덟 번째 실패는 provenance replay다. 오래된 provenance statement가 새 artifact digest와 맞지 않으면 reject되어야 하고, 오래된 policy로 검증된 VSA를 새 policy의 결과처럼 쓰면 안 된다. verification record는 artifact digest, policy digest, verifier version, verification time을 포함해야 한다.
+
+아홉 번째 실패는 release와 rollback을 다르게 취급하는 것이다. rollback은 보안 통제를 우회하는 예외가 되기 쉽다. 이전 digest로 돌아가더라도 그 digest의 provenance, signature, known vulnerability status, circuit compatibility를 다시 확인해야 한다. incident response 속도를 위해 policy를 끄는 순간, 공격자는 rollback path를 supply-chain bypass로 사용할 수 있다.
+
+## Minimal Lab or Trace
+
+작은 lab:
+
+```txt
+1. build verifier image
+2. record image digest
+3. generate SBOM
+4. generate SLSA provenance
+5. sign artifact or attestation
+6. verify signature
+7. check builder id
+8. check source ref
+9. deploy only by digest
+```
+
+policy trace:
+
+```txt
+provenance read
+  -> subject digest match
+  -> trusted builder match
+  -> source ref match
+  -> workflow policy match
+  -> signature identity match
+  -> deploy gate decision
+```
+
+verification worksheet:
+
+| check | expected |
+|---|---|
+| digest | deployment digest matches subject |
+| signer | trusted identity |
+| builder | expected build platform |
+| source | expected repo and ref |
+| policy | exact policy digest |
+| time | within accepted window |
+
+negative tests:
+
+```txt
+wrong signer:
+  reject
+
+wrong builder:
+  reject
+
+wrong predicate:
+  reject
+
+tag without digest:
+  reject
+
+source ref mismatch:
+  reject
+
+stale circuit:
+  reject or warn
+```
+
+이 lab은 실제 signing tool보다 policy reasoning이 중요하다. tool이 valid라고 해도 product policy가 기대한 source와 builder가 아니면 reject해야 한다.
+
+## zkTLS Bridge
+
+zkTLS verifier가 "proof valid"라고 말할 때, 실제로는 특정 verifier software와 circuit이 특정 policy로 proof를 검증했다는 뜻이다. 이 사실을 추적하려면 verification event에 다음 정보가 필요하다.
+
+```txt
+proof id
+verifier artifact digest
+circuit digest
+verification key id
+policy digest
+provenance reference
+verification result
+```
+
+공급망 provenance가 없으면 나중에 "이 proof는 취약한 verifier version으로 accept되었는가"를 묻기 어렵다. circuit bug가 발견되었을 때 어떤 proofs가 영향을 받는지도 추적할 수 없다. CI/CD attestation은 zkTLS protocol의 일부가 아니지만, proof system 운영 신뢰의 일부다.
+
+또한 prover와 verifier가 서로 다른 조직에 배포될 수 있다. external verifier가 third-party binary를 실행한다면, binary signing과 provenance policy가 없으면 trust boundary가 불명확해진다. 이때 SBOM, provenance, signature, runtime attestation은 proof ecosystem의 meta-evidence가 된다.
+
+특히 circuit과 verifier binary의 compatibility는 별도 policy로 관리해야 한다. verifier가 v3 circuit을 기대하는데 deployment가 v2 verification key를 들고 있으면 proof semantics가 바뀐다. provenance record는 "어떤 bytes로 빌드됐는가"를 넘어서 "어떤 proof statement version을 검증하는 release인가"와 연결되어야 한다. 그래야 오래된 proof result를 재평가하거나, 특정 circuit bug의 영향을 받는 verification event를 찾아낼 수 있다.
+
+## Verification Checklist
+
+- signing, provenance, attestation, VSA를 구분했는가?
+- SLSA current version을 v1.2로 확인했는가?
+- subject digest, buildDefinition, runDetails, builder.id를 설명했는가?
+- signer identity와 builder identity를 분리했는가?
+- mutable tag 대신 artifact digest 검증을 강조했는가?
+- self-hosted runner와 hosted builder trust boundary를 다뤘는가?
+- provenance에 secret을 넣지 않는 실패 모드를 포함했는가?
+- zkTLS verifier, circuit, key, policy provenance를 verification event와 연결했는가?
+
+## Visual Artifact Brief
+
+- Artifact key: slsa-provenance-attestation-chain
+- Purpose: artifact digest가 source, builder, provenance, signature, policy verification으로 연결되는 과정을 설명한다.
+- Layout: source repo, build platform, artifact digest, provenance statement, signature, verifier policy, deployment gate를 sequence로 그린다.
+- Labels: subject, buildDefinition, runDetails, builder.id, signer, policy digest, VSA, circuit digest.
+- Motion idea: artifact가 digest로 고정되고 provenance와 signature가 붙은 뒤 policy gate를 통과한다. mismatch는 red reject path로 빠진다.
+- Reduced-motion state: provenance skeleton과 verification worksheet를 나란히 표시한다.
+
+## References
+
+- [SLSA v1.2 specification](https://slsa.dev/spec/v1.2/)
+- [SLSA v1.2 Provenance](https://slsa.dev/spec/v1.2/provenance)
+- [SLSA v1.2 Build Provenance](https://slsa.dev/spec/v1.2/build-provenance)
+- [SLSA v1.2 Verifying Artifacts](https://slsa.dev/spec/v1.2/verifying-artifacts)
+- [SLSA v1.2 Distributing Provenance](https://slsa.dev/spec/v1.2/distributing-provenance)
+- [SLSA Verification Summary Attestation](https://slsa.dev/spec/v1.2/verification_summary)
+- [in-toto Attestation Framework](https://github.com/in-toto/attestation)
+- [Sigstore Cosign Quickstart](https://docs.sigstore.dev/quickstart/quickstart-cosign/)
+- [Cosign verifying signatures](https://docs.sigstore.dev/cosign/verifying/verify/)
+- [Cosign verifying attestations](https://docs.sigstore.dev/cosign/verifying/attestation/)
+- [NIST SP 800-218 SSDF](https://csrc.nist.gov/pubs/sp/800/218/final)

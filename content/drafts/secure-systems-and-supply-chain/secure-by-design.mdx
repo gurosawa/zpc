@@ -1,0 +1,158 @@
+---
+title: Secure by Design
+chapter: Secure Systems and Supply Chain
+chapterSlug: secure-systems-and-supply-chain
+articleSlug: secure-by-design
+status: draft
+difficulty: foundation
+wordCountTarget: 5200
+visualKey: supply-chain-provenance
+branch: content/c06-a01-secure-by-design
+readerQuestion: secure by design은 기능 위에 보안을 덧붙이는 방식과 무엇이 다른가?
+zktlsBridge: zkTLS UX는 proof 생성 전에 consent, redaction, policy default가 안전해야 한다.
+references:
+  - https://www.cisa.gov/securebydesign
+  - https://www.cisa.gov/resources-tools/resources/secure-by-design
+  - https://www.cisa.gov/resources-tools/resources/cisa-secure-design-pledge
+  - https://csrc.nist.gov/pubs/sp/800/218/final
+  - https://owasp.org/Top10/2025/A06_2025-Insecure_Design/
+---
+
+# Secure by Design
+
+## Reader Question
+
+secure by design은 "출시 직전에 보안 검사를 추가한다"는 말이 아니다. 제품 제조자와 서비스 운영자가 고객의 보안 결과를 제품 요구사항으로 소유한다는 말이다. CISA Secure by Design의 핵심 방향은 보안 부담을 고객 설정과 사후 대응에 밀어 넣지 않고, 제조자가 안전한 기본값, 투명한 취약점 처리, 측정 가능한 개선을 제품 설계 안에 넣는 것이다.
+
+이 관점에서 보안 기능은 옵션 목록이 아니다. MFA를 켤 수 있다, audit log를 켤 수 있다, redaction을 설정할 수 있다가 아니라, 위험한 기본값이 출고되지 않도록 해야 한다. 사용자가 전문가처럼 설정해야만 안전한 제품은 secure by design이 아니다. "secure option"과 "secure default"는 다르다.
+
+## Why It Matters
+
+zkTLS 제품은 사용자 consent, session secret, selective disclosure, verifier policy, proof freshness를 다룬다. 이 요소들은 나중에 문서로 주의사항을 붙여 해결할 수 없다. proof를 만들기 전에 어떤 origin을 fetch할지, 어떤 field를 공개할지, session token을 어디에도 저장하지 않을지, verifier가 어떤 policy로 claim을 받아들일지 기본 흐름에 들어가야 한다.
+
+Secure by Design은 threat modeling을 product requirement로 끌어올린다. NIST SSDF는 secure software development practice를 SDLC에 통합해 취약점을 줄이고, 발견되지 않은 취약점의 영향을 완화하며, root cause를 다루는 공통 어휘를 제공한다. CISA의 Secure by Design Pledge는 MFA, default password 제거, vulnerability class 감소, patch adoption, vulnerability disclosure, CVE, intrusion evidence 같은 측정 가능한 목표를 제품 제조자의 책임으로 놓는다.
+
+zkTLS reference manual에서는 이 관점을 "proof가 안전하다"보다 넓게 잡아야 한다. proof protocol이 sound해도 UX가 raw credential을 verifier에게 복사하게 만들거나, redaction default가 과다 공개라면 제품은 안전하지 않다.
+
+## Core Model
+
+Secure by Design의 mental model은 다음 네 칸이다.
+
+```txt
+outcome
+  고객이 안전해지는 결과
+
+default
+  별도 설정 없이 적용되는 상태
+
+evidence
+  결과를 관측하는 로그와 지표
+
+owner
+  그 결과를 책임지는 제품 조직
+```
+
+보안 요구사항은 "암호화 지원" 같은 기능명으로 끝나지 않는다. 다음처럼 outcome으로 써야 한다.
+
+| 약한 요구사항 | secure by design 요구사항 |
+|---|---|
+| redaction 기능 제공 | 기본 proof는 최소 field만 공개 |
+| MFA 옵션 제공 | 관리자와 민감 작업은 강한 인증 기본 |
+| 로그 기능 제공 | 실패와 예외가 구조화 evidence로 남음 |
+| patch guide 제공 | 고객이 적용 가능한 업데이트 경로 제공 |
+
+이 모델은 고객을 무능하다고 보는 관점이 아니다. 시스템 복잡성을 만든 쪽이 안전한 경로를 기본값으로 제공해야 한다는 engineering 책임이다. 고객은 risk owner일 수 있지만, vendor가 만든 insecure default의 root cause까지 고객에게 떠넘길 수는 없다.
+
+## Protocol or System Artifact
+
+secure-by-design artifact는 feature spec이 아니라 security outcome ownership matrix다.
+
+| surface | unsafe default | secure default | evidence | owner |
+|---|---|---|---|---|
+| proof request | all fields | allowed fields | policy id | verifier |
+| user consent | vague text | origin and field list | consent event | product |
+| token handling | copy token | private witness | no-token log scan | client |
+| verifier policy | accept any proof | policy-bound proof | decision log | verifier |
+| update path | manual only | visible patch status | version metric | ops |
+
+이 matrix는 각 기능을 "누가 안전해지는가"로 묶는다. 예를 들어 redaction UI는 privacy outcome을 위한 도구다. 고객이 모든 field를 직접 알아서 숨겨야 한다면 secure default가 아니다. verifier policy도 마찬가지다. proof file이 valid하면 무조건 accept하는 것이 아니라 origin, freshness, circuit version, allowed claim type을 함께 검증해야 한다.
+
+NIST SSDF 관점으로는 prepare, protect, produce, respond practice가 모두 연결된다. 조직은 secure development role과 toolchain을 준비하고, code와 secret을 보호하고, 취약점을 줄이는 방식으로 개발하고, 발견된 취약점에 대응해야 한다. Secure by Design은 그 practice가 customer-visible outcome으로 이어지는지 묻는다.
+
+## Failure Mode
+
+첫 번째 실패는 opt-in security다. 고객이 별도 문서를 읽고 MFA, audit log, rate limit, redaction, webhook signature를 하나씩 켜야 안전해진다면 공격자는 기본 배포를 노린다. 안전한 기본값이 불편하면 UX를 다시 설계해야지, 위험한 기본값을 남겨두면 안 된다.
+
+두 번째 실패는 책임 전가다. "고객이 token을 안전하게 보관해야 한다"는 문장은 맞지만, 제품이 token을 URL에 넣거나 log에 남기거나 third-party script가 읽을 수 있는 storage에 넣는다면 제조자 책임이다. zkTLS client가 session cookie를 verifier에게 복사하게 만드는 UX도 같은 실패다.
+
+세 번째 실패는 불투명한 취약점 처리다. vulnerability disclosure policy가 없고, CVE 발급과 advisory가 늦고, patch 상태가 보이지 않으면 고객은 risk를 관리할 수 없다. transparency는 홍보 문구가 아니라 대응 시간을 줄이는 운영 통제다.
+
+네 번째 실패는 evidence 없는 pledge다. "Secure by Design을 지향한다"는 선언만으로는 충분하지 않다. default password 감소, MFA 적용률, 취약점 class 감소, patch adoption, intrusion evidence 같은 측정 가능한 지표가 있어야 한다. evidence가 없으면 고객은 제조자의 보안 결과를 검증할 수 없다.
+
+다섯 번째 실패는 cryptographic proof를 product safety와 혼동하는 것이다. zkTLS protocol이 안전하다는 말은 consent UI, storage, verifier decision, incident response가 안전하다는 뜻이 아니다. secure by design은 protocol, product, operation을 함께 본다.
+
+## Minimal Lab or Trace
+
+작은 lab은 feature requirement를 security outcome으로 바꾸는 연습이다.
+
+```txt
+feature:
+  user proves account balance
+
+unsafe design:
+  user pastes API token
+  app fetches all fields
+  verifier accepts any valid proof
+
+secure-by-design trace:
+  origin allow-list
+  consent screen shows fields
+  token stays private
+  redaction default is minimal
+  proof has freshness nonce
+  verifier checks policy id
+  failure writes safe audit event
+```
+
+검토 table:
+
+| step | default | owner | evidence |
+|---|---|---|---|
+| consent | explicit field list | product | consent id |
+| fetch | allow-listed origin | client | origin log |
+| prove | minimum disclosure | prover | public claim hash |
+| verify | policy-bound accept | verifier | decision event |
+
+이 lab의 목표는 "보안 기능이 있는가"가 아니라 "안전한 경로가 기본인가"를 확인하는 것이다.
+
+## zkTLS Bridge
+
+zkTLS에서 Secure by Design은 세 가지 default로 나타난다. 첫째, consent default다. 사용자는 어떤 origin과 어떤 field가 proof 대상인지 알 수 있어야 하며, 숨겨야 할 field를 전문가처럼 직접 골라야 해서는 안 된다. 둘째, secret handling default다. session cookie, bearer token, private witness, TLS secret은 verifier에게 공개되지 않아야 한다. 셋째, verifier policy default다. valid proof라도 wrong origin, stale freshness, unknown circuit, unsupported claim type이면 reject해야 한다.
+
+이 default가 제품 요구사항에 들어가면 proof UX가 달라진다. "증명 생성" 버튼은 단순 실행 버튼이 아니라 consent, redaction, freshness, policy binding을 통과한 workflow가 된다. Secure by Design은 zkTLS가 사용자에게 privacy burden을 전가하지 않게 만드는 원칙이다.
+
+## Verification Checklist
+
+- secure option과 secure default를 구분했는가?
+- 고객 보안 결과를 feature가 아니라 outcome으로 적었는가?
+- CISA Secure by Design의 제조자 책임과 투명성 관점을 반영했는가?
+- NIST SSDF의 SDLC practice와 product outcome을 연결했는가?
+- 취약점 disclosure, patch, intrusion evidence를 운영 artifact로 다뤘는가?
+- zkTLS consent, redaction, token handling, verifier policy가 기본 안전 경로로 설계되었는가?
+
+## Visual Artifact Brief
+
+- Artifact key: secure-by-design-outcome-matrix
+- Purpose: 보안 기능 목록을 고객 보안 결과, 안전한 기본값, evidence, owner로 변환한다.
+- Layout: 왼쪽에는 product surfaces, 가운데에는 unsafe default와 secure default 비교, 오른쪽에는 evidence와 owner를 둔다.
+- Labels: security outcome, secure default, customer burden, evidence, owner, consent, redaction, policy id.
+- Motion idea: opt-in toggle이 secure default lane으로 이동하면서 owner와 evidence가 함께 점등된다.
+- Reduced-motion state: outcome ownership matrix와 zkTLS proof flow callout.
+
+## References
+
+- [CISA Secure by Design](https://www.cisa.gov/securebydesign)
+- [CISA Secure by Design resource](https://www.cisa.gov/resources-tools/resources/secure-by-design)
+- [CISA Secure by Design Pledge](https://www.cisa.gov/resources-tools/resources/cisa-secure-design-pledge)
+- [NIST SP 800-218 SSDF](https://csrc.nist.gov/pubs/sp/800/218/final)
+- [OWASP Top 10:2025 A06 Insecure Design](https://owasp.org/Top10/2025/A06_2025-Insecure_Design/)

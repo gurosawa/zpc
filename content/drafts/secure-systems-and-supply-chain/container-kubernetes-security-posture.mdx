@@ -1,0 +1,284 @@
+---
+title: Container / Kubernetes security posture
+chapter: Secure Systems and Supply Chain
+chapterSlug: secure-systems-and-supply-chain
+articleSlug: container-kubernetes-security-posture
+status: draft
+difficulty: deep
+wordCountTarget: 8000
+visualKey: trust-boundary-map
+branch: content/c06-a05-container-kubernetes-security-posture
+readerQuestion: 컨테이너와 Kubernetes 환경에서 runtime boundary는 어디서 깨지는가?
+zktlsBridge: zkTLS verifier 운영 환경은 proof correctness만큼 workload compromise 방어가 중요하다.
+references:
+  - https://kubernetes.io/docs/concepts/security/security-checklist/
+  - https://kubernetes.io/docs/concepts/security/pod-security-standards/
+  - https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
+  - https://kubernetes.io/docs/concepts/services-networking/network-policies/
+  - https://kubernetes.io/docs/concepts/security/service-accounts/
+  - https://kubernetes.io/docs/reference/access-authn-authz/rbac/
+  - https://kubernetes.io/docs/concepts/security/rbac-good-practices/
+  - https://kubernetes.io/docs/concepts/configuration/secret/
+  - https://kubernetes.io/docs/concepts/security/secrets-good-practices/
+  - https://kubernetes.io/docs/concepts/containers/images/
+---
+
+# Container / Kubernetes security posture
+
+## Reader Question
+
+컨테이너로 감쌌고 Kubernetes에 올렸다면 runtime boundary는 충분한가? 아니다. 컨테이너는 process와 filesystem isolation을 제공하지만, 잘못된 capability, privileged mode, broad service account, exposed secret, missing network policy, mutable image가 있으면 boundary는 쉽게 흐려진다. Kubernetes security posture는 image provenance, workload identity, least privilege, runtime isolation, cluster policy의 조합이다.
+
+Kubernetes 공식 Security Checklist는 Pod Security Standards, RBAC, NetworkPolicy, Secret handling, admission control, resource policy 같은 여러 layer를 함께 본다. Pod Security Standards는 privileged, baseline, restricted 세 policy level로 PodSpec field를 제한한다. 이들은 누적적으로 더 엄격해진다. 하나의 설정으로 끝나는 보안이 아니다.
+
+## Why It Matters
+
+zkTLS verifier나 proof service가 cloud-native 환경에서 운영되면 cluster compromise는 proof correctness에 직접 영향을 준다. 공격자가 verifier pod에 shell을 얻으면 proof input, verification result, policy config, secret, audit log를 볼 수 있다. 공격자가 service account token을 훔치면 Kubernetes API를 통해 더 넓은 권한을 얻을 수 있다. network policy가 없으면 compromised pod가 database, metadata service, internal verifier endpoint로 lateral movement를 할 수 있다.
+
+컨테이너 image도 공급망 artifact다. tag가 mutable하고 base image가 오래되었으며 digest pinning과 signature verification이 없으면 실행 중인 workload가 어떤 bytes인지 알기 어렵다. Kubernetes deployment가 `latest`를 pull하고 broad RBAC를 가진다면, CI/CD provenance를 만들었어도 runtime에서 사라진다.
+
+따라서 Kubernetes posture는 "cluster hardening checklist"가 아니라 proof service trust boundary map이다. 어떤 pod가 어떤 identity로 어떤 secret과 network path를 갖는지 보아야 한다.
+
+## Core Model
+
+Kubernetes security posture의 mental model:
+
+```txt
+image
+  what bytes run
+
+pod
+  what privileges run
+
+identity
+  who the workload is
+
+network
+  who can talk to whom
+
+secret
+  what credentials are exposed
+
+policy
+  what is admitted
+
+audit
+  what can be investigated
+```
+
+각 layer는 다른 failure를 막는다. image scanning은 privileged container를 막지 못한다. Pod Security Standards는 broad RBAC를 막지 못한다. RBAC는 pod-to-pod network access를 막지 못한다. NetworkPolicy는 secret volume exposure를 막지 못한다. posture는 layer의 합이다.
+
+zkTLS verifier deployment row:
+
+```txt
+workload:
+  verifier-api
+
+image:
+  digest pinned
+
+pod security:
+  restricted
+
+service account:
+  verifier-sa
+
+rbac:
+  no cluster-admin
+
+network:
+  ingress from gateway
+  egress to database only
+
+secrets:
+  mounted by need
+
+audit:
+  API and app events
+```
+
+## Protocol or System Artifact
+
+Pod security artifact:
+
+```txt
+securityContext:
+  runAsNonRoot: true
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+
+capabilities:
+  drop:
+    - ALL
+```
+
+이 예시는 방향을 보여줄 뿐이다. 실제 fields는 workload와 Kubernetes version에 맞춰 검증해야 한다. 중요한 것은 privileged, host namespace, broad capabilities, writable root filesystem을 기본값으로 두지 않는 것이다.
+
+securityContext는 pod와 container 두 레벨에서 적용될 수 있다. runAsNonRoot, readOnlyRootFilesystem, allowPrivilegeEscalation, capabilities drop 같은 설정은 workload가 필요한 kernel surface를 줄인다. 하지만 설정이 manifest에 있다는 사실만으로 충분하지 않다. admission 단계에서 restricted profile이나 equivalent policy로 강제되어야 하고, generated manifest와 emergency patch에도 같은 규칙이 적용되어야 한다.
+
+ServiceAccount와 RBAC artifact:
+
+```txt
+ServiceAccount:
+  verifier-sa
+
+Role:
+  read ConfigMap policy
+  no Secret list
+  no Pod exec
+
+RoleBinding:
+  verifier-sa -> verifier-role
+```
+
+NetworkPolicy artifact:
+
+```txt
+default:
+  deny ingress
+  deny egress
+
+allow:
+  gateway -> verifier-api
+  verifier-api -> database
+  verifier-api -> log collector
+```
+
+Kubernetes Secret artifact는 sensitive data를 pod에 전달할 수 있지만, etcd encryption, RBAC, secret access audit, external secret integration이 없으면 secret sprawl이 생긴다. secret을 environment variable로 넣으면 process inspection과 crash dump에서 노출될 수 있다. volume projection도 permission과 lifecycle을 봐야 한다.
+
+RBAC good practice는 verb와 resource의 조합으로 본다. `get secret` 하나와 `list secret`은 blast radius가 다르고, `create pods/exec`, `update rolebindings`, `impersonate serviceaccounts`는 privilege escalation 경로가 될 수 있다. verifier workload가 Kubernetes API를 전혀 호출하지 않는다면 service account token automount를 꺼야 한다. 호출해야 한다면 namespace-local Role과 필요한 verb만 둔다.
+
+## Failure Mode
+
+첫 번째 실패는 privileged container다. `privileged: true`, hostPID, hostNetwork, hostPath mount, broad Linux capabilities는 container boundary를 host boundary로 확장한다. verifier pod가 이런 권한을 가질 이유는 거의 없다. debug 편의로 남긴 설정이 production compromise path가 된다.
+
+두 번째 실패는 default service account 남용이다. namespace의 여러 workload가 같은 default ServiceAccount를 쓰면 identity granularity가 무너진다. RBAC를 최소화할 수 없고, token leak 시 blast radius가 커진다. 각 workload는 목적별 service account와 role binding을 가져야 한다.
+
+세 번째 실패는 cluster-admin shortcut이다. controller나 CI job에 cluster-admin을 주면 편하지만, compromise 시 cluster 전체를 제어할 수 있다. verifier service가 secret list, pod exec, role binding update 권한을 가질 필요가 있는지 묻고 제거해야 한다.
+
+네 번째 실패는 NetworkPolicy 부재다. 많은 cluster에서 pod 간 통신은 기본 allow다. 공격자가 한 pod를 장악하면 database, queue, internal admin, metadata endpoint로 이동할 수 있다. verifier API는 필요한 ingress와 egress만 허용해야 한다.
+
+다섯 번째 실패는 image tag와 runtime bytes 불일치다. `latest`나 mutable tag를 쓰면 배포된 bytes를 증명하기 어렵다. digest pinning, image signing verification, admission policy, SBOM/provenance 연결이 필요하다.
+
+여섯 번째 실패는 secret을 pod에 과다 주입하는 것이다. 모든 service가 같은 database credential을 갖거나, pod가 쓰지 않는 cloud credential을 volume으로 받으면 compromise impact가 커진다. secret은 workload identity와 최소 권한으로 전달되어야 한다.
+
+일곱 번째 실패는 admission 없는 policy 문서다. securityContext guide가 있어도 admission controller나 policy engine이 거부하지 않으면 drift가 발생한다. pull request review만으로는 emergency deployment, manual kubectl, generated manifests를 막기 어렵다.
+
+여덟 번째 실패는 service mesh나 ingress를 network policy로 착각하는 것이다. mesh mTLS가 service identity를 제공해도 pod가 database나 metadata endpoint로 egress할 수 있으면 lateral movement surface는 남는다. Kubernetes NetworkPolicy는 네트워크 플러그인이 지원할 때만 enforcement가 되며, default deny가 실제로 적용되는지 test해야 한다.
+
+아홉 번째 실패는 image provenance를 runtime admission과 연결하지 않는 것이다. CI에서 image를 sign하고 SBOM을 만들었더라도 cluster가 unsigned digest를 허용하면 공급망 통제는 deployment 앞에서 끊어진다. registry policy, admission policy, deployment manifest가 같은 digest 기준을 사용해야 한다.
+
+## Minimal Lab or Trace
+
+작은 posture trace:
+
+```txt
+1. list verifier pods
+2. map images to digests
+3. inspect securityContext
+4. inspect serviceAccountName
+5. list RBAC bindings
+6. inspect mounted secrets
+7. inspect network policies
+8. test denied egress
+9. check audit events
+```
+
+RBAC trace:
+
+```txt
+serviceAccountName
+  -> RoleBinding
+  -> Role
+  -> resource verbs
+  -> escalation check
+```
+
+worksheet:
+
+| surface | expected |
+|---|---|
+| image | digest pinned |
+| pod | restricted profile |
+| service account | workload-specific |
+| RBAC | no cluster-admin |
+| secret | least needed |
+| network | default deny |
+| admission | rejects privileged |
+
+negative probes:
+
+```txt
+privileged pod:
+  admission rejects
+
+unexpected egress:
+  network policy blocks
+
+pod exec permission:
+  absent for verifier SA
+
+unused secret:
+  not mounted
+
+default SA token:
+  not used by verifier
+```
+
+이 lab은 production cluster에 destructive test를 하지 않는다. staging namespace나 policy dry-run, audit mode를 먼저 사용한다.
+
+## zkTLS Bridge
+
+zkTLS verifier는 암호학적으로 proof를 검증하지만, 그 verifier가 실행되는 workload가 compromised되면 결과를 조작할 수 있다. 공격자는 valid proof를 reject하거나 invalid proof를 accept하는 API response를 만들 수 있고, user claim과 audit log를 바꿀 수 있다. 따라서 runtime posture는 proof soundness의 외부 조건이다.
+
+zkTLS 운영에서는 다음을 묶어 기록해야 한다.
+
+```txt
+verification event:
+  proof id
+  verifier version
+  image digest
+  pod identity
+  policy version
+  result
+
+cluster context:
+  namespace
+  service account
+  admission policy
+  network policy
+```
+
+외부 verifier에게 cluster topology를 모두 공개할 필요는 없다. 그러나 운영자는 어떤 proof result가 어떤 runtime identity와 image digest에서 나왔는지 알아야 한다. incident가 발생하면 affected proof results를 추적할 수 있어야 한다.
+
+## Verification Checklist
+
+- image, pod, identity, network, secret, policy, audit layer를 분리했는가?
+- Pod Security Standards의 privileged, baseline, restricted 의미를 다뤘는가?
+- ServiceAccount와 RBAC 최소 권한을 확인했는가?
+- NetworkPolicy default deny와 필요한 egress만 허용하는 모델을 설명했는가?
+- Kubernetes Secret을 secret manager로 과장하지 않았는가?
+- mutable image tag, privileged pod, broad RBAC, mounted unused secret을 failure mode로 포함했는가?
+- zkTLS verifier compromise가 proof result와 audit integrity에 미치는 영향을 설명했는가?
+
+## Visual Artifact Brief
+
+- Artifact key: kubernetes-verifier-trust-boundary-map
+- Purpose: verifier workload의 image, pod, identity, network, secret, admission boundary를 한 장에 표시한다.
+- Layout: cluster boundary 안에 verifier pod를 중심으로 image registry, API server, secret store, database, log collector, ingress gateway를 연결한다.
+- Labels: image digest, Pod Security, ServiceAccount, RBAC, NetworkPolicy, Secret, admission, audit, verifier result.
+- Motion idea: privileged pod, broad RBAC, no NetworkPolicy path가 red로 점등되고 restricted profile과 default deny가 적용되면 green으로 바뀐다.
+- Reduced-motion state: trust boundary map과 posture checklist table.
+
+## References
+
+- [Kubernetes Security Checklist](https://kubernetes.io/docs/concepts/security/security-checklist/)
+- [Kubernetes Pod Security Standards](https://kubernetes.io/docs/concepts/security/pod-security-standards/)
+- [Kubernetes Security Context](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/)
+- [Kubernetes Network Policies](https://kubernetes.io/docs/concepts/services-networking/network-policies/)
+- [Kubernetes Service Accounts](https://kubernetes.io/docs/concepts/security/service-accounts/)
+- [Kubernetes RBAC](https://kubernetes.io/docs/reference/access-authn-authz/rbac/)
+- [Kubernetes RBAC Good Practices](https://kubernetes.io/docs/concepts/security/rbac-good-practices/)
+- [Kubernetes Secrets](https://kubernetes.io/docs/concepts/configuration/secret/)
+- [Kubernetes Secrets Good Practices](https://kubernetes.io/docs/concepts/security/secrets-good-practices/)
+- [Kubernetes Images](https://kubernetes.io/docs/concepts/containers/images/)

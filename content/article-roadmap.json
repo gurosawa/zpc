@@ -1088,7 +1088,7 @@
       "order": 6,
       "title": "SECURE SYSTEMS AND SUPPLY CHAIN",
       "slug": "secure-systems-and-supply-chain",
-      "status": "planned",
+      "status": "draft",
       "visualKey": "supply-chain-provenance",
       "guidingQuestion": "소프트웨어 공급망과 운영 보안은 proof system의 신뢰를 어떻게 뒷받침하는가?",
       "articles": [
@@ -1099,7 +1099,7 @@
           "title": "Secure by Design",
           "slug": "secure-by-design",
           "branch": "content/c06-a01-secure-by-design",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "foundation",
           "wordCountTarget": 5200,
           "visualKey": "supply-chain-provenance",
@@ -1117,8 +1117,12 @@
           ],
           "references": [
             "https://www.cisa.gov/securebydesign",
-            "https://csrc.nist.gov/pubs/sp/800/218/final"
-          ]
+            "https://www.cisa.gov/resources-tools/resources/secure-by-design",
+            "https://www.cisa.gov/resources-tools/resources/cisa-secure-design-pledge",
+            "https://csrc.nist.gov/pubs/sp/800/218/final",
+            "https://owasp.org/Top10/2025/A06_2025-Insecure_Design/"
+          ],
+          "actualWordCount": 5495
         },
         {
           "id": "c06-a02",
@@ -1127,7 +1131,7 @@
           "title": "Dependency risk와 SBOM",
           "slug": "dependency-risk-sbom",
           "branch": "content/c06-a02-dependency-risk-sbom",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "intermediate",
           "wordCountTarget": 6800,
           "visualKey": "supply-chain-provenance",
@@ -1144,9 +1148,16 @@
             "proof build 영향 분석과 연결했는가?"
           ],
           "references": [
+            "https://www.cisa.gov/topics/information-communications-technology-supply-chain-security/sbom",
             "https://www.cisa.gov/resources-tools/resources/2025-minimum-elements-software-bill-materials-sbom",
-            "https://csrc.nist.gov/pubs/sp/800/218/final"
-          ]
+            "https://www.cisa.gov/sites/default/files/2025-08/2025_CISA_SBOM_Minimum_Elements.pdf",
+            "https://csrc.nist.gov/pubs/sp/800/218/final",
+            "https://spdx.dev/use/specifications/",
+            "https://cyclonedx.org/specification/overview/",
+            "https://slsa.dev/spec/v1.2/",
+            "https://slsa.dev/spec/v1.2/provenance"
+          ],
+          "actualWordCount": 7118
         },
         {
           "id": "c06-a03",
@@ -1155,7 +1166,7 @@
           "title": "Secrets management",
           "slug": "secrets-management",
           "branch": "content/c06-a03-secrets-management",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "deep",
           "wordCountTarget": 7400,
           "visualKey": "risk-matrix",
@@ -1173,8 +1184,14 @@
           ],
           "references": [
             "https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html",
-            "https://csrc.nist.gov/pubs/sp/800/57/pt1/r5/final"
-          ]
+            "https://csrc.nist.gov/pubs/sp/800/57/pt1/r5/final",
+            "https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final",
+            "https://kubernetes.io/docs/concepts/configuration/secret/",
+            "https://kubernetes.io/docs/concepts/security/secrets-good-practices/",
+            "https://kubernetes.io/docs/concepts/security/service-accounts/",
+            "https://csrc.nist.gov/pubs/sp/800/218/final"
+          ],
+          "actualWordCount": 7541
         },
         {
           "id": "c06-a04",
@@ -1183,7 +1200,7 @@
           "title": "CI/CD signing, provenance, attestation",
           "slug": "cicd-provenance-attestation",
           "branch": "content/c06-a04-cicd-provenance-attestation",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "deep",
           "wordCountTarget": 8200,
           "visualKey": "supply-chain-provenance",
@@ -1200,9 +1217,19 @@
             "circuit/prover/verifier provenance를 연결했는가?"
           ],
           "references": [
-            "https://slsa.dev/spec/v1.0/provenance",
-            "https://openssf.org/slsa-tooling/"
-          ]
+            "https://slsa.dev/spec/v1.2/",
+            "https://slsa.dev/spec/v1.2/provenance",
+            "https://slsa.dev/spec/v1.2/build-provenance",
+            "https://slsa.dev/spec/v1.2/verifying-artifacts",
+            "https://slsa.dev/spec/v1.2/distributing-provenance",
+            "https://slsa.dev/spec/v1.2/verification_summary",
+            "https://github.com/in-toto/attestation",
+            "https://docs.sigstore.dev/quickstart/quickstart-cosign/",
+            "https://docs.sigstore.dev/cosign/verifying/verify/",
+            "https://docs.sigstore.dev/cosign/verifying/attestation/",
+            "https://csrc.nist.gov/pubs/sp/800/218/final"
+          ],
+          "actualWordCount": 8454
         },
         {
           "id": "c06-a05",
@@ -1211,7 +1238,7 @@
           "title": "Container / Kubernetes security posture",
           "slug": "container-kubernetes-security-posture",
           "branch": "content/c06-a05-container-kubernetes-security-posture",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "deep",
           "wordCountTarget": 8000,
           "visualKey": "trust-boundary-map",
@@ -1229,8 +1256,17 @@
           ],
           "references": [
             "https://kubernetes.io/docs/concepts/security/security-checklist/",
-            "https://kubernetes.io/docs/concepts/security/"
-          ]
+            "https://kubernetes.io/docs/concepts/security/pod-security-standards/",
+            "https://kubernetes.io/docs/tasks/configure-pod-container/security-context/",
+            "https://kubernetes.io/docs/concepts/services-networking/network-policies/",
+            "https://kubernetes.io/docs/concepts/security/service-accounts/",
+            "https://kubernetes.io/docs/reference/access-authn-authz/rbac/",
+            "https://kubernetes.io/docs/concepts/security/rbac-good-practices/",
+            "https://kubernetes.io/docs/concepts/configuration/secret/",
+            "https://kubernetes.io/docs/concepts/security/secrets-good-practices/",
+            "https://kubernetes.io/docs/concepts/containers/images/"
+          ],
+          "actualWordCount": 8236
         },
         {
           "id": "c06-a06",
@@ -1239,7 +1275,7 @@
           "title": "Memory safety와 Rust 전환",
           "slug": "memory-safety-rust-transition",
           "branch": "content/c06-a06-memory-safety-rust-transition",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "intermediate",
           "wordCountTarget": 6200,
           "visualKey": "trust-boundary-map",
@@ -1257,8 +1293,16 @@
           ],
           "references": [
             "https://www.cisa.gov/case-memory-safe-roadmaps",
-            "https://www.cisa.gov/resources-tools/resources/memory-safe-languages-reducing-vulnerabilities-modern-software-development"
-          ]
+            "https://www.cisa.gov/resources-tools/resources/memory-safe-languages-reducing-vulnerabilities-modern-software-development",
+            "https://media.defense.gov/2025/Jun/23/2003742198/-1/-1/0/CSI_MEMORY_SAFE_LANGUAGES_REDUCING_VULNERABILITIES_IN_MODERN_SOFTWARE_DEVELOPMENT.PDF",
+            "https://www.cisa.gov/news-events/news/urgent-need-memory-safety-software-products",
+            "https://www.rust-lang.org/learn",
+            "https://doc.rust-lang.org/book/ch04-00-understanding-ownership.html",
+            "https://doc.rust-lang.org/book/ch20-01-unsafe-rust.html",
+            "https://doc.rust-lang.org/reference/unsafe-keyword.html",
+            "https://doc.rust-lang.org/nomicon/ffi.html"
+          ],
+          "actualWordCount": 7538
         }
       ]
     },
