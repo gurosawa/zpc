@@ -9,10 +9,20 @@ type SearchItem = {
   id: string;
   chapterSlug: string;
   chapterTitle: string;
+  articleSlug?: string;
+  articleTitle?: string;
   heading: string;
   anchor: string;
+  path?: string;
   text: string;
 };
+
+function hrefForItem(item: SearchItem) {
+  const basePath =
+    item.path ?? (item.articleSlug ? `/guide/${item.chapterSlug}/${item.articleSlug}` : `/guide/${item.chapterSlug}`);
+
+  return `${basePath}#${item.anchor}`;
+}
 
 export function SearchDialog() {
   const [isOpen, setIsOpen] = useState(false);
@@ -45,7 +55,7 @@ export function SearchDialog() {
   const fuse = useMemo(
     () =>
       new Fuse(items, {
-        keys: ["chapterTitle", "heading", "text"],
+        keys: ["chapterTitle", "articleTitle", "heading", "text"],
         threshold: 0.35,
         ignoreLocation: true,
       }),
@@ -97,7 +107,7 @@ export function SearchDialog() {
                 results.map((item) => (
                   <Link
                     key={item.id}
-                    href={`/guide/${item.chapterSlug}#${item.anchor}`}
+                    href={hrefForItem(item)}
                     role="listitem"
                     onClick={() => setIsOpen(false)}
                     className="search-result"

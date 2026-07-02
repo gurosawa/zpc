@@ -6,6 +6,7 @@ import test from "node:test";
 const roadmap = JSON.parse(fs.readFileSync("content/article-roadmap.json", "utf8"));
 const contentSource = fs.readFileSync("lib/content.ts", "utf8");
 const homeSource = fs.readFileSync("app/page.tsx", "utf8");
+const searchDialogSource = fs.readFileSync("components/search-dialog.tsx", "utf8");
 
 function articlePaths() {
   return roadmap.chapters.flatMap((chapter) =>
@@ -49,6 +50,12 @@ test("home TOC uses article route paths instead of legacy hash anchors", () => {
   assert.match(homeSource, /href=\{article\.path\}/);
   assert.doesNotMatch(homeSource, /#\$\{article\.articleSlug/);
   assert.doesNotMatch(homeSource, /\/guide\/\$\{article\.slug\}#/);
+});
+
+test("search results use indexed article paths instead of chapter hash routes", () => {
+  assert.match(searchDialogSource, /function hrefForItem/);
+  assert.match(searchDialogSource, /href=\{hrefForItem\(item\)\}/);
+  assert.doesNotMatch(searchDialogSource, /href=\{`\/guide\/\$\{item\.chapterSlug\}#/);
 });
 
 test("article route page and shell expose required metadata fields", () => {
