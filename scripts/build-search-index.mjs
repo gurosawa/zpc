@@ -30,8 +30,10 @@ function chunksForChapter(fileName) {
   const { content, data } = matter(raw);
   const chapterSlug = String(data.slug);
   const chapterTitle = String(data.title);
-  const searchableContent = content.replace(/```[\s\S]*?```/g, " ");
-  const blocks = searchableContent.split(/\n{2,}/);
+  const searchableContent = content
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/\r\n?/g, "\n");
+  const blocks = searchableContent.split(/\n[ \t]*\n+/);
   const chunks = [];
   let currentHeading = chapterTitle;
   let currentAnchor = slugify(chapterTitle);
