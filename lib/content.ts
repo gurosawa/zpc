@@ -65,6 +65,11 @@ export type RoadmapArticle = ArticleMeta & {
   wordCount: number;
 };
 
+export type RoadmapArticleDraft = {
+  body: string;
+  frontmatter: Record<string, unknown>;
+};
+
 export type Chapter = {
   slug: string;
   order: number;
@@ -82,6 +87,8 @@ export type Chapter = {
 };
 
 const contentDir = path.join(process.cwd(), "content");
+const articleDraftDirs = [path.join(contentDir, "articles"), path.join(contentDir, "drafts")];
+
 export function getRoadmapArticlePath(chapterSlug: string, articleSlug: string) {
   return `/guide/${chapterSlug}/${articleSlug}`;
 }
@@ -161,6 +168,46 @@ export function getRoadmapArticleBySlugs(chapterSlug: string, articleSlug: strin
   return getRoadmapArticles().find(
     (article) => article.chapterSlug === chapterSlug && article.articleSlug === articleSlug,
   ) ?? null;
+}
+
+export function getAdjacentRoadmapArticles(chapterSlug: string, articleSlug: string) {
+  const articles = getRoadmapArticles();
+  const currentIndex = articles.findIndex(
+    (article) => article.chapterSlug === chapterSlug && article.articleSlug === articleSlug,
+  );
+
+  if (currentIndex === -1) {
+    return {
+      previousArticle: null,
+      nextArticle: null,
+    };
+  }
+
+  return {
+    previousArticle: articles[currentIndex - 1] ?? null,
+    nextArticle: articles[currentIndex + 1] ?? null,
+  };
+}
+
+export function getRoadmapArticleDraftBySlugs(
+  chapterSlug: string,
+  articleSlug: string,
+): RoadmapArticleDraft | null {
+  const draftPath = articleDraftDirs
+    .map((draftDir) => path.join(draftDir, chapterSlug, `${articleSlug}.mdx`))
+    .find((candidate) => fs.existsSync(candidate));
+
+  if (!draftPath) {
+    return null;
+  }
+
+  const raw = fs.readFileSync(draftPath, "utf8");
+  const { content, data } = matter(raw);
+
+  return {
+    body: content,
+    frontmatter: data,
+  };
 }
 
 export function getTocSections(): TocSection[] {

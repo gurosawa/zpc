@@ -1,0 +1,104 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import test from "node:test";
+
+const roadmap = JSON.parse(fs.readFileSync("content/article-roadmap.json", "utf8"));
+const contentSource = fs.readFileSync("lib/content.ts", "utf8");
+const homeSource = fs.readFileSync("app/page.tsx", "utf8");
+
+function articlePaths() {
+  return roadmap.chapters.flatMap((chapter) =>
+    chapter.articles.map((article) => `/guide/${chapter.slug}/${article.slug}`),
+  );
+}
+
+test("roadmap article routes are unique article-level paths", () => {
+  const paths = articlePaths();
+
+  assert.equal(paths.length, 48);
+  assert.equal(new Set(paths).size, 48);
+  assert.ok(paths.includes("/guide/security-thinking/cia-triad"));
+  assert.ok(paths.includes("/guide/cryptographic-primitives/hmac-tag-verification"));
+  assert.ok(paths.includes("/guide/web-trust-and-tls/tls-record-layer"));
+  assert.ok(paths.includes("/guide/zktls-architectures-and-labs/mpc-tls-tlsnotary"));
+  assert.equal(paths.some((routePath) => routePath.includes("#")), false);
+});
+
+test("content helpers expose article lookup and adjacency contracts", () => {
+  const expectedExports = [
+    "getRoadmapChapters",
+    "getRoadmapArticles",
+    "getRoadmapArticleBySlugs",
+    "getAdjacentRoadmapArticles",
+    "getRoadmapArticlePath",
+  ];
+
+  for (const exportName of expectedExports) {
+    assert.match(contentSource, new RegExp(`export function ${exportName}\\b`), `${exportName} export`);
+  }
+
+  assert.match(
+    contentSource,
+    /return `\/guide\/\$\{chapterSlug\}\/\$\{articleSlug\}`/,
+    "getRoadmapArticlePath should use article-level route shape",
+  );
+});
+
+test("home TOC uses article route paths instead of legacy hash anchors", () => {
+  assert.match(homeSource, /href=\{article\.path\}/);
+  assert.doesNotMatch(homeSource, /#\$\{article\.articleSlug/);
+  assert.doesNotMatch(homeSource, /\/guide\/\$\{article\.slug\}#/);
+});
+
+test("article route page and shell expose required metadata fields", () => {
+  const routeFile = path.join("app", "guide", "[chapterSlug]", "[articleSlug]", "page.tsx");
+  const shellFile = path.join("components", "article-page-shell.tsx");
+
+  assert.equal(fs.existsSync(routeFile), true, "article route file should use [chapterSlug]");
+  assert.equal(fs.existsSync(shellFile), true, "article page shell component should exist");
+
+  const routeSource = fs.readFileSync(routeFile, "utf8");
+  const shellSource = fs.readFileSync(shellFile, "utf8");
+
+  assert.match(routeSource, /generateStaticParams/);
+  assert.match(routeSource, /generateMetadata/);
+  assert.match(routeSource, /notFound\(\)/);
+  assert.match(routeSource, /ArticlePageShell/);
+  assert.match(routeSource, /\$\{article\.title\} · zkTLS Master Guide/);
+
+  const requiredShellText = [
+    "Core Model",
+    "Protocol or System Artifact",
+    "Failure Mode",
+    "Minimal Lab or Trace",
+    "zkTLS Bridge",
+    "Verification Checklist",
+    "References",
+    "Back to table of contents",
+  ];
+
+  for (const label of requiredShellText) {
+    assert.match(shellSource, new RegExp(label), `${label} shell label`);
+  }
+
+  for (const fieldName of ["branch", "difficulty", "visualKey", "readerQuestion"]) {
+    assert.match(shellSource, new RegExp(fieldName), `${fieldName} rendered by shell`);
+  }
+});
+
+test("adjacent article expectations are defined over roadmap order", () => {
+  const articles = roadmap.chapters.flatMap((chapter) =>
+    chapter.articles.map((article) => ({
+      chapterSlug: chapter.slug,
+      articleSlug: article.slug,
+      path: `/guide/${chapter.slug}/${article.slug}`,
+    })),
+  );
+
+  assert.equal(articles[0].path, "/guide/security-thinking/cia-triad");
+  assert.equal(articles[1].path, "/guide/security-thinking/asset-threat-vulnerability-risk");
+  assert.equal(articles[5].path, "/guide/security-thinking/security-control-failure-modes");
+  assert.equal(articles[6].path, "/guide/cryptographic-primitives/randomness-entropy");
+  assert.equal(articles.at(-1).path, "/guide/zktls-architectures-and-labs/toy-circuit-production-risk");
+});

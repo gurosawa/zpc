@@ -8,7 +8,7 @@ import { getChapterBySlug, getChapters } from "@/lib/content";
 import { slugify } from "@/lib/slug";
 
 type PageProps = {
-  params: Promise<{ chapter: string }>;
+  params: Promise<{ chapterSlug: string }>;
 };
 
 function formatWords(words: number) {
@@ -28,11 +28,11 @@ function headingsFor(body: string) {
 }
 
 export function generateStaticParams() {
-  return getChapters().map((chapter) => ({ chapter: chapter.slug }));
+  return getChapters().map((chapter) => ({ chapterSlug: chapter.slug }));
 }
 
 export async function generateMetadata({ params }: PageProps) {
-  const { chapter: slug } = await params;
+  const { chapterSlug: slug } = await params;
   const chapter = getChapterBySlug(slug);
 
   if (!chapter) {
@@ -46,7 +46,7 @@ export async function generateMetadata({ params }: PageProps) {
 }
 
 export default async function ChapterPage({ params }: PageProps) {
-  const { chapter: slug } = await params;
+  const { chapterSlug: slug } = await params;
   const chapters = getChapters();
   const chapter = getChapterBySlug(slug);
 

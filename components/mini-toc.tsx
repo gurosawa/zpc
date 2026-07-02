@@ -12,6 +12,7 @@ type MiniTocItem = {
 
 type MiniTocProps = {
   items: MiniTocItem[];
+  label?: string;
   status: TocSectionStatus;
   wordCount: number;
 };
@@ -20,7 +21,7 @@ function formatWords(words: number) {
   return `${(words / 1000).toFixed(1)}K`;
 }
 
-export function MiniToc({ items, status, wordCount }: MiniTocProps) {
+export function MiniToc({ items, label = "Chapter sections", status, wordCount }: MiniTocProps) {
   const [activeId, setActiveId] = useState(items[0]?.id);
 
   useEffect(() => {
@@ -52,7 +53,7 @@ export function MiniToc({ items, status, wordCount }: MiniTocProps) {
   }
 
   return (
-    <aside className="mini-toc" aria-label="Chapter sections">
+    <aside className="mini-toc" aria-label={label}>
       <ol>
         {items.map((item) => (
           <li key={item.id}>
