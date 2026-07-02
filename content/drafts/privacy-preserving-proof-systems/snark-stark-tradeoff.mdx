@@ -1,0 +1,270 @@
+---
+title: SNARK vs STARK trade-off
+chapter: Privacy-Preserving Proof Systems
+chapterSlug: privacy-preserving-proof-systems
+articleSlug: snark-stark-tradeoff
+status: draft
+difficulty: deep
+wordCountTarget: 8200
+visualKey: circuit-grid
+branch: content/c07-a04-snark-stark-tradeoff
+readerQuestion: SNARK와 STARK는 proof size, verification, setup, post-quantum 성격에서 어떻게 갈라지는가?
+zktlsBridge: zkTLS product는 proof system을 user latency와 verifier environment에 맞춰 선택해야 한다.
+references:
+  - https://eprint.iacr.org/2018/046
+  - https://eprint.iacr.org/2016/260
+  - https://tlsnotary.org/docs/protocol/mpc-tls/
+  - https://tlsnotary.org/docs/faq/
+  - https://www.wisdom.weizmann.ac.il/~oded/gmw1.html
+---
+
+# SNARK vs STARK trade-off
+
+## Reader Question
+
+SNARK와 STARK 중 어느 쪽이 더 좋은가? 이 질문은 너무 넓다. proof system 선택은 proof size, prover time, verifier time, setup trust, post-quantum assumption, circuit shape, implementation maturity, deployment target의 trade-off다. "작은 proof" 하나만 보고 선택하면 브라우저 proving latency, mobile memory, on-chain calldata, trusted setup, recursion, public input leakage를 놓친다.
+
+Groth16 논문은 pairing-based preprocessing SNARK로 작은 proof와 낮은 verification complexity를 보여준다. abstract 기준으로 proof가 세 group element이고 verification이 세 pairing을 사용하는 형태다. STARK 논문은 transparent, scalable, post-quantum secure computational integrity를 내세우며 trusted setup 없이 hash와 coding-theoretic 구조에 기반한 계열을 설명한다. 이 둘은 같은 "ZK" 이름 아래 있지만 product surface는 다르다.
+
+## Why It Matters
+
+zkTLS에서 proof는 사용자의 브라우저, mobile client, server prover, off-chain verifier, on-chain verifier 중 어디서든 만들어지거나 검증될 수 있다. 사용자가 proof 버튼을 눌렀을 때 2초를 기다리는지 60초를 기다리는지, verifier가 cloud에서 10만 proof를 처리하는지 smart contract가 proof 하나를 받는지에 따라 요구사항이 달라진다.
+
+TLS authenticity 자체도 proof system이 해결하지 않는다. TLSNotary는 MPC-TLS로 prover와 verifier가 TLS session key share를 나눠 서버와의 데이터 provenance를 만든다. 그 위에 transcript hash commitment나 application predicate를 ZK로 표현할 수 있다. 즉 proof system은 zkTLS architecture의 한 layer다. TLS provenance, parser, commitment, redaction, verifier policy와 함께 봐야 한다.
+
+SNARK/STARK 선택을 추상 성능표로만 하면 실패한다. 실제 predicate가 JSON path check인지, TLS transcript parser인지, SHA/HMAC-heavy 회로인지, range proof인지, VM execution인지에 따라 cost가 바뀐다. benchmark 숫자는 구현 의존성이 크므로 원고에서는 절대 순위를 만들지 않는다.
+
+## Core Model
+
+proof system choice matrix:
+
+| axis | SNARK question | STARK question |
+|---|---|---|
+| setup | trusted or universal setup? | transparent setup? |
+| proof size | very small possible? | larger acceptable? |
+| verifier | pairing-friendly? | hash/FRI verification cost? |
+| prover | circuit-specific cost? | trace/AIR cost? |
+| assumptions | pairing algebra | hash/coding assumptions |
+| target | on-chain, mobile, server | large computations, transparent systems |
+
+artifact terms:
+
+```txt
+SNARK style:
+  arithmetic circuit
+  R1CS or constraint system
+  proving key
+  verifying key
+  public inputs
+  proof
+
+STARK style:
+  execution trace
+  AIR constraints
+  low-degree testing
+  Merkle commitments
+  Fiat-Shamir transcript
+  proof
+```
+
+정확한 mental model은 "proof system family"가 아니라 "statement를 어떤 intermediate representation으로 바꾸고, verifier에게 어떤 비용으로 설득하는가"다.
+
+## Protocol or System Artifact
+
+zkTLS predicate:
+
+```txt
+statement:
+  response field at path P
+  from origin O
+  satisfies age >= 21
+
+private:
+  response bytes
+  parser witness
+  field value
+
+public:
+  origin commitment
+  path commitment
+  threshold
+  freshness nonce
+```
+
+SNARK artifact checklist:
+
+```txt
+circuit id
+constraint count
+proving key hash
+verifying key hash
+setup ceremony or source
+public input schema
+proof bytes
+```
+
+STARK artifact checklist:
+
+```txt
+AIR id
+trace length
+hash function
+FRI parameters
+Merkle roots
+Fiat-Shamir domain
+public input schema
+proof bytes
+```
+
+공통으로 verifier는 proof만 받지 않는다. circuit version, public input schema, allowed origin, parser version, freshness policy를 함께 받아야 한다. 같은 proof system이라도 public input 설계가 나쁘면 privacy가 깨지고, circuit binding이 약하면 soundness가 깨진다.
+
+statement catalog도 artifact다. 같은 `age >= 21` claim이라도 어떤 origin, 어떤 parser, 어떤 freshness window, 어떤 redaction rule을 쓰는지에 따라 다른 statement다. catalog가 없으면 product team은 같은 이름의 proof를 계속 재사용하지만 verifier는 서로 다른 circuit을 같은 policy로 받아들인다.
+
+```txt
+statement catalog row:
+  claim type
+  proof system
+  circuit or AIR id
+  parser version
+  public input schema
+  accepted origins
+  freshness policy
+  deprecation date
+```
+
+## Failure Mode
+
+첫 번째 실패는 이름으로 선택하는 것이다. "SNARK는 작고 STARK는 투명하다"는 기억은 시작점일 뿐이다. 실제 deployment가 on-chain verifier라면 proof size와 gas가 중요할 수 있고, server-side batch verifier라면 throughput과 operational complexity가 중요할 수 있다.
+
+두 번째 실패는 trusted setup을 metadata로 관리하지 않는 것이다. circuit이 바뀌었는데 old proving key를 쓰거나, verifying key hash를 proof event에 남기지 않으면 어떤 statement가 검증됐는지 추적하기 어렵다. toxic waste assumption이 있는 setup에서는 ceremony provenance도 운영 artifact다.
+
+세 번째 실패는 public input leak이다. proof system이 zero-knowledge여도 public input은 공개된다. origin URL, account id, exact timestamp, rare path, commitment granularity가 사용자 식별자가 될 수 있다. proof system 선택보다 public input minimization이 먼저다.
+
+네 번째 실패는 parser를 circuit 밖에 두는 것이다. JSON parser, canonicalization, response field extraction을 off-circuit에서 처리하고 결과만 proof에 넣으면 prover가 다른 parser interpretation을 사용할 수 있다. parser witness와 commitment binding을 분리해 검증해야 한다.
+
+다섯 번째 실패는 STARK의 post-quantum 성격을 전체 시스템 보안으로 과장하는 것이다. hash-based proof system을 써도 TLS handshake, signature, credential key, deployment signing key가 post-quantum이 아니면 전체 zkTLS system이 post-quantum이라고 말할 수 없다.
+
+여섯 번째 실패는 proof size를 network/UI에 맞추지 않는 것이다. STARK proof가 server-to-server에는 괜찮아도 mobile upload나 smart contract calldata에는 부담일 수 있다. 반대로 SNARK proof가 작아도 proving memory가 browser 환경을 넘을 수 있다.
+
+일곱 번째 실패는 circuit update와 product version을 분리하는 것이다. verifier UI는 "나이 조건 증명"이라고 같게 보이지만 circuit v1은 exact age를 public input으로 내고 v2는 predicate만 낼 수 있다. versioned statement catalog가 필요하다.
+
+여덟 번째 실패는 recursion과 aggregation을 성능 마법으로 보는 것이다. 여러 proof를 하나로 묶는 recursion은 verifier UX를 단순하게 만들 수 있지만, proving pipeline, trusted setup 또는 cycle-friendly curve 선택, failure diagnosis를 더 복잡하게 만든다. batch verification도 개별 proof의 statement metadata를 잃으면 incident response가 어려워진다.
+
+아홉 번째 실패는 developer ecosystem을 보지 않는 것이다. proof system 자체가 뛰어나도 circuit language, audit tooling, witness generation, browser support, deterministic build, hardware acceleration, verifier library maturity가 약하면 product risk가 커진다. zkTLS는 parser와 network witness가 복잡하므로 circuit authoring ergonomics가 실제 보안에 영향을 준다.
+
+열 번째 실패는 arithmetic-friendly와 hash-friendly workload를 같은 비용으로 보는 것이다. TLS transcript와 Merkle commitment는 hash-heavy할 수 있고, application predicate는 비교적 작은 arithmetic constraint일 수 있다. proof system과 circuit library가 특정 hash나 parser에 비효율적이면 전체 proving cost가 예상과 달라진다. "하나의 predicate"가 아니라 witness generation과 preprocessing까지 포함한 end-to-end cost를 재야 한다.
+
+열한 번째 실패는 verifier target을 바꾸면서 statement를 그대로 쓰는 것이다. backend verifier는 큰 public metadata와 rich policy check를 처리할 수 있지만 smart contract verifier는 calldata, gas, supported curves, precompile availability의 제약을 받는다. 같은 zkTLS claim을 on-chain으로 옮기려면 public input을 다시 설계해야 한다.
+
+## Minimal Lab or Trace
+
+같은 predicate를 두 backend로 비교하는 lab:
+
+```txt
+predicate:
+  committed field age >= 21
+
+measure:
+  constraint or trace size
+  proving time
+  memory peak
+  proof size
+  verify time
+  public input fields
+  setup artifact
+```
+
+comparison table:
+
+| target | primary risk | selection question |
+|---|---|---|
+| browser prover | latency and memory | can user device prove? |
+| server prover | throughput | can infra batch safely? |
+| mobile verifier | proof size | can app verify offline? |
+| on-chain verifier | calldata and gas | can contract afford it? |
+
+negative trace:
+
+```txt
+change circuit:
+  SNARK key mismatch
+
+add public URL:
+  privacy leak
+
+increase trace:
+  STARK proof grows
+
+change parser:
+  statement mismatch
+```
+
+이 lab의 결과는 "A가 B보다 빠르다"가 아니라 "이 product target에서 어떤 cost가 bottleneck인가"여야 한다.
+
+audit trace:
+
+```txt
+proof accepted
+  -> proof system name
+  -> circuit id
+  -> key or parameter hash
+  -> public input schema
+  -> verifier binary digest
+  -> policy id
+```
+
+나중에 circuit bug가 발견되면 이 trace로 영향을 받는 proof를 찾는다. proof byte만 저장하고 metadata를 버리면 recall이나 재검증이 어렵다.
+
+## zkTLS Bridge
+
+zkTLS에서 SNARK/STARK는 TLS response를 직접 신뢰 가능하게 만드는 시작점이 아니다. 먼저 origin authenticity와 transcript binding이 필요하고, 그 다음 private witness에서 application predicate를 증명한다. TLSNotary 같은 MPC-TLS 시스템은 prover가 TLS transcript를 임의로 위조하지 못하게 하려는 layer를 제공한다. ZK layer는 그 transcript나 commitment 위에서 더 좁은 claim을 만든다.
+
+zkTLS product decision:
+
+```txt
+if proof generated in browser:
+  prioritize memory and latency
+
+if verified on-chain:
+  prioritize proof size and verifier cost
+
+if verified by backend:
+  prioritize throughput and auditability
+
+if long-lived credential:
+  prioritize unlinkability
+  minimize public inputs
+```
+
+proof system 선택은 암호학 취향이 아니라 product architecture 결정이다. 선택 결과는 UX delay, verifier bill, privacy surface, upgrade process, security assumption으로 나타난다.
+
+또한 zkTLS verifier는 proof system metadata를 audit log에 남겨야 한다. proof가 성공했다는 event만으로는 나중에 어떤 circuit, 어떤 proving key, 어떤 STARK parameters, 어떤 public input schema를 사용했는지 알 수 없다. circuit bug가 발견되면 affected proof를 찾아야 하므로 `proofSystem`, `circuitId`, `parameterHash`, `publicInputSchema`, `verifierVersion`을 event에 포함한다.
+
+서비스가 여러 proof system을 동시에 지원한다면 downgrade도 막아야 한다. 새 circuit이 더 강한 parser binding을 제공하는데 verifier가 old circuit을 계속 허용하면 공격자는 약한 statement로 돌아갈 수 있다. deprecation date와 minimum accepted circuit version은 cryptographic policy가 아니라 product security policy로 관리된다.
+
+## Verification Checklist
+
+- proof size, prover cost, verifier cost, setup trust, assumptions를 함께 비교했는가?
+- Groth16과 STARK 논문을 특정 claim의 근거로만 사용했는가?
+- benchmark 숫자를 일반 순위처럼 만들지 않았는가?
+- public input leak와 parser off-circuit failure를 다뤘는가?
+- trusted setup, key hash, circuit id를 운영 artifact로 다뤘는가?
+- post-quantum을 전체 시스템 보안으로 과장하지 않았는가?
+- zkTLS의 TLS provenance layer와 ZK predicate layer를 분리했는가?
+
+## Visual Artifact Brief
+
+- Artifact key: snark-stark-deployment-tradeoff-matrix
+- Purpose: SNARK/STARK 선택을 proof size 하나가 아니라 deployment target별 trade-off로 보여준다.
+- Layout: 중앙에 statement catalog를 두고, 왼쪽은 SNARK artifact stack, 오른쪽은 STARK artifact stack, 아래는 browser/server/on-chain target matrix를 배치한다.
+- Labels: proof size, prover time, verifier cost, setup trust, AIR, R1CS, public input, circuit id.
+- Motion idea: target을 선택하면 bottleneck axis가 강조되고, unsuitable path는 red latency/cost marker로 표시된다.
+- Reduced-motion state: trade-off matrix와 artifact checklist table.
+
+## References
+
+- [STARK paper: Scalable, transparent, and post-quantum secure computational integrity](https://eprint.iacr.org/2018/046)
+- [Groth16: On the Size of Pairing-based Non-interactive Arguments](https://eprint.iacr.org/2016/260)
+- [TLSNotary MPC-TLS](https://tlsnotary.org/docs/protocol/mpc-tls/)
+- [TLSNotary FAQ](https://tlsnotary.org/docs/faq/)
+- [Goldreich-Micali-Wigderson zero-knowledge page](https://www.wisdom.weizmann.ac.il/~oded/gmw1.html)

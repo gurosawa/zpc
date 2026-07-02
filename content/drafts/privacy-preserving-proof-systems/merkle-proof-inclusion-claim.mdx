@@ -1,0 +1,225 @@
+---
+title: Merkle proof와 inclusion claim
+chapter: Privacy-Preserving Proof Systems
+chapterSlug: privacy-preserving-proof-systems
+articleSlug: merkle-proof-inclusion-claim
+status: draft
+difficulty: intermediate
+wordCountTarget: 6400
+visualKey: hash-chain
+branch: content/c07-a02-merkle-proof-inclusion-claim
+readerQuestion: 어떤 값이 큰 집합에 포함됐다는 사실을 작은 경로로 어떻게 증명하는가?
+zktlsBridge: zkTLS selective disclosure는 응답 필드가 committed transcript 구조 안에 포함됨을 보여주는 패턴을 빌릴 수 있다.
+references:
+  - https://datatracker.ietf.org/doc/html/rfc9162
+  - https://www.rfc-editor.org/info/rfc9162
+  - https://certificate.transparency.dev/howctworks/
+  - https://transparency.dev/verifiable-data-structures/
+  - https://www.rfc-editor.org/rfc/rfc9901.html
+  - https://www.w3.org/TR/vc-data-model-2.0/
+---
+
+# Merkle proof와 inclusion claim
+
+## Reader Question
+
+큰 데이터 집합 전체를 보여주지 않고도 "이 값이 그 집합 안에 있다"를 어떻게 증명할 수 있을까? Merkle tree는 leaf hash들을 pairwise로 hash해 root를 만들고, 특정 leaf에서 root까지 필요한 sibling path만 제시한다. verifier는 leaf와 path를 접어 root를 재계산한다.
+
+inclusion proof의 핵심은 "작은 proof"가 아니라 "root가 어떤 universe를 대표하는가"다. root가 어떤 데이터와 어떤 순서, 어떤 canonicalization, 어떤 hash rule로 만들어졌는지 모르면 proof는 모호하다. Certificate Transparency는 Merkle tree를 공개 append-only log의 audit 구조로 사용한다. RFC 9162는 CT v2에서 Merkle tree leaves, tree head, inclusion proof, consistency proof 같은 artifact를 정의한다.
+
+## Why It Matters
+
+privacy-preserving proof에서는 전체 데이터를 공개하지 않는 것이 중요하다. 하지만 전체를 숨기면 verifier는 공개된 field가 원본 안에 있었는지 확인하기 어렵다. Merkle inclusion은 "전체를 열지 않고도 포함 관계를 확인"하는 패턴을 제공한다.
+
+zkTLS response는 HTML, JSON, header, certificate chain, transcript chunk처럼 여러 구조를 가질 수 있다. 특정 field만 증명하고 싶다면 field가 어떤 committed transcript나 response root 안에 포함되어 있음을 보여야 한다. Merkle proof는 이때 사용할 수 있는 기본 grammar다. 물론 zkTLS가 반드시 CT와 같은 Merkle tree를 써야 한다는 뜻은 아니다. 중요한 것은 leaf identity, sibling direction, root binding, canonicalization을 명시하는 사고방식이다.
+
+## Core Model
+
+Merkle inclusion mental model:
+
+```txt
+leaf
+  -> hash with sibling
+  -> parent
+  -> hash with sibling
+  -> parent
+  -> root
+```
+
+proof에는 세 가지가 필요하다.
+
+| part | meaning |
+|---|---|
+| leaf hash | 증명하려는 item |
+| sibling path | root까지 필요한 hashes |
+| direction | sibling이 left인지 right인지 |
+
+root에는 universe가 붙는다.
+
+```txt
+root commitment:
+  hash algorithm
+  canonicalization
+  tree size
+  leaf ordering
+  domain
+  timestamp
+```
+
+leaf가 같아도 ordering과 encoding이 다르면 root가 달라진다. 따라서 Merkle proof는 hash path만이 아니라 data model의 proof다.
+
+## Protocol or System Artifact
+
+간단한 proof table:
+
+| level | current | sibling | side |
+|---|---|---|---|
+| 0 | leaf H(A) | H(B) | right |
+| 1 | H(AB) | H(CD) | right |
+| 2 | H(ABCD) | H(EFGH) | right |
+
+verification pseudo-code:
+
+```txt
+node = H(leaf_encoding)
+
+for each step:
+  if side == left:
+    node = H(sibling, node)
+  if side == right:
+    node = H(node, sibling)
+
+accept if node == root
+```
+
+Certificate Transparency의 public log는 certificate entry를 append-only log에 넣고 Merkle tree로 audit한다. CT 설명 문서는 log가 append-only이고 Merkle tree로 tampering과 misbehaviour를 검출한다고 설명한다. RFC 9162는 STH, SCT, inclusion proof, consistency proof를 protocol artifact로 둔다.
+
+RFC 9162는 leaf와 internal node를 같은 hash namespace에 두지 않는다. leaf hash는 leaf prefix를 붙인 입력을 hash하고, internal node는 internal prefix와 두 child hash를 함께 hash한다. 이 domain separation이 없으면 leaf bytes와 internal node bytes가 같은 의미 공간에서 충돌하는 구조적 혼동이 생긴다. 또한 RFC 9162 자체는 Experimental RFC이므로, 여기서는 CT의 Merkle proof grammar를 배우는 1차 reference로 사용하고 실제 browser/log deployment 상태를 표준 순위처럼 단정하지 않는다.
+
+zkTLS field proof로 옮기면 artifact는 다음처럼 생긴다.
+
+```txt
+response root
+  content type
+  schema version
+  leaf path
+  leaf value hash
+  sibling path
+  root freshness
+```
+
+이 구조는 "field value가 공개 claim과 연결된다"와 "field가 원본 response commitment 안에 있었다"를 분리한다.
+
+## Failure Mode
+
+첫 번째 실패는 canonicalization 부재다. JSON object key order, whitespace, unicode normalization, number format, array order가 정해지지 않으면 같은 응답도 다른 leaf hash를 만든다. proof가 실패하거나, 더 나쁘게는 서로 다른 parser가 다른 claim을 같은 proof로 받아들인다.
+
+두 번째 실패는 direction 누락이다. sibling hash만 나열하고 left/right를 생략하면 verifier가 여러 조합을 시도하게 된다. 이 경우 proof가 모호해지고 일부 tree shape에서는 다른 leaf를 같은 root로 접을 여지가 생긴다.
+
+세 번째 실패는 root universe 혼동이다. root가 "이 계정 response"인지 "하루치 statement log"인지 "전체 TLS transcript"인지 불명확하면 inclusion claim의 의미가 바뀐다. root metadata에는 데이터 범위와 생성 시간을 넣어야 한다.
+
+네 번째 실패는 leaf path를 value와 분리하지 않는 것이다. `120`이라는 leaf만 증명하면 balance인지 loyalty points인지 모른다. leaf encoding에는 path, type, value, domain이 들어가야 한다.
+
+다섯 번째 실패는 membership을 authorization으로 착각하는 것이다. 어떤 certificate가 CT log에 포함되었다는 사실은 그 certificate가 모든 application policy에 적합하다는 뜻이 아니다. 마찬가지로 어떤 field가 response root에 포함되었다는 사실은 그 claim을 사용할 법적, 제품적 권한이 있다는 뜻이 아니다.
+
+여섯 번째 실패는 stale root다. 오래된 response root에 대한 inclusion proof는 그때 그 데이터가 있었다는 증거일 수는 있지만, 지금도 유효하다는 뜻은 아니다. zkTLS에서는 freshness nonce, timestamp, origin policy가 함께 필요하다.
+
+일곱 번째 실패는 inclusion proof를 append-only proof로 과장하는 것이다. leaf가 특정 root에 포함됐다는 사실과 log가 이전 root에서 append-only로 성장했다는 사실은 다른 claim이다. CT에서는 consistency proof와 auditing이 이 축을 다룬다. zkTLS에서도 response root inclusion과 transcript/session freshness를 같은 검증으로 합치면 안 된다.
+
+여덟 번째 실패는 signed root 없이 path만 검증하는 것이다. path는 어떤 root로 접힐 뿐이다. root가 signed tree head인지, verifier policy가 허용한 response commitment인지, nonce와 연결되는지 확인하지 않으면 inclusion proof는 자기완결적 증거가 아니다.
+
+## Minimal Lab or Trace
+
+작은 Merkle lab:
+
+```txt
+1. choose four fields
+2. canonicalize each field
+3. hash path and value
+4. build tree root
+5. output one leaf proof
+6. verify path to root
+7. change path and reject
+8. change direction and reject
+```
+
+field input:
+
+```txt
+path:
+  /account/balance
+
+type:
+  decimal
+
+value:
+  120.00
+
+domain:
+  zktls-response-v1
+```
+
+negative trace:
+
+| mutation | expected |
+|---|---|
+| value changed | root mismatch |
+| path changed | root mismatch |
+| sibling order changed | root mismatch |
+| old root reused | freshness failure |
+| wrong content type | policy failure |
+| missing leaf prefix | domain failure |
+| unsigned root | trust failure |
+
+이 lab의 pass condition은 "root가 맞는다" 하나가 아니다. verifier가 leaf canonicalization, direction, root metadata, freshness policy를 모두 검사해야 한다.
+
+## zkTLS Bridge
+
+zkTLS selective disclosure는 "필드가 원본 response에 있었다"와 "필드가 predicate를 만족한다"를 모두 필요로 한다. Merkle inclusion은 첫 번째 질문의 형태를 빌려온다. ZK circuit이나 transcript commitment 안에서 leaf path를 root에 묶고, public output에는 predicate만 남길 수 있다.
+
+예시:
+
+```txt
+private:
+  response bytes
+  parser witness
+  field value
+  sibling path
+
+public:
+  origin
+  response root
+  field path
+  predicate result
+  freshness
+```
+
+이때 verifier는 raw response를 보지 않아도 field가 committed response universe 안에 있었는지 확인한다. 하지만 Merkle root만으로 origin authenticity가 생기지는 않는다. root는 TLS transcript, server identity, freshness, parser rule과 함께 묶여야 zkTLS claim이 된다.
+
+## Verification Checklist
+
+- leaf hash, sibling path, direction을 구분했는가?
+- root가 대표하는 데이터 universe를 명시했는가?
+- canonicalization, ordering, hash algorithm을 포함했는가?
+- inclusion과 authorization 또는 validity를 혼동하지 않았는가?
+- stale root와 freshness failure를 다뤘는가?
+- CT의 append-only log와 Merkle proof artifact를 예시로 사용했는가?
+- zkTLS response field proof에서 path와 value를 함께 binding했는가?
+
+## Visual Artifact Brief
+
+- Artifact key: merkle-inclusion-path-to-response-root
+- Purpose: 한 field leaf가 sibling path를 통해 response root로 접히는 과정을 보여준다.
+- Layout: 왼쪽 아래 leaf에서 시작해 오른쪽 위 root까지 대각선 경로를 그리고, 비공개 sibling은 hash box로 표시한다.
+- Labels: leaf encoding, sibling, left/right, root, tree size, field path, freshness.
+- Motion idea: leaf와 sibling이 단계별로 합쳐져 root가 되고, path mutation은 red mismatch로 표시된다.
+- Reduced-motion state: proof table과 Merkle tree static diagram을 함께 표시한다.
+
+## References
+
+- [RFC 9162: Certificate Transparency Version 2.0](https://datatracker.ietf.org/doc/html/rfc9162)
+- [RFC 9162 info](https://www.rfc-editor.org/info/rfc9162)
+- [Certificate Transparency: How CT Works](https://certificate.transparency.dev/howctworks/)
+- [Transparency.dev Verifiable Data Structures](https://transparency.dev/verifiable-data-structures/)
+- [RFC 9901: Selective Disclosure for JSON Web Tokens](https://www.rfc-editor.org/rfc/rfc9901.html)
+- [W3C Verifiable Credentials Data Model v2.0](https://www.w3.org/TR/vc-data-model-2.0/)

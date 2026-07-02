@@ -1311,7 +1311,7 @@
       "order": 7,
       "title": "PRIVACY-PRESERVING PROOF SYSTEMS",
       "slug": "privacy-preserving-proof-systems",
-      "status": "planned",
+      "status": "draft",
       "visualKey": "witness-public-circuit",
       "guidingQuestion": "원본을 공개하지 않고도 검증 가능한 주장을 만들려면 어떤 증명 도구가 필요한가?",
       "articles": [
@@ -1322,7 +1322,7 @@
           "title": "Commitment와 selective disclosure",
           "slug": "commitment-selective-disclosure",
           "branch": "content/c07-a01-commitment-selective-disclosure",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "foundation",
           "wordCountTarget": 5200,
           "visualKey": "witness-public-circuit",
@@ -1340,8 +1340,13 @@
           ],
           "references": [
             "https://www.w3.org/TR/vc-data-model-2.0/",
-            "https://datatracker.ietf.org/doc/html/rfc9162"
-          ]
+            "https://www.w3.org/TR/vc-data-integrity/",
+            "https://www.w3.org/TR/vc-di-bbs/",
+            "https://datatracker.ietf.org/doc/rfc9901/",
+            "https://datatracker.ietf.org/doc/html/rfc9162",
+            "https://www.wisdom.weizmann.ac.il/~oded/VO/foc.pdf"
+          ],
+          "actualWordCount": 5887
         },
         {
           "id": "c07-a02",
@@ -1350,7 +1355,7 @@
           "title": "Merkle proof와 inclusion claim",
           "slug": "merkle-proof-inclusion-claim",
           "branch": "content/c07-a02-merkle-proof-inclusion-claim",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "intermediate",
           "wordCountTarget": 6400,
           "visualKey": "hash-chain",
@@ -1368,8 +1373,13 @@
           ],
           "references": [
             "https://datatracker.ietf.org/doc/html/rfc9162",
-            "https://certificate.transparency.dev/howctworks/"
-          ]
+            "https://www.rfc-editor.org/info/rfc9162",
+            "https://certificate.transparency.dev/howctworks/",
+            "https://transparency.dev/verifiable-data-structures/",
+            "https://www.rfc-editor.org/rfc/rfc9901.html",
+            "https://www.w3.org/TR/vc-data-model-2.0/"
+          ],
+          "actualWordCount": 6013
         },
         {
           "id": "c07-a03",
@@ -1378,7 +1388,7 @@
           "title": "영지식 증명의 completeness, soundness, zero-knowledge",
           "slug": "zk-proof-properties",
           "branch": "content/c07-a03-zk-proof-properties",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "intermediate",
           "wordCountTarget": 6800,
           "visualKey": "witness-public-circuit",
@@ -1395,8 +1405,14 @@
             "TLS provenance와 app predicate를 분리했는가?"
           ],
           "references": [
-            "https://www.wisdom.weizmann.ac.il/~oded/gmw1.html"
-          ]
+            "https://people.csail.mit.edu/silvio/Selected%20Scientific%20Papers/Proof%20Systems/The_Knowledge_Complexity_Of_Interactive_Proof_Systems.pdf",
+            "https://www.wisdom.weizmann.ac.il/~oded/gmw1.html",
+            "https://www.wisdom.weizmann.ac.il/~oded/PSX/zk-tut02v3.pdf",
+            "https://eprint.iacr.org/2016/260",
+            "https://eprint.iacr.org/2018/046",
+            "https://www.w3.org/TR/vc-data-model-2.0/"
+          ],
+          "actualWordCount": 6471
         },
         {
           "id": "c07-a04",
@@ -1405,7 +1421,7 @@
           "title": "SNARK vs STARK trade-off",
           "slug": "snark-stark-tradeoff",
           "branch": "content/c07-a04-snark-stark-tradeoff",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "deep",
           "wordCountTarget": 8200,
           "visualKey": "circuit-grid",
@@ -1423,8 +1439,12 @@
           ],
           "references": [
             "https://eprint.iacr.org/2018/046",
-            "https://eprint.iacr.org/2016/260"
-          ]
+            "https://eprint.iacr.org/2016/260",
+            "https://tlsnotary.org/docs/protocol/mpc-tls/",
+            "https://tlsnotary.org/docs/faq/",
+            "https://www.wisdom.weizmann.ac.il/~oded/gmw1.html"
+          ],
+          "actualWordCount": 8527
         },
         {
           "id": "c07-a05",
@@ -1433,7 +1453,7 @@
           "title": "MPC와 garbled circuit",
           "slug": "mpc-garbled-circuit",
           "branch": "content/c07-a05-mpc-garbled-circuit",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "deep",
           "wordCountTarget": 8400,
           "visualKey": "circuit-grid",
@@ -1451,8 +1471,15 @@
           ],
           "references": [
             "https://tlsnotary.org/docs/protocol/mpc-tls/",
-            "https://tlsnotary.org/docs/faq/"
-          ]
+            "https://tlsnotary.org/docs/protocol/mpc-tls/handshake/",
+            "https://tlsnotary.org/docs/protocol/mpc-tls/encryption/",
+            "https://tlsnotary.org/docs/protocol/notarization/",
+            "https://tlsnotary.org/docs/protocol/verification/",
+            "https://tlsnotary.org/docs/faq/",
+            "https://doi.org/10.1109/SFCS.1982.38",
+            "https://www.math.ias.edu/~avi/PUBLICATIONS/MYPAPERS/GMW87/GMW87.pdf"
+          ],
+          "actualWordCount": 8415
         },
         {
           "id": "c07-a06",
@@ -1461,7 +1488,7 @@
           "title": "Verifiable credentials와 anonymous credentials",
           "slug": "verifiable-anonymous-credentials",
           "branch": "content/c07-a06-verifiable-anonymous-credentials",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "deep",
           "wordCountTarget": 8000,
           "visualKey": "transcript-receipt",
@@ -1479,8 +1506,14 @@
           ],
           "references": [
             "https://www.w3.org/TR/vc-data-model-2.0/",
-            "https://www.w3.org/TR/vc-overview/"
-          ]
+            "https://www.w3.org/TR/vc-overview/",
+            "https://www.w3.org/TR/vc-data-integrity/",
+            "https://www.w3.org/TR/vc-jose-cose/",
+            "https://www.w3.org/TR/vc-bitstring-status-list/",
+            "https://www.w3.org/TR/vc-di-bbs/",
+            "https://datatracker.ietf.org/doc/rfc9901/"
+          ],
+          "actualWordCount": 9022
         }
       ]
     },

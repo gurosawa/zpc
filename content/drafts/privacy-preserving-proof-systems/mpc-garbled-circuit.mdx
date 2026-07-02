@@ -1,0 +1,307 @@
+---
+title: MPC와 garbled circuit
+chapter: Privacy-Preserving Proof Systems
+chapterSlug: privacy-preserving-proof-systems
+articleSlug: mpc-garbled-circuit
+status: draft
+difficulty: deep
+wordCountTarget: 8400
+visualKey: circuit-grid
+branch: content/c07-a05-mpc-garbled-circuit
+readerQuestion: 여러 참여자가 입력을 숨긴 채 공동 계산을 한다는 것은 실제 프로토콜에서 어떤 비용을 만드는가?
+zktlsBridge: MPC-TLS는 prover가 TLS session key를 단독으로 소유하지 못하게 해 response forgery를 줄이려 한다.
+references:
+  - https://tlsnotary.org/docs/protocol/mpc-tls/
+  - https://tlsnotary.org/docs/protocol/mpc-tls/handshake/
+  - https://tlsnotary.org/docs/protocol/mpc-tls/encryption/
+  - https://tlsnotary.org/docs/protocol/notarization/
+  - https://tlsnotary.org/docs/protocol/verification/
+  - https://tlsnotary.org/docs/faq/
+  - https://doi.org/10.1109/SFCS.1982.38
+  - https://www.math.ias.edu/~avi/PUBLICATIONS/MYPAPERS/GMW87/GMW87.pdf
+---
+
+# MPC와 garbled circuit
+
+## Reader Question
+
+MPC는 여러 참여자가 각자의 입력을 숨긴 채 공동 계산을 수행하는 protocol family다. 결과는 알지만 상대의 private input은 알지 못하게 한다. Garbled circuit은 특히 two-party computation에서 함수를 Boolean circuit으로 바꾸고 wire label과 oblivious transfer를 사용해 evaluator가 입력과 중간값을 보지 못하게 하는 방식이다.
+
+zkTLS에서 이 개념이 필요한 이유는 TLS가 symmetric key 기반 인증을 사용하기 때문이다. 일반 TLS client는 server response를 검증하는 데 필요한 secret을 알고 있으므로, 제3자에게 보여줄 가짜 transcript를 만들 수 있다. TLSNotary FAQ는 이 문제 때문에 verifier를 TLS connection에 참여시키고, MPC로 unilateral access to secret key를 줄인다고 설명한다.
+
+## Why It Matters
+
+zkTLS는 "웹 서버가 이렇게 말했다"를 제3자에게 증명하려 한다. 하지만 서버가 응답마다 signature를 제공하지 않는 일반 TLS에서는 client가 response authenticity를 제3자에게 직접 증명하기 어렵다. TLSNotary의 MPC-TLS는 prover가 서버와 물리적으로 통신하지만 TLS cryptographic operation은 verifier와 함께 MPC로 수행해 session key share를 나눈다.
+
+이 구조는 보안과 비용을 동시에 만든다. verifier가 plaintext를 보면 privacy가 깨지고, prover가 full key를 가지면 response forgery 위험이 생긴다. MPC는 이 둘 사이를 좁히지만 latency, bandwidth, abort behavior, adversary model, implementation complexity가 증가한다. Garbled circuit은 "가능하다"가 아니라 "비싼 계산을 어떻게 회로로 표현하고 네트워크로 주고받는가"의 문제다.
+
+## Core Model
+
+MPC mental model:
+
+```txt
+parties:
+  P1 input x
+  P2 input y
+
+function:
+  f(x, y)
+
+goal:
+  learn output
+  hide private inputs
+```
+
+garbled circuit mental model:
+
+```txt
+function
+  -> boolean circuit
+  -> wire labels
+  -> garbled tables
+  -> oblivious transfer
+  -> output decoding
+```
+
+TLSNotary-style key share model:
+
+```txt
+Prover:
+  talks to server
+  holds key share
+  learns plaintext
+
+Verifier or Notary:
+  holds key share
+  helps MAC/decrypt
+  does not learn plaintext
+
+Server:
+  sees normal TLS client
+```
+
+security model은 항상 명시해야 한다. semi-honest adversary는 protocol을 따르지만 정보를 캐려 하고, malicious adversary는 protocol을 벗어날 수 있다. production zkTLS에서 어떤 모델을 가정하는지 숨기면 audit이 불가능하다.
+
+## Protocol or System Artifact
+
+TLSNotary handshake artifact:
+
+```txt
+TLS handshake starts
+  Prover contacts Server
+  Prover and Verifier run MPC
+  session key shares created
+  neither side learns full key
+```
+
+encryption/decryption artifact:
+
+```txt
+request:
+  Prover plaintext input
+  both key shares
+  MPC encrypts
+  MAC computed
+  ciphertext sent
+
+response:
+  ciphertext received
+  MAC validated in MPC
+  decrypted in MPC
+  plaintext revealed to Prover only
+```
+
+notarization artifact:
+
+```txt
+plaintext commitment
+TLS-specific commitment
+Session Header
+Notary signature
+later opening
+redacted verification output
+```
+
+TLSNotary notarization 문서는 prover가 plaintext에 대한 authenticated commitment를 만들고 notary가 plaintext를 보지 않고 서명한다고 설명한다. verification 단계에서는 signed Session Header, plaintext commitment opening, TLS-specific data, server identity를 확인하고, undisclosed data는 redacted로 나타난다.
+
+garbled circuit artifact는 transcript보다 낮은 레벨에 있다. 함수가 Boolean circuit으로 바뀌면 gate 수, depth, input bit length, OT count, garbled table size가 network cost가 된다. TLS처럼 byte-oriented protocol을 다룰 때는 AES, MAC, transcript hash, record framing이 모두 회로 비용으로 나타날 수 있다. 따라서 MPC-TLS 설계는 cryptographic correctness와 performance engineering이 한 몸이다.
+
+```txt
+garbled circuit cost row:
+  function
+  gate count
+  circuit depth
+  input wires
+  OT messages
+  garbled table bytes
+  abort points
+```
+
+## Failure Mode
+
+첫 번째 실패는 adversary model 혼동이다. semi-honest 보안으로 설계한 protocol을 malicious 환경에 내놓으면 abort, selective failure, malformed circuit, inconsistent input 문제가 생길 수 있다. 문서에는 "누가 무엇을 벗어날 수 있는가"가 있어야 한다.
+
+두 번째 실패는 MAC 검증을 circuit 밖으로 빼는 것이다. TLS response authenticity는 MAC/tag check와 연결된다. 이 검증을 prover가 혼자 수행하거나 off-circuit parser 결과만 신뢰하면 forged ciphertext나 tampered plaintext가 들어올 수 있다.
+
+세 번째 실패는 plaintext privacy를 verifier에게 잃는 것이다. key share 설계가 잘못되거나 debug log가 plaintext를 남기거나, notary가 full transcript를 보게 되면 MPC-TLS의 privacy 목적이 깨진다.
+
+네 번째 실패는 abort side channel이다. verifier가 특정 wire나 field에서만 abort하게 만들면 prover의 hidden input에 대한 정보를 leakage할 수 있다. error handling은 "어디서 실패했는지"를 과도하게 드러내지 않아야 한다.
+
+다섯 번째 실패는 commitment granularity 실패다. notarization 때 너무 큰 range만 commitment하면 나중에 필요한 field만 선택 공개하기 어렵고, 너무 작은 range와 metadata를 공개하면 linkability와 structure leakage가 커진다. commit strategy는 product requirement와 함께 설계해야 한다.
+
+여섯 번째 실패는 parser mismatch다. MPC는 TLS plaintext provenance를 만들 수 있지만, application-specific parser가 wrong field를 읽으면 최종 claim은 틀릴 수 있다. HTTP parsing, JSON canonicalization, redaction semantics는 별도 검증 대상이다.
+
+일곱 번째 실패는 verifier neutrality를 무시하는 것이다. TLSNotary FAQ는 verifier가 TLS-MPC를 직접 수행하지 않았다면 notary neutrality와 compromise 여부를 신뢰해야 한다고 설명한다. notary를 도입하면 trust가 사라지는 것이 아니라 형태가 바뀐다.
+
+여덟 번째 실패는 network cost를 threat model 밖에 두는 것이다. Garbled circuit과 MPC는 round trip과 bandwidth를 많이 쓸 수 있다. mobile network, browser extension, high-latency region에서 protocol이 느려지면 사용자는 중단하고, abort와 retry가 많아지며, verifier는 partial transcript를 어떻게 처리할지 결정해야 한다. availability와 privacy는 분리되지 않는다.
+
+아홉 번째 실패는 range commitment를 disclosure strategy 없이 고르는 것이다. TLSNotary notarization은 plaintext range를 나중에 열 수 있게 commitment한다. 그런데 HTTP response에서 headers, cookies, JSON body가 같은 range에 묶이면 필요한 claim만 열기 어렵다. 반대로 너무 잘게 쪼개면 response shape와 length가 새고 proof object가 커진다.
+
+열 번째 실패는 notary signature를 application truth로 과장하는 것이다. signed Session Header는 TLS session plaintext provenance를 말한다. 그 plaintext 안의 JSON이 business rule을 만족하는지, 서버가 신뢰할 source인지, redaction이 verifier policy에 충분한지는 별도 application verification이다.
+
+열한 번째 실패는 malicious prover가 request를 조작하는 경로를 놓치는 것이다. Prover가 서버에 어떤 request를 보냈는지도 commitment와 policy에 들어가야 한다. response가 진짜 서버에서 왔더라도 request가 verifier가 기대한 endpoint, method, body, authentication context와 다르면 claim 의미가 바뀐다.
+
+열두 번째 실패는 retry와 partial transcript를 무시하는 것이다. 네트워크 실패 후 같은 proof flow를 재시도하면 nonce, commitment, notary session, server response가 모두 달라질 수 있다. partial transcript가 로그나 cache에 남으면 privacy와 replay surface가 된다.
+
+## Minimal Lab or Trace
+
+toy lab:
+
+```txt
+function:
+  tag = MAC(k_prover + k_verifier, msg)
+
+inputs:
+  prover key share
+  verifier key share
+  message
+  received tag
+
+output:
+  tag matches?
+```
+
+trace table:
+
+| step | prover sees | verifier sees |
+|---|---|---|
+| key share | own share | own share |
+| plaintext request | yes | no |
+| ciphertext | yes | yes |
+| response plaintext | yes | no |
+| commitment | yes | yes |
+| opening | selected ranges | selected ranges |
+
+negative cases:
+
+```txt
+tampered tag:
+  reject
+
+full key leak:
+  protocol failure
+
+notary sees plaintext:
+  privacy failure
+
+abort by secret branch:
+  leakage risk
+
+wrong parser:
+  claim failure
+```
+
+lab의 목표는 AES를 구현하는 것이 아니라 key share, MAC check, plaintext visibility, commitment opening의 boundary를 보는 것이다.
+
+commit strategy trace:
+
+```txt
+range A:
+  HTTP headers
+
+range B:
+  public JSON fields
+
+range C:
+  sensitive cookies
+
+later:
+  open B only
+  keep A and C redacted
+```
+
+이 trace는 "나중에 무엇을 공개할 수 있는가"가 notarization 시점의 commitment granularity에서 이미 결정된다는 점을 보여준다. zkTLS UX가 disclosure를 나중에 고르는 것처럼 보여도 cryptographic artifact가 그 선택을 지원하지 않으면 불가능하다.
+
+request/response policy table:
+
+| item | check |
+|---|---|
+| method | expected verb |
+| host | allowed origin |
+| path | allowed endpoint |
+| request body | no hidden mutation |
+| response range | expected field |
+| redaction | policy-allowed |
+
+이 표는 provenance가 response만의 문제가 아니라는 점을 보여준다. 어떤 request에 대한 response인지 모르면 같은 JSON field도 다른 claim이 된다.
+
+## zkTLS Bridge
+
+MPC-TLS는 zkTLS에서 "origin response를 prover가 임의로 만들지 않았다"를 보강하는 bridge다. prover가 full TLS key를 단독으로 갖지 않으면 forged response를 만들기 어렵다. verifier나 notary도 plaintext를 보지 않도록 설계하면 privacy를 유지한다.
+
+하지만 MPC는 selective disclosure와 ZK predicate를 자동으로 제공하지 않는다. TLSNotary verification은 redacted opening과 application parser를 사용한다. 더 복잡한 predicate가 필요하면 commitment 위에 ZK proof를 얹거나, parser와 predicate를 별도 circuit으로 검증해야 한다.
+
+좋은 zkTLS architecture:
+
+```txt
+MPC-TLS:
+  response authenticity
+
+commitment:
+  later selective opening
+
+parser policy:
+  field semantics
+
+ZK predicate:
+  derived claim
+
+verifier policy:
+  accept or reject
+```
+
+이 layering을 지키면 MPC가 할 일과 ZK가 할 일을 혼동하지 않는다.
+
+MPC-TLS는 특히 "prover가 단독으로 response를 forge하지 못한다"는 문제에 집중한다. 그러나 verifier가 모든 세션에 직접 참여하기 어렵다면 notary delegation, proof replay, notary reputation, availability 같은 운영 문제가 생긴다. 따라서 zkTLS product는 "MPC 참여 verifier", "trusted notary", "application verifier"가 같은 entity인지 분리되어 있는지 명확히 해야 한다.
+
+또한 MPC-TLS output을 ZK layer로 넘길 때는 redacted opening과 hidden witness의 boundary가 선명해야 한다. Notary가 서명한 commitment를 ZK circuit이 참조한다면 circuit은 commitment opening, parser path, predicate를 함께 검증해야 한다. 그렇지 않으면 MPC provenance와 ZK predicate 사이가 다시 사람이 읽는 JSON으로 느슨하게 연결된다.
+
+## Verification Checklist
+
+- MPC를 private input과 shared output의 모델로 설명했는가?
+- garbled circuit의 Boolean circuit, wire label, OT, output decoding을 언급했는가?
+- semi-honest와 malicious 가정을 구분했는가?
+- TLSNotary에서 prover가 서버와 통신하고 cryptographic operation은 MPC로 수행한다는 구조를 설명했는가?
+- key share, MAC check, plaintext visibility, session header를 artifact로 다뤘는가?
+- abort, parser mismatch, commitment granularity 실패를 포함했는가?
+- zkTLS에서 MPC-TLS와 ZK predicate layer를 분리했는가?
+
+## Visual Artifact Brief
+
+- Artifact key: mpc-tls-garbled-circuit-key-share-flow
+- Purpose: Prover, Verifier/Notary, Server 사이에서 key share와 ciphertext, plaintext commitment가 어떻게 흐르는지 보여준다.
+- Layout: 세 column으로 Prover, Verifier/Notary, Server를 두고, handshake, encryption, decryption, notarization, verification을 lane으로 나눈다.
+- Labels: key share, MPC, MAC check, ciphertext, plaintext, Session Header, opening, redaction.
+- Motion idea: full key가 한 곳에 모이지 않고 share로 유지되며, plaintext는 prover 쪽에만 나타나고 verifier에는 commitment만 보인다.
+- Reduced-motion state: lane diagram과 visibility table.
+
+## References
+
+- [TLSNotary MPC-TLS](https://tlsnotary.org/docs/protocol/mpc-tls/)
+- [TLSNotary Handshake](https://tlsnotary.org/docs/protocol/mpc-tls/handshake/)
+- [TLSNotary Encryption and Decryption](https://tlsnotary.org/docs/protocol/mpc-tls/encryption/)
+- [TLSNotary Notarization](https://tlsnotary.org/docs/protocol/notarization/)
+- [TLSNotary Verification](https://tlsnotary.org/docs/protocol/verification/)
+- [TLSNotary FAQ](https://tlsnotary.org/docs/faq/)
+- [Yao: Protocols for Secure Computations](https://doi.org/10.1109/SFCS.1982.38)
+- [GMW: How to Play any Mental Game](https://www.math.ias.edu/~avi/PUBLICATIONS/MYPAPERS/GMW87/GMW87.pdf)

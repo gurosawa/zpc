@@ -1,0 +1,247 @@
+---
+title: 영지식 증명의 completeness, soundness, zero-knowledge
+chapter: Privacy-Preserving Proof Systems
+chapterSlug: privacy-preserving-proof-systems
+articleSlug: zk-proof-properties
+status: draft
+difficulty: intermediate
+wordCountTarget: 6800
+visualKey: witness-public-circuit
+branch: content/c07-a03-zk-proof-properties
+readerQuestion: 영지식 증명은 무엇을 보장하고 무엇을 보장하지 않는가?
+zktlsBridge: zkTLS는 TLS provenance statement와 app predicate를 정확히 회로화해야 한다.
+references:
+  - https://people.csail.mit.edu/silvio/Selected%20Scientific%20Papers/Proof%20Systems/The_Knowledge_Complexity_Of_Interactive_Proof_Systems.pdf
+  - https://www.wisdom.weizmann.ac.il/~oded/gmw1.html
+  - https://www.wisdom.weizmann.ac.il/~oded/PSX/zk-tut02v3.pdf
+  - https://eprint.iacr.org/2016/260
+  - https://eprint.iacr.org/2018/046
+  - https://www.w3.org/TR/vc-data-model-2.0/
+---
+
+# 영지식 증명의 completeness, soundness, zero-knowledge
+
+## Reader Question
+
+영지식 증명은 "아무것도 공개하지 않고 모든 것을 증명한다"는 마법이 아니다. 증명은 특정 statement에 대해 특정 witness가 존재함을 보인다. 어떤 statement를 만들었는지, 무엇을 public input으로 냈는지, verifier가 어떤 policy로 받아들이는지에 따라 보장 범위가 결정된다.
+
+기본 속성은 세 가지다. completeness는 참인 statement와 올바른 witness가 있으면 honest verifier가 받아들인다는 성질이다. soundness는 거짓 statement를 prover가 받아들이게 만들기 어렵다는 성질이다. zero-knowledge는 proof가 statement의 참/거짓 이외의 witness 정보를 추가로 누출하지 않는다는 성질이다.
+
+Goldreich-Micali-Wigderson의 고전 결과는 zero-knowledge proof가 NP statement에 넓게 적용될 수 있음을 보였다. 하지만 그 넓은 적용성은 statement를 정확히 정의했을 때의 이야기다. 틀린 statement를 circuit으로 만들면 증명은 틀린 질문에 정확히 답한다.
+
+## Why It Matters
+
+zkTLS에서는 "TLS response가 진짜였다", "field가 response 안에 있었다", "field가 predicate를 만족했다", "user가 consent했다", "proof가 freshness window 안이다"가 서로 다른 statement다. ZK proof 하나가 이 모든 것을 자동으로 보장하지 않는다.
+
+예를 들어 circuit이 `balance >= 100`만 증명하고 origin, account id, timestamp를 public input이나 committed witness에 묶지 않으면 verifier는 어떤 balance인지 모른다. 반대로 proof public input에 full account id와 exact balance를 넣으면 zero-knowledge라고 부르기 어렵다. 보안 속성은 circuit 밖의 system artifact와 함께 읽어야 한다.
+
+SNARK나 STARK 같은 proof system 선택도 이 세 속성의 구체적 instantiation이다. Groth16 같은 pairing-based SNARK는 작은 proof와 낮은 verification cost를 제공하지만 setup과 circuit-specific assumptions를 봐야 한다. STARK 계열은 transparent setup과 hash 기반 성격을 내세우지만 proof size와 prover cost가 다르다. 속성 이름만으로 제품 요구사항이 끝나지 않는다.
+
+## Core Model
+
+ZK proof mental model:
+
+```txt
+statement:
+  public claim to verify
+
+witness:
+  private data proving it
+
+circuit:
+  allowed computation
+
+proof:
+  compact evidence
+
+verifier:
+  checks proof and inputs
+```
+
+세 속성:
+
+| property | 기억할 질문 |
+|---|---|
+| completeness | 참이면 통과하는가? |
+| soundness | 거짓이면 통과하기 어려운가? |
+| zero-knowledge | witness를 더 흘리지 않는가? |
+
+zkTLS example:
+
+```txt
+private witness:
+  TLS transcript
+  response bytes
+  parser path
+  field value
+
+public input:
+  origin
+  response root
+  predicate result
+  freshness nonce
+  circuit id
+```
+
+statement는 다음처럼 명시해야 한다.
+
+```txt
+I know response data from origin O
+inside transcript commitment R
+where field path P satisfies predicate Q
+under circuit version C
+and freshness nonce N.
+```
+
+## Protocol or System Artifact
+
+toy circuit table:
+
+| wire | visibility | meaning |
+|---|---|---|
+| transcript_root | public | committed TLS response |
+| origin_hash | public | server identity binding |
+| path_hash | public | field identity |
+| value | private | hidden field value |
+| threshold | public | verifier policy |
+| result | public | predicate output |
+
+circuit sketch:
+
+```txt
+check field in response root
+check origin binding
+check value >= threshold
+output result
+```
+
+proof verification does not parse policy text. verifier must check public inputs against product policy:
+
+```txt
+proof verifies:
+  cryptographic relation holds
+
+policy verifies:
+  origin allowed
+  circuit accepted
+  nonce fresh
+  threshold correct
+  claim type supported
+```
+
+이 분리를 놓치면 "proof verified"를 "business decision accepted"와 혼동한다. proof verifier는 arithmetic relation을 확인하고, application verifier는 그 relation이 이 request에서 의미 있는지를 확인한다.
+
+## Failure Mode
+
+첫 번째 실패는 statement mismatch다. 제품은 "사용자의 현재 잔고가 100 이상"을 원했는데 circuit은 "어떤 응답 안의 어떤 숫자가 100 이상"만 증명할 수 있다. proof는 valid지만 claim은 쓸모없거나 위험하다.
+
+두 번째 실패는 public input leak이다. zero-knowledge proof라도 public input은 공개된다. exact balance, account id, email, timestamp, URL query가 public input으로 들어가면 witness가 숨겨져도 privacy가 깨진다.
+
+세 번째 실패는 parser witness를 신뢰하지 않는 것이다. response bytes에서 field를 뽑는 parser가 circuit 밖에 있으면 prover가 원하는 값만 골라 넣을 수 있다. parser rule, canonicalization, field path check가 statement 안으로 들어가거나 별도 commitment로 묶여야 한다.
+
+네 번째 실패는 soundness를 implementation security와 혼동하는 것이다. proof system이 sound해도 verifier binary가 compromised되거나, verification key가 wrong circuit용이면 invalid proof가 accept될 수 있다. runtime posture와 provenance가 필요하다.
+
+다섯 번째 실패는 freshness를 증명하지 않는 것이다. 오래된 transcript로 만든 proof가 오늘도 유효한 claim처럼 쓰이면 replay가 된다. nonce, timestamp, session binding, origin policy를 public input과 verifier policy에 넣어야 한다.
+
+여섯 번째 실패는 completeness failure를 사용자 실패로 해석하는 것이다. true statement인데 parser drift나 canonicalization mismatch 때문에 proof가 실패하면 UX는 "사용자 인증 실패"처럼 보일 수 있다. circuit version과 parser version을 trace해야 한다.
+
+일곱 번째 실패는 under-constrained circuit이다. circuit이 `value >= threshold`만 확인하고 `value`가 transcript field에서 왔다는 constraint를 빠뜨리면 prover는 아무 숫자나 witness로 넣을 수 있다. proof system은 회로가 요구한 관계만 지킨다.
+
+여덟 번째 실패는 setup과 transcript transform을 잊는 것이다. 일부 SNARK는 proving/verifying key 생성 과정의 toxic waste나 trusted setup assumption을 가진다. Fiat-Shamir로 interactive protocol을 non-interactive로 바꿀 때도 domain separation과 challenge derivation이 약하면 soundness argument가 흔들릴 수 있다.
+
+## Minimal Lab or Trace
+
+작은 lab:
+
+```txt
+goal:
+  prove balance >= 100
+
+private:
+  balance = 120
+
+public:
+  threshold = 100
+  result = true
+
+circuit:
+  assert balance >= threshold
+```
+
+이 lab을 바로 사용하면 부족하다. 다음 binding을 추가한다.
+
+```txt
+add:
+  origin hash
+  response root
+  field path
+  freshness nonce
+  circuit id
+```
+
+negative cases:
+
+| mutation | expected |
+|---|---|
+| wrong origin | policy reject |
+| old nonce | policy reject |
+| wrong path | circuit reject |
+| leaked exact value | privacy failure |
+| wrong circuit id | verifier reject |
+| missing transcript constraint | soundness failure |
+| weak nonce binding | replay failure |
+
+테스트의 목적은 proof library API가 작동하는지보다 statement surface를 보는 것이다. private witness와 public claim을 분리해 표로 적어 보면 대부분의 설계 결함이 드러난다.
+
+## zkTLS Bridge
+
+zkTLS는 TLS provenance와 application predicate를 합치는 시스템이다. TLS layer는 origin과 transcript authenticity를 말하고, ZK layer는 숨겨진 response에서 특정 predicate가 성립함을 말한다. 둘 사이의 binding이 약하면 proof는 privacy-preserving이지만 source-driven이 아니거나, source-driven이지만 privacy-preserving이 아니다.
+
+zkTLS verifier가 확인해야 할 축:
+
+```txt
+cryptographic proof:
+  proof verifies
+
+origin provenance:
+  transcript binds to origin
+
+field semantics:
+  parser and path match
+
+policy:
+  claim allowed
+
+freshness:
+  replay blocked
+```
+
+completeness, soundness, zero-knowledge는 이 축 중 proof relation에 대한 언어다. 운영 시스템은 relation 밖의 metadata와 policy를 함께 검증해야 한다.
+
+## Verification Checklist
+
+- completeness, soundness, zero-knowledge를 각각 다른 질문으로 설명했는가?
+- witness, public input, circuit, proof, verifier를 구분했는가?
+- public input도 privacy leak surface임을 다뤘는가?
+- statement mismatch를 주요 실패 모드로 포함했는가?
+- parser/canonicalization/freshness를 statement 설계와 연결했는가?
+- proof verification과 product policy verification을 분리했는가?
+- zkTLS에서 TLS provenance와 app predicate의 binding을 설명했는가?
+
+## Visual Artifact Brief
+
+- Artifact key: witness-public-circuit-property-map
+- Purpose: ZK proof 속성을 witness, public input, circuit, verifier policy의 관계로 설명한다.
+- Layout: 왼쪽 private witness, 중앙 circuit, 오른쪽 public input과 verifier decision을 배치하고 세 속성의 적용 위치를 색으로 표시한다.
+- Labels: completeness, soundness, zero-knowledge, witness, statement, public input, circuit id, policy.
+- Motion idea: witness가 circuit을 통과해 proof로 압축되고, public input leak이 발생하는 항목은 별도 red lane으로 표시된다.
+- Reduced-motion state: property table과 zkTLS statement diagram.
+
+## References
+
+- [GMR: The Knowledge Complexity of Interactive Proof Systems](https://people.csail.mit.edu/silvio/Selected%20Scientific%20Papers/Proof%20Systems/The_Knowledge_Complexity_Of_Interactive_Proof_Systems.pdf)
+- [Goldreich-Micali-Wigderson zero-knowledge page](https://www.wisdom.weizmann.ac.il/~oded/gmw1.html)
+- [Goldreich zero-knowledge tutorial](https://www.wisdom.weizmann.ac.il/~oded/PSX/zk-tut02v3.pdf)
+- [Groth16: On the Size of Pairing-based Non-interactive Arguments](https://eprint.iacr.org/2016/260)
+- [STARK: Scalable, transparent, and post-quantum secure computational integrity](https://eprint.iacr.org/2018/046)
+- [W3C Verifiable Credentials Data Model v2.0](https://www.w3.org/TR/vc-data-model-2.0/)
