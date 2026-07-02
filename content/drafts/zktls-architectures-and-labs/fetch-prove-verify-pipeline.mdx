@@ -1,0 +1,343 @@
+---
+title: Fetch-Prove-Verify pipeline
+chapter: ZKTLS Architectures and Labs
+chapterSlug: zktls-architectures-and-labs
+articleSlug: fetch-prove-verify-pipeline
+status: draft
+difficulty: lab
+wordCountTarget: 9000
+visualKey: proof-pipeline
+branch: content/c08-a05-fetch-prove-verify-pipeline
+readerQuestion: zkTLS product flow는 사용자가 데이터를 가져오고 증명하고 검증받는 과정을 어떻게 분리해야 하는가?
+zktlsBridge: 이 pipeline은 모든 article의 zkTLS bridge를 실제 구현 흐름으로 모으는 공통 언어다.
+references:
+  - https://tlsnotary.org/docs/intro/
+  - https://tlsnotary.org/docs/protocol/verification/
+  - https://tlsnotary.org/docs/protocol/notarization/
+  - https://arxiv.org/abs/1909.00938
+  - https://www.rfc-editor.org/rfc/rfc9901.html
+---
+
+# Fetch-Prove-Verify pipeline
+
+## Reader Question
+
+zkTLS product flow는 왜 Fetch, Prove, Verify로 나눠야 하는가? 사용자가 버튼 하나를 누르는 UI라도 내부에는 origin data acquisition, proof generation, policy-based verification이 분리되어 있다. 단계를 섞으면 UI는 "proof complete"라고 말하지만 verifier가 무엇을 받아들였는지 알 수 없다.
+
+Fetch는 origin data를 안전하게 가져오는 단계다. Prove는 raw data를 selective claim과 cryptographic artifact로 바꾸는 단계다. Verify는 proof relation뿐 아니라 origin, freshness, policy, redaction을 확인하는 단계다. 이 세 단어는 frontend, protocol, content, verifier, audit log가 공유할 vocabulary다.
+
+## Why It Matters
+
+zkTLS UX에서 가장 흔한 실패는 proof status와 verification decision을 혼동하는 것이다. proof bytes가 생성됐다고 해서 verifier policy가 accept한 것은 아니다. origin fetch가 성공했다고 해서 disclosure가 안전한 것도 아니다. verifier가 proof를 cryptographically accepted했다고 해서 business reliance가 정당한 것도 아니다.
+
+TLSNotary introduction도 prover가 TLS request를 수행하고, selectively disclose하고, verifier가 verifies the data라는 단계적 모델을 제시한다. verification 문서는 signed Session Header, opening, TLS-specific data, server identity, parser output을 검증 대상으로 둔다. 이 구조를 product pipeline으로 번역해야 한다.
+
+## Core Model
+
+pipeline:
+
+```txt
+Fetch
+  acquire origin data
+  bind session
+  avoid token leakage
+
+Prove
+  commit transcript
+  select fields
+  compute predicate
+  produce proof
+
+Verify
+  check proof
+  check origin
+  check freshness
+  check policy
+  record decision
+```
+
+owner table:
+
+| stage | owner | artifact |
+|---|---|---|
+| Fetch | client/prover | transcript |
+| Prove | prover engine | proof object |
+| Verify | verifier service | decision |
+| Audit | operator | event log |
+
+각 stage는 error code도 달라야 한다. fetch failure, proof failure, policy reject, parser reject, privacy failure를 모두 "failed"로 묶으면 debugging과 user consent가 불가능하다.
+
+pipeline에서 가장 중요한 설계 선택은 artifact ownership이다. Fetch artifact는 user-side secret을 포함할 수 있으므로 오래 저장하면 안 된다. Prove artifact는 verifier에게 전달 가능한 cryptographic object다. Verify artifact는 decision과 reason을 남기지만 private witness를 담으면 안 된다. 같은 proof flow 안에서도 retention policy가 다르다.
+
+## Protocol or System Artifact
+
+minimal object schema:
+
+```txt
+proof object:
+  proofId
+  statementId
+  publicInputs
+  proofBytes
+  circuitVersion
+  createdAt
+
+decision object:
+  decisionId
+  proofId
+  verifierId
+  policyId
+  result
+  reasonCode
+```
+
+두 object를 분리해야 같은 proof를 새 policy로 재평가하거나, policy bug가 발견되었을 때 영향을 받은 decision만 회수할 수 있다. proof object는 cryptographic evidence이고 decision object는 verifier의 해석 결과다. 저장, 공유, 삭제, 이의제기 기준도 서로 다르다.
+
+pipeline artifact:
+
+```txt
+request:
+  origin
+  method
+  path
+  verifier challenge
+
+transcript:
+  session commitment
+  response commitment
+  timestamp
+
+proof:
+  statement id
+  public inputs
+  private witness hidden
+  proof bytes
+
+verification:
+  policy id
+  parser id
+  result
+  reason code
+```
+
+state machine:
+
+```txt
+idle
+  -> fetching
+  -> fetched
+  -> proving
+  -> proof_ready
+  -> verifying
+  -> accepted
+  -> rejected
+```
+
+실패 상태도 first-class다.
+
+```txt
+fetch_denied
+origin_mismatch
+proof_invalid
+policy_reject
+redaction_violation
+stale_challenge
+parser_error
+```
+
+이 artifact는 UI copy가 아니라 implementation contract다. API response와 audit event가 같은 reason code를 써야 한다.
+
+artifact retention table:
+
+| artifact | retention |
+|---|---|
+| raw response | avoid |
+| private witness | ephemeral |
+| proof object | policy-defined |
+| decision event | retained |
+| debug log | redacted |
+
+이 표가 없으면 support team이 debugging을 위해 raw response를 요청하게 된다. zkTLS product는 support workflow까지 privacy-preserving이어야 한다.
+
+## Failure Mode
+
+첫 번째 실패는 Fetch에서 credential을 과다 노출하는 것이다. 사용자가 bearer token을 verifier에게 보내거나, browser extension이 cookie를 log에 남기면 proof 이전에 privacy가 깨진다.
+
+두 번째 실패는 Prove 단계에서 public input을 과다 공개하는 것이다. exact URL, account id, full timestamp, rare field path가 public input에 들어가면 ZK proof라도 tracking surface가 생긴다.
+
+세 번째 실패는 Verify 단계에서 policy를 비워 두는 것이다. proof verifies만 보고 accepted로 처리하면 wrong origin, stale challenge, unsupported statement, deprecated circuit을 받을 수 있다.
+
+네 번째 실패는 parser를 invisible helper로 두는 것이다. verifier가 redacted transcript를 application-specific parser로 읽는다면 parser id, version, grammar, failure reason이 audit에 남아야 한다.
+
+다섯 번째 실패는 progress UI가 보안 상태를 과장하는 것이다. "검증 완료"는 proof relation, policy, origin, freshness, redaction이 모두 통과했을 때만 보여야 한다. 중간 단계는 "proof generated"처럼 구체적으로 표현한다.
+
+여섯 번째 실패는 lab에서 production credential을 쓰는 것이다. fetch lab은 toy origin과 synthetic response만 써야 한다. real bank, real cookie, production account token을 사용하는 demo는 사고 표면이다.
+
+일곱 번째 실패는 retry semantics 부재다. challenge가 바뀌었는데 old proof를 재사용하거나, fetch retry가 다른 response를 가져왔는데 same proof id로 묶으면 audit이 깨진다.
+
+여덟 번째 실패는 verifier policy update를 proof regeneration과 혼동하는 것이다. 같은 proof object를 새 policy로 평가할 수 있는 경우도 있고, public input schema나 freshness requirement가 바뀌어 새 proof가 필요한 경우도 있다. proof object와 decision object를 분리해야 이 차이를 다룰 수 있다.
+
+아홉 번째 실패는 UX에서 hidden data를 preview하지 않는 것이다. 사용자가 무엇을 공개하는지 모르면 consent가 약하다. 하지만 preview가 raw secret을 화면이나 analytics에 남기면 또 다른 leak가 된다. preview는 disclosed fields만 보여주고 hidden fields는 count와 category로만 표시하는 방식이 필요하다.
+
+열 번째 실패는 multi-verifier reuse를 설계하지 않는 것이다. 한 proof를 여러 verifier에게 제출할 수 있는지, verifier-specific challenge가 필요한지, redaction set이 verifier마다 달라지는지 명확해야 한다.
+
+## Minimal Lab or Trace
+
+privacy-safe support trace:
+
+```txt
+user reports:
+  decision id
+  reason code
+  timestamp
+
+support can see:
+  policy id
+  parser id
+  verifier version
+
+support cannot see:
+  raw response
+  private witness
+  session cookie
+```
+
+observability budget:
+
+| metric | allowed detail |
+|---|---|
+| stage latency | bucketed |
+| failure code | enumerated |
+| origin | source class |
+| proof size | rounded |
+| payload | never captured |
+
+이 lab은 UI 흐름만 보는 실습이 아니라 운영자가 문제를 해결할 때 어떤 데이터를 보아도 되는지 정하는 실습이다. zkTLS는 privacy-preserving proof를 만들면서도 support log로 privacy를 깨뜨릴 수 있다.
+
+local dummy lab:
+
+```txt
+fixture response:
+  membershipTier: gold
+  accountId: hidden
+  email: hidden
+
+public claim:
+  membershipTier == gold
+
+private witness:
+  full fixture response
+```
+
+trace:
+
+```txt
+Fetch:
+  load local fixture
+  no real token
+
+Prove:
+  commit response
+  expose claim result
+  hide accountId
+
+Verify:
+  check commitment
+  check statement id
+  check challenge
+```
+
+reason code table:
+
+| code | stage | user action |
+|---|---|---|
+| origin_mismatch | Fetch | retry allowed |
+| stale_challenge | Verify | refresh proof |
+| redaction_violation | Prove | stop |
+| policy_reject | Verify | not accepted |
+| parser_error | Verify | report |
+
+This lab is intentionally local. It teaches stage boundaries without using real user secrets.
+
+UI-state trace:
+
+```txt
+proof generated:
+  cryptographic object exists
+
+submitted:
+  verifier received object
+
+accepted:
+  verifier policy passed
+
+rejected:
+  reason code available
+```
+
+이 four-state trace는 사용자에게 과장된 성공 메시지를 보여주지 않게 한다. "proof generated"와 "claim accepted"는 다른 상태다.
+
+## zkTLS Bridge
+
+multi-verifier bridge에서는 audience binding이 중요하다. employment verifier, lending verifier, community verifier가 모두 같은 claim을 요구하더라도 challenge, policy, disclosure set은 달라질 수 있다. proof를 portable하게 만들수록 replay와 over-disclosure 위험이 커지고, verifier-specific하게 만들수록 UX 비용과 재증명 비용이 커진다. pipeline 설계는 이 tradeoff를 숨기지 말고 artifact에 표현해야 한다.
+
+production SLO도 보안 설계의 일부다. proving latency, verification latency, retry budget, challenge expiry가 맞지 않으면 사용자는 stale proof를 재사용하거나 screenshot fallback을 찾게 된다. 따라서 performance budget은 convenience metric이 아니라 proof freshness와 user behavior를 통제하는 security control이다.
+
+마지막 bridge는 dispute handling이다. verifier가 reject한 경우 사용자는 raw response를 support ticket에 붙여 넣고 싶어질 수 있다. product는 그 행동을 막고, decision id와 reason code만으로 재시도, 정책 설명, appeal path를 제공해야 한다. 그렇지 않으면 privacy-preserving proof flow가 운영 단계에서 평문 제출 flow로 되돌아간다.
+
+Fetch-Prove-Verify is the operational form of zkTLS. Earlier chapters described CIA, TLS, APIs, supply chain, commitments, ZK, MPC. This pipeline tells implementers where each concept lands.
+
+```txt
+Fetch:
+  TLS and secret handling
+
+Prove:
+  commitment, ZK, redaction
+
+Verify:
+  policy, parser, audit
+
+Operate:
+  supply chain and monitoring
+```
+
+좋은 zkTLS product는 proof object와 decision object를 분리한다.
+
+```txt
+proof object:
+  cryptographic evidence
+
+decision object:
+  verifier policy result
+```
+
+이 분리가 있어야 proof를 재검증하거나 다른 verifier policy로 평가할 수 있다.
+
+production pipeline은 observability도 필요하다. 그러나 observability는 private witness를 수집하지 않는 방식이어야 한다. metrics는 stage duration, failure code, proof system version, policy id 같은 non-secret dimension으로 제한한다. sample payload capture는 금지하거나 synthetic environment에서만 허용한다.
+
+## Verification Checklist
+
+- Fetch, Prove, Verify의 owner와 artifact를 구분했는가?
+- proof generated와 verifier accepted를 혼동하지 않았는가?
+- stage-specific error code를 정의했는가?
+- parser id, policy id, challenge, freshness를 artifact에 넣었는가?
+- lab에서 실제 credential/token 사용 금지를 명시했는가?
+- public input leak와 redaction failure를 다뤘는가?
+- proof object와 decision object를 분리했는가?
+
+## Visual Artifact Brief
+
+- Artifact key: fetch-prove-verify-proof-pipeline
+- Purpose: zkTLS product flow를 fetch, prove, verify, audit stage로 나누고 각 artifact와 failure reason을 보여준다.
+- Layout: horizontal pipeline with four stages, each stage has input, output, failure code slots.
+- Labels: origin, transcript, witness, proof, public input, policy, decision, audit event.
+- Motion idea: fixture response가 transcript commitment로 접히고, proof object와 decision object가 서로 다른 cards로 분리된다.
+- Reduced-motion state: pipeline table과 reason code matrix.
+
+## References
+
+- [TLSNotary Introduction](https://tlsnotary.org/docs/intro/)
+- [TLSNotary Verification](https://tlsnotary.org/docs/protocol/verification/)
+- [TLSNotary Notarization](https://tlsnotary.org/docs/protocol/notarization/)
+- [DECO arXiv](https://arxiv.org/abs/1909.00938)
+- [RFC 9901: Selective Disclosure for JSON Web Tokens](https://www.rfc-editor.org/rfc/rfc9901.html)

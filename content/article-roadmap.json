@@ -1522,7 +1522,7 @@
       "order": 8,
       "title": "ZKTLS ARCHITECTURES AND LABS",
       "slug": "zktls-architectures-and-labs",
-      "status": "planned",
+      "status": "draft",
       "visualKey": "proof-pipeline",
       "guidingQuestion": "zkTLS는 TLS 데이터 provenance 문제를 어떤 protocol architecture와 lab trace로 다루는가?",
       "articles": [
@@ -1533,7 +1533,7 @@
           "title": "zkTLS가 해결하는 provenance 문제",
           "slug": "zktls-provenance-problem",
           "branch": "content/c08-a01-zktls-provenance-problem",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "foundation",
           "wordCountTarget": 5400,
           "visualKey": "transcript-receipt",
@@ -1550,9 +1550,12 @@
             "source origin과 selected claim을 분리했는가?"
           ],
           "references": [
+            "https://tlsnotary.org/docs/intro/",
+            "https://tlsnotary.org/docs/faq/",
             "https://arxiv.org/abs/1909.00938",
-            "https://tlsnotary.org/"
-          ]
+            "https://research.chain.link/deco.pdf"
+          ],
+          "actualWordCount": 4807
         },
         {
           "id": "c08-a02",
@@ -1561,7 +1564,7 @@
           "title": "Proxy 방식과 신뢰 가정",
           "slug": "zktls-proxy-trust-assumptions",
           "branch": "content/c08-a02-zktls-proxy-trust-assumptions",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "intermediate",
           "wordCountTarget": 7000,
           "visualKey": "proof-pipeline",
@@ -1579,8 +1582,12 @@
           ],
           "references": [
             "https://tlsnotary.org/docs/intro/",
+            "https://tlsnotary.org/docs/protocol/proxy-mode/",
+            "https://tlsnotary.org/docs/faq/",
+            "https://arxiv.org/abs/1909.00938",
             "https://www.deco.works/"
-          ]
+          ],
+          "actualWordCount": 6156
         },
         {
           "id": "c08-a03",
@@ -1589,7 +1596,7 @@
           "title": "MPC-TLS와 TLSNotary",
           "slug": "mpc-tls-tlsnotary",
           "branch": "content/c08-a03-mpc-tls-tlsnotary",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "deep",
           "wordCountTarget": 8800,
           "visualKey": "proof-pipeline",
@@ -1606,9 +1613,15 @@
             "forgery 방지 논리를 ZK만으로 설명하지 않았는가?"
           ],
           "references": [
+            "https://tlsnotary.org/docs/intro/",
             "https://tlsnotary.org/docs/protocol/mpc-tls/",
+            "https://tlsnotary.org/docs/protocol/mpc-tls/handshake/",
+            "https://tlsnotary.org/docs/protocol/mpc-tls/encryption/",
+            "https://tlsnotary.org/docs/protocol/notarization/",
+            "https://tlsnotary.org/docs/protocol/verification/",
             "https://tlsnotary.org/docs/faq/"
-          ]
+          ],
+          "actualWordCount": 8455
         },
         {
           "id": "c08-a04",
@@ -1617,7 +1630,7 @@
           "title": "DECO 계열 설계",
           "slug": "deco-design-lineage",
           "branch": "content/c08-a04-deco-design-lineage",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "deep",
           "wordCountTarget": 9000,
           "visualKey": "proof-pipeline",
@@ -1636,8 +1649,11 @@
           "references": [
             "https://arxiv.org/abs/1909.00938",
             "https://research.chain.link/deco.pdf",
-            "https://www.deco.works/"
-          ]
+            "https://www.deco.works/",
+            "https://tlsnotary.org/docs/intro/",
+            "https://tlsnotary.org/docs/protocol/mpc-tls/"
+          ],
+          "actualWordCount": 8188
         },
         {
           "id": "c08-a05",
@@ -1646,7 +1662,7 @@
           "title": "Fetch-Prove-Verify pipeline",
           "slug": "fetch-prove-verify-pipeline",
           "branch": "content/c08-a05-fetch-prove-verify-pipeline",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "lab",
           "wordCountTarget": 9000,
           "visualKey": "proof-pipeline",
@@ -1664,8 +1680,12 @@
           ],
           "references": [
             "https://tlsnotary.org/docs/intro/",
-            "https://arxiv.org/abs/1909.00938"
-          ]
+            "https://tlsnotary.org/docs/protocol/verification/",
+            "https://tlsnotary.org/docs/protocol/notarization/",
+            "https://arxiv.org/abs/1909.00938",
+            "https://www.rfc-editor.org/rfc/rfc9901.html"
+          ],
+          "actualWordCount": 8041
         },
         {
           "id": "c08-a06",
@@ -1674,7 +1694,7 @@
           "title": "Toy circuit에서 production risk까지",
           "slug": "toy-circuit-production-risk",
           "branch": "content/c08-a06-toy-circuit-production-risk",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "lab",
           "wordCountTarget": 9600,
           "visualKey": "circuit-grid",
@@ -1692,9 +1712,12 @@
           ],
           "references": [
             "https://csrc.nist.gov/pubs/sp/800/218/final",
-            "https://slsa.dev/spec/v1.0/provenance",
-            "https://tlsnotary.org/docs/intro/"
-          ]
+            "https://slsa.dev/spec/v1.2/",
+            "https://slsa.dev/spec/v1.2/provenance",
+            "https://tlsnotary.org/docs/intro/",
+            "https://tlsnotary.org/docs/faq/"
+          ],
+          "actualWordCount": 8319
         }
       ]
     }

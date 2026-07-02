@@ -1,0 +1,206 @@
+---
+title: zkTLS가 해결하는 provenance 문제
+chapter: ZKTLS Architectures and Labs
+chapterSlug: zktls-architectures-and-labs
+articleSlug: zktls-provenance-problem
+status: draft
+difficulty: foundation
+wordCountTarget: 5400
+visualKey: transcript-receipt
+branch: content/c08-a01-zktls-provenance-problem
+readerQuestion: 왜 TLS로 받은 웹 데이터를 그대로 복사해서는 제3자에게 강하게 증명할 수 없는가?
+zktlsBridge: 이 article이 전체 가이드의 최종 문제 설정이며 앞선 보안/TLS/암호 장을 묶는다.
+references:
+  - https://tlsnotary.org/docs/intro/
+  - https://tlsnotary.org/docs/faq/
+  - https://arxiv.org/abs/1909.00938
+  - https://research.chain.link/deco.pdf
+---
+
+# zkTLS가 해결하는 provenance 문제
+
+## Reader Question
+
+브라우저에서 받은 JSON을 복사하거나 스크린샷을 찍으면 왜 충분한 증거가 아닌가? 그 데이터가 특정 origin에서 왔다는 사실, 전송 중 변조되지 않았다는 사실, 사용자가 필요한 부분만 공개했다는 사실, verifier가 기대한 정책에 맞는다는 사실이 함께 필요하기 때문이다. 복사본은 내용은 보여주지만 provenance가 약하다.
+
+TLS는 client와 server 사이의 confidentiality와 integrity를 제공한다. 그러나 일반적인 TLS 세션은 server가 각 response를 제3자 검증 가능한 형태로 서명해 주지 않는다. TLSNotary FAQ도 TLS가 connection 참여자에게 authenticity를 보장하지만, server가 데이터를 제3자에게 검증 가능한 방식으로 "sign"하는 mechanism은 제공하지 않는다고 설명한다.
+
+zkTLS의 출발점은 이 간극이다. 사용자는 private web data를 다른 system에 전달하고 싶지만, bearer token을 넘기거나 전체 response를 공개하고 싶지는 않다. verifier는 사용자의 말만 믿고 싶지 않고, origin과 statement를 검증하고 싶다.
+
+## Why It Matters
+
+이 문제는 단순한 편의 기능이 아니다. 은행 잔고, KYC 상태, 배송 이력, 학력 증명, subscription 상태, health portal record 같은 데이터는 이미 웹 서비스 안에 있다. 그러나 그 데이터는 origin에 갇혀 있고, 사용자가 다른 application에 안전하게 가져가려면 출처와 privacy를 동시에 보존해야 한다.
+
+스크린샷은 쉽게 조작된다. JSON 복사본은 누가 만들었는지 알 수 없다. API token 공유는 verifier에게 과도한 권한을 준다. OAuth integration은 server-side 협력이 필요하고 모든 legacy site가 지원하지 않는다. proxy 방식은 단순하지만 proxy가 보는 정보와 network-path assumption이 생긴다. MPC-TLS는 강한 provenance를 노리지만 비용과 UX 제약이 있다.
+
+DECO 논문은 TLS가 private data에 confidentiality와 integrity를 제공하지만 사용자가 제3자에게 provenance를 증명하기 어렵다는 문제를 명시한다. DECO와 TLSNotary는 모두 이 문제 공간을 다루며, server-side modification 없이 web data provenance와 selective disclosure를 만드는 방향을 제시한다.
+
+## Core Model
+
+provenance proof는 네 축을 묶는다.
+
+```txt
+source origin
+  which server?
+
+session integrity
+  which TLS exchange?
+
+selected claim
+  which field or predicate?
+
+verifier policy
+  accepted for what purpose?
+```
+
+증거의 수준:
+
+| evidence | origin | integrity | privacy |
+|---|---|---|---|
+| screenshot | weak | weak | weak |
+| copied JSON | weak | weak | weak |
+| shared token | strong access | risky | weak |
+| proxy trace | medium | depends | depends |
+| zkTLS proof | explicit | cryptographic | selective |
+
+zkTLS는 "웹 데이터를 증명한다"가 아니라 "origin-bound transcript에서 나온 selected claim을 verifier policy에 맞게 증명한다"로 기억해야 한다. selected claim이 없으면 privacy가 없고, origin binding이 없으면 provenance가 없다.
+
+## Protocol or System Artifact
+
+transcript receipt:
+
+```txt
+origin:
+  example.com
+
+session:
+  TLS transcript commitment
+
+request:
+  method and path commitment
+
+response:
+  commitment or ranges
+
+claim:
+  selected field or predicate
+
+policy:
+  verifier rule id
+```
+
+redacted receipt:
+
+```txt
+public:
+  origin
+  freshness
+  claim result
+  proof id
+
+hidden:
+  cookie
+  bearer token
+  full response
+  unrelated fields
+```
+
+TLSNotary introduction frames the protocol in three steps: prover requests data over TLS while cooperating with verifier in MPC, prover selectively discloses data, verifier verifies it. This is the cleanest vocabulary for the whole guide: fetch, prove, verify.
+
+## Failure Mode
+
+첫 번째 실패는 screenshot proof다. screenshot은 visual artifact일 뿐 cryptographic artifact가 아니다. browser chrome, DOM, timestamp, account context, transport integrity가 모두 약하다.
+
+두 번째 실패는 API token delegation이다. verifier에게 token을 주면 verifier는 필요한 claim보다 더 많은 data를 읽고, action까지 수행할 수 있다. provenance를 얻으려다 authorization을 넘겨주는 꼴이 된다.
+
+세 번째 실패는 raw response oversharing이다. 서버 응답 전체를 보내면 origin content는 보일 수 있지만 privacy가 깨진다. account id, address, session metadata, unrelated fields가 함께 노출된다.
+
+네 번째 실패는 origin과 claim을 분리하지 않는 것이다. "잔고가 100 이상"이라는 claim만 있으면 어떤 bank, 어떤 account, 어떤 시점인지 모른다. 반대로 origin transcript만 있으면 어떤 claim을 verifier가 받아들여야 하는지 모른다.
+
+다섯 번째 실패는 stale proof다. 오래된 response로 만든 proof가 현재 상태처럼 쓰이면 replay가 된다. freshness nonce, timestamp, verifier challenge가 필요하다.
+
+여섯 번째 실패는 zk라는 단어로 trust assumption을 숨기는 것이다. zk proof가 있어도 notary, proxy, circuit, parser, verifier implementation에 대한 신뢰와 공격면은 남는다.
+
+## Minimal Lab or Trace
+
+evidence comparison lab:
+
+```txt
+claim:
+  membershipTier == gold
+
+methods:
+  screenshot
+  copied JSON
+  shared token
+  proxy trace
+  zkTLS proof
+```
+
+worksheet:
+
+| method | proves source? | leaks secret? |
+|---|---|---|
+| screenshot | no | maybe |
+| copied JSON | no | maybe |
+| token | not proof | yes |
+| proxy | depends | depends |
+| zkTLS | yes | minimized |
+
+negative tests:
+
+```txt
+edit screenshot:
+  not detectable
+
+edit copied JSON:
+  not detectable
+
+reuse old proof:
+  freshness reject
+
+open extra field:
+  consent failure
+```
+
+이 lab은 zkTLS가 왜 필요한지 보여준다. 암호학 세부 구현보다 "어떤 증거가 어떤 claim을 뒷받침하는가"를 먼저 묻는다.
+
+## zkTLS Bridge
+
+이 article은 전체 가이드의 다리다. CIA, risk, trust boundary, TLS, API security, supply chain, commitment, ZK, MPC를 모두 하나의 product question으로 모은다.
+
+```txt
+Can a user prove:
+  data came from origin O
+  in session S
+  field P satisfies Q
+  without revealing R
+  under verifier policy V?
+```
+
+zkTLS는 privacy-preserving data portability의 한 방식이다. 그러나 proof가 valid하다고 해서 데이터 source가 trustworthy한지, claim이 충분한지, verifier가 사용할 권리가 있는지는 자동으로 해결되지 않는다. provenance와 reliance는 다르다.
+
+## Verification Checklist
+
+- TLS가 제3자 검증 가능한 response signature를 기본 제공하지 않는다는 문제를 설명했는가?
+- screenshot, copied JSON, shared token, proxy, zkTLS proof를 비교했는가?
+- source origin, session integrity, selected claim, verifier policy를 분리했는가?
+- privacy와 provenance 요구를 동시에 다뤘는가?
+- stale proof와 token delegation failure를 포함했는가?
+- zkTLS가 모든 trust problem을 없앤다고 과장하지 않았는가?
+
+## Visual Artifact Brief
+
+- Artifact key: zktls-provenance-evidence-ladder
+- Purpose: screenshot, copied JSON, token sharing, proxy, zkTLS proof가 어떤 보장과 누출을 갖는지 비교한다.
+- Layout: 왼쪽에는 evidence ladder, 오른쪽에는 origin, integrity, privacy, policy 축의 coverage matrix를 둔다.
+- Labels: origin, session integrity, selected claim, redaction, freshness, verifier policy.
+- Motion idea: 약한 evidence가 red gap을 남기고, zkTLS proof가 four-axis receipt로 접히는 animation.
+- Reduced-motion state: evidence table과 transcript receipt diagram.
+
+## References
+
+- [TLSNotary Introduction](https://tlsnotary.org/docs/intro/)
+- [TLSNotary FAQ](https://tlsnotary.org/docs/faq/)
+- [DECO arXiv](https://arxiv.org/abs/1909.00938)
+- [DECO paper PDF](https://research.chain.link/deco.pdf)

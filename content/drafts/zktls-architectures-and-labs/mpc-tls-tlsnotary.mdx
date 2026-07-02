@@ -1,0 +1,331 @@
+---
+title: MPC-TLS와 TLSNotary
+chapter: ZKTLS Architectures and Labs
+chapterSlug: zktls-architectures-and-labs
+articleSlug: mpc-tls-tlsnotary
+status: draft
+difficulty: deep
+wordCountTarget: 8800
+visualKey: proof-pipeline
+branch: content/c08-a03-mpc-tls-tlsnotary
+readerQuestion: TLSNotary의 MPC-TLS는 prover가 response를 위조하지 못하게 어떤 역할 분리를 만드는가?
+zktlsBridge: TLSNotary는 TLS response provenance를 실제 developer가 다룰 수 있는 protocol API로 만든다.
+references:
+  - https://tlsnotary.org/docs/intro/
+  - https://tlsnotary.org/docs/protocol/mpc-tls/
+  - https://tlsnotary.org/docs/protocol/mpc-tls/handshake/
+  - https://tlsnotary.org/docs/protocol/mpc-tls/encryption/
+  - https://tlsnotary.org/docs/protocol/notarization/
+  - https://tlsnotary.org/docs/protocol/verification/
+  - https://tlsnotary.org/docs/faq/
+---
+
+# MPC-TLS와 TLSNotary
+
+## Reader Question
+
+TLSNotary의 MPC-TLS는 prover가 response를 위조하지 못하게 무엇을 나누는가? 핵심은 TLS session secret과 cryptographic operation을 단일 prover가 독점하지 못하게 하는 것이다. Prover는 server와 물리적으로 통신하지만, TLS handshake와 암복호화/MAC 관련 계산은 verifier와 MPC로 협업한다.
+
+TLSNotary MPC-TLS 문서는 prover와 verifier가 MPC protocol을 실행해 prover가 TLS-enabled server와 연결하고 데이터를 교환할 수 있게 한다고 설명한다. verifier는 encrypted application data만 배우고, prover는 request를 단독 구성하거나 server response를 forge할 수 없으며, exchanged data의 authenticity를 verifier에게 증명할 수 있다.
+
+## Why It Matters
+
+일반 TLS client는 server와 공유한 symmetric secret을 알고 있다. 이 때문에 client가 제3자에게 "이 transcript는 서버가 보냈다"고 말해도, 제3자는 client가 locally fabricated transcript를 만들었는지 구분하기 어렵다. MPC-TLS는 prover와 verifier가 session key share를 나눠 이 문제를 완화한다.
+
+TLSNotary introduction은 protocol을 세 단계로 설명한다. Prover가 TLS로 data를 요청하면서 verifier와 MPC를 수행한다. 그 다음 prover가 data를 selectively disclose한다. 마지막으로 verifier가 data를 검증한다. notary mode에서는 general-purpose notary가 commitments to data and server identity에 서명하고, application-specific verifier가 나중에 opening을 검증한다.
+
+중요한 제약도 있다. TLSNotary introduction은 현재 TLS 1.2를 지원하고 TLS 1.3 support는 roadmap이라고 명시한다. 따라서 현대 TLS 1.3/ECH 환경에서의 일반 구현 가능성을 과장하면 안 된다.
+
+## Core Model
+
+role model:
+
+```txt
+Prover:
+  initiates TLS connection
+  talks to Server
+  sees plaintext
+  holds key share
+
+Verifier:
+  joins MPC
+  holds key share
+  sees ciphertext
+  checks authenticity
+
+Server:
+  sees ordinary TLS client
+
+Notary:
+  optional delegated verifier
+```
+
+phase model:
+
+```txt
+MPC-TLS phase
+  handshake
+  key shares
+  encrypted request
+  MAC check
+  decrypted response
+
+Notarization phase
+  plaintext commitment
+  server identity commitment
+  signed Session Header
+
+Verification phase
+  opening
+  redaction
+  parser
+  policy check
+```
+
+이 모델에서 ZK는 모든 일을 하지 않는다. MPC-TLS가 origin data authenticity를 만들고, commitment가 나중의 selective opening을 가능하게 하며, parser와 policy가 application claim을 만든다.
+
+developer가 기억할 boundary는 세 개다. 첫째, TLS boundary다. server와 prover 사이의 transport security는 TLS가 담당한다. 둘째, MPC boundary다. prover가 TLS cryptographic material을 단독으로 소유하지 못하게 verifier가 계산에 참여한다. 셋째, disclosure boundary다. verifier나 application은 필요한 range와 predicate만 보아야 한다.
+
+```txt
+boundary stack:
+  TLS transport
+  MPC key sharing
+  commitment receipt
+  selective disclosure
+  app policy
+```
+
+## Protocol or System Artifact
+
+handshake artifact:
+
+```txt
+Prover starts TLS
+Prover and Verifier run MPC
+session key shares computed
+neither learns full key
+TLS handshake completes
+```
+
+encryption/decryption artifact:
+
+```txt
+request:
+  Prover plaintext input
+  both TLS key shares
+  MPC encrypts
+  MPC computes MAC
+  ciphertext sent
+
+response:
+  ciphertext received
+  MAC validated in MPC
+  decryption in MPC
+  plaintext to Prover only
+```
+
+notarization artifact:
+
+```txt
+Session Header:
+  plaintext commitment
+  TLS-specific commitment
+  Notary signature
+```
+
+verification artifact:
+
+```txt
+Verifier receives:
+  signed Session Header
+  opening to plaintext
+  TLS-specific data
+  server identity
+
+Verifier checks:
+  opening matches commitment
+  TLS data matches commitment
+  server identity matches data
+  redacted parser output
+```
+
+이 artifact vocabulary를 쓰면 proof UI가 "verified"라고만 말하지 않고 어느 단계가 통과했는지 말할 수 있다.
+
+notary delegation artifact도 별도로 둔다.
+
+```txt
+notary proof:
+  notary identity
+  signature algorithm
+  session header hash
+  server identity commitment
+  plaintext commitment
+  issuance time
+```
+
+application verifier는 notary identity와 signature를 확인할 뿐 아니라, 그 notary가 이 claim type에 대해 허용되는지 policy로 확인해야 한다. "서명은 맞지만 허용하지 않는 notary"는 reject되어야 한다.
+
+## Failure Mode
+
+첫 번째 실패는 online verifier cost를 숨기는 것이다. MPC-TLS는 prover와 verifier가 protocol 중 협업해야 하므로 bandwidth, latency, availability가 UX에 직접 영향을 준다. mobile 환경에서 abort와 retry가 많으면 proof completion rate가 낮아질 수 있다.
+
+두 번째 실패는 verifier가 plaintext를 본다고 착각하거나, 반대로 아무 정보도 보지 않는다고 착각하는 것이다. TLSNotary는 verifier가 encrypted application data를 배우며 plaintext는 보지 않는다고 설명한다. 하지만 metadata와 protocol transcript는 별도 privacy surface다.
+
+세 번째 실패는 request provenance를 무시하는 것이다. response가 authentic해도 어떤 request에 대한 response인지가 중요하다. method, path, body, auth context가 verifier policy와 맞지 않으면 claim 의미가 달라진다.
+
+네 번째 실패는 notary trust를 지우는 것이다. notary가 Session Header에 서명하면 proof는 portable해지지만, application verifier는 notary를 신뢰해야 한다. TLSNotary introduction도 verifier가 signed data를 받아들이려면 notary를 trust해야 한다고 설명한다.
+
+다섯 번째 실패는 redaction policy를 parser 뒤에 붙이는 것이다. sensitive field가 parser error, boundary mismatch, compression, chunking 때문에 새면 selective disclosure가 깨진다. commitment range와 parser grammar가 함께 설계되어야 한다.
+
+여섯 번째 실패는 TLS version caveat를 빼는 것이다. TLS 1.2 지원과 TLS 1.3 roadmap을 구분하지 않으면 독자는 모든 modern TLS deployment에서 바로 작동한다고 오해한다.
+
+일곱 번째 실패는 old implementation lineage를 무시하는 것이다. TLSNotary introduction은 older versions including PageSigner가 security vulnerability로 archived되었다고 말한다. historical project name이 같아도 current protocol과 old implementation을 섞으면 안 된다.
+
+여덟 번째 실패는 server identity privacy를 무조건 유지된다고 말하는 것이다. TLSNotary documentation은 notary setup에서 plaintext와 server identity privacy를 다루지만, application verifier에게 origin을 공개해야 하는 claim도 많다. 어떤 actor가 server identity를 보는지 diagram으로 명시해야 한다.
+
+아홉 번째 실패는 commitment opening을 final claim으로 착각하는 것이다. opening은 selected bytes를 보여준다. verifier는 이를 HTTP/JSON parser로 해석하고 policy에 맞게 판단해야 한다. redacted bytes가 parser semantics를 바꿀 수 있으면 claim은 안전하지 않다.
+
+열 번째 실패는 proof portability와 replay를 혼동하는 것이다. Session Header가 portable해도 verifier challenge, freshness window, allowed disclosure range가 없으면 오래된 data가 새 decision으로 재사용될 수 있다.
+
+## Minimal Lab or Trace
+
+challenge-binding trace:
+
+```txt
+verifier creates:
+  nonce
+  audience
+  origin policy
+  disclosure scope
+  expiry
+
+prover returns:
+  session header hash
+  request hash
+  opened ranges
+  parser id
+```
+
+decision table:
+
+| check | reject when |
+|---|---|
+| audience | wrong verifier |
+| nonce | reused value |
+| expiry | outside window |
+| request hash | wrong endpoint |
+| parser id | unknown version |
+
+이 trace는 TLSNotary 자체를 다시 구현하는 lab이 아니다. application verifier가 cryptographic receipt를 어떤 policy object와 결합해야 하는지 확인하는 최소 연습이다. response authenticity만 보지 말고 request template, origin, freshness, allowed disclosure scope가 모두 같은 claim에 묶였는지 확인한다.
+
+sequence trace:
+
+```txt
+1. Prover chooses URL
+2. Verifier challenge created
+3. MPC-TLS handshake runs
+4. request encrypted with shares
+5. server response authenticated
+6. plaintext committed
+7. Session Header signed
+8. selected ranges opened
+9. application parser runs
+10. verifier policy accepts
+```
+
+failure table:
+
+| phase | failure | result |
+|---|---|---|
+| handshake | MPC abort | no proof |
+| request | wrong path | policy reject |
+| response | MAC mismatch | reject |
+| notarize | bad signature | reject |
+| disclose | extra field | privacy failure |
+| parse | wrong grammar | claim failure |
+
+safe lab rule:
+
+```txt
+never use:
+  real bank account
+  real session cookie
+  production token
+  sensitive health data
+
+use:
+  toy server
+  fixture response
+  synthetic credential
+  local verifier
+```
+
+이 lab은 architecture trace를 이해하기 위한 것이며 실제 credential을 꺼내는 demo가 아니다.
+
+mode comparison lab:
+
+| question | MPC-TLS trace |
+|---|---|
+| who sees plaintext? | prover only |
+| who sees ciphertext? | both |
+| who signs receipt? | notary |
+| who parses output? | app verifier |
+| who sets policy? | verifier |
+
+이 표를 proxy mode 표와 비교하면 mode별 trust boundary가 선명해진다.
+
+## zkTLS Bridge
+
+운영 관점의 bridge는 "어떤 proof가 유효한가"가 아니라 "어떤 verifier가 어떤 상황에서 이 proof를 받아들이는가"까지 포함한다. notary allowlist, TLS version support, server identity 공개 수준, parser version, freshness window, appeal path가 함께 있어야 user-facing zkTLS decision이 된다. 이 항목들이 빠지면 protocol은 맞아도 product는 다시 screenshot verifier와 비슷한 신뢰 문제로 돌아간다.
+
+request binding도 bridge의 일부다. 같은 JSON field라도 `/accounts/primary`와 `/accounts/demo`에서 온 값은 다른 claim이다. verifier는 response commitment뿐 아니라 method, path, request body shape, audience, challenge를 정책으로 확인해야 한다. 이 경계를 두면 prover가 참인 데이터를 가져왔지만 verifier가 의도하지 않은 문맥에서 가져온 경우를 거절할 수 있다.
+
+TLSNotary는 zkTLS를 추상 개념에서 protocol API로 내린다. prover, verifier, notary, server, Session Header, opening, redaction 같은 artifact가 생기면 product와 UI가 논의할 수 있는 대상이 생긴다.
+
+zkTLS product event:
+
+```txt
+proof event:
+  mode = mpc-tls
+  tls version
+  notary id
+  session header hash
+  origin
+  disclosed ranges
+  parser id
+  policy id
+  result
+```
+
+이 event가 있어야 나중에 어떤 notary와 어떤 protocol mode로 어떤 claim을 받아들였는지 audit할 수 있다. cryptographic proof와 operational provenance를 함께 기록해야 한다.
+
+MPC-TLS는 zkTLS의 "왜 ZK만으로 안 되는가"에 대한 답이기도 하다. ZK circuit은 prover가 가진 witness가 predicate를 만족한다고 말할 수 있지만, 그 witness가 서버가 보낸 response인지까지 알려면 TLS provenance layer가 필요하다. TLSNotary는 이 provenance layer를 별도 protocol로 만든다.
+
+## Verification Checklist
+
+- Prover, Verifier, Server, Notary 역할을 분리했는가?
+- MPC-TLS가 prover의 unilateral forgery를 줄이는 이유를 설명했는가?
+- encrypted data와 plaintext visibility를 구분했는가?
+- handshake, encryption/decryption, notarization, verification artifact를 나눴는가?
+- online verifier cost, bandwidth, abort를 failure mode로 포함했는가?
+- TLS 1.2 지원과 TLS 1.3 roadmap caveat를 명시했는가?
+- redaction과 parser policy를 verification에 연결했는가?
+
+## Visual Artifact Brief
+
+- Artifact key: tlsnotary-mpc-tls-session-header-flow
+- Purpose: MPC-TLS에서 key share, ciphertext, commitment, Session Header, opening이 어떻게 이어지는지 보여준다.
+- Layout: Prover, Verifier/Notary, Server, Application Verifier 네 lane의 sequence diagram.
+- Labels: key share, encrypted data, MAC, plaintext commitment, TLS-specific data, Session Header, opening, redaction.
+- Motion idea: session key가 두 share로 나뉘고 full key가 한 곳에 모이지 않으며, plaintext는 commitment로 접힌 뒤 선택 range만 열린다.
+- Reduced-motion state: phase table과 actor visibility matrix.
+
+## References
+
+- [TLSNotary Introduction](https://tlsnotary.org/docs/intro/)
+- [TLSNotary MPC-TLS](https://tlsnotary.org/docs/protocol/mpc-tls/)
+- [TLSNotary Handshake](https://tlsnotary.org/docs/protocol/mpc-tls/handshake/)
+- [TLSNotary Encryption and Decryption](https://tlsnotary.org/docs/protocol/mpc-tls/encryption/)
+- [TLSNotary Notarization](https://tlsnotary.org/docs/protocol/notarization/)
+- [TLSNotary Verification](https://tlsnotary.org/docs/protocol/verification/)
+- [TLSNotary FAQ](https://tlsnotary.org/docs/faq/)

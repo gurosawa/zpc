@@ -1,0 +1,350 @@
+---
+title: Toy circuit에서 production risk까지
+chapter: ZKTLS Architectures and Labs
+chapterSlug: zktls-architectures-and-labs
+articleSlug: toy-circuit-production-risk
+status: draft
+difficulty: lab
+wordCountTarget: 9600
+visualKey: circuit-grid
+branch: content/c08-a06-toy-circuit-production-risk
+readerQuestion: 교육용 회로와 production proof system 사이에는 어떤 보안·성능·운영 간극이 있는가?
+zktlsBridge: zkTLS labs는 반드시 실제 서비스 데이터, secret, account token을 쓰지 않는 안전한 경계를 유지해야 한다.
+references:
+  - https://csrc.nist.gov/pubs/sp/800/218/final
+  - https://slsa.dev/spec/v1.2/
+  - https://slsa.dev/spec/v1.2/provenance
+  - https://tlsnotary.org/docs/intro/
+  - https://tlsnotary.org/docs/faq/
+---
+
+# Toy circuit에서 production risk까지
+
+## Reader Question
+
+toy circuit이 통과하면 production proof system도 안전한가? 아니다. toy circuit은 predicate shape를 가르친다. production proof system은 soundness, witness generation, parser correctness, key lifecycle, setup provenance, circuit audit, performance, monitoring, incident response를 요구한다.
+
+교육용 lab은 필요하다. `membershipTier == gold` 같은 작은 predicate를 circuit으로 표현하면 witness와 public input의 차이를 이해할 수 있다. 그러나 실제 zkTLS product는 attacker-controlled response, real browser constraints, user secrets, supply chain, verifier policy, logging, support workflow를 만난다.
+
+## Why It Matters
+
+zkTLS는 demo가 위험한 영역이다. 멋진 browser proof demo를 만들고 싶어 real account, real session cookie, real bank response를 쓰면 user secret이 test artifact와 log에 남을 수 있다. Toy lab은 반드시 synthetic data와 local fixture를 사용해야 한다.
+
+NIST SSDF는 secure software development practice를 SDLC에 통합해 취약점을 줄이고 root cause를 다루는 공통 vocabulary를 제공한다. SLSA v1.2는 supply chain security levels와 provenance attestation formats를 다룬다. zkTLS production risk는 circuit만의 문제가 아니라 software delivery와 운영 검증의 문제다.
+
+## Core Model
+
+toy vs production model:
+
+| surface | toy | production |
+|---|---|---|
+| data | fixture | user origin data |
+| secret | none | cookie or token risk |
+| parser | simple | versioned grammar |
+| circuit | small | audited relation |
+| keys | fake | lifecycle managed |
+| proof | demo | policy-bound artifact |
+| logs | console | privacy-reviewed audit |
+
+risk expansion:
+
+```txt
+toy predicate
+  -> statement spec
+  -> parser spec
+  -> circuit constraints
+  -> witness generator
+  -> proof system params
+  -> verifier policy
+  -> audit event
+  -> incident playbook
+```
+
+한 줄 predicate는 production에서 여러 artifact로 분해된다. 이 분해가 없으면 toy guarantee가 product guarantee처럼 보인다.
+
+production mental model은 proof relation plus operating envelope이다. proof relation은 circuit이 보장하는 수학적 관계다. operating envelope은 어떤 code가 witness를 만들고, 어떤 binary가 verify하며, 어떤 key와 parameter가 쓰이고, 어떤 logs와 alerts가 남는지를 말한다. 둘 중 하나라도 약하면 product guarantee는 약하다.
+
+## Protocol or System Artifact
+
+lab tier manifest:
+
+```txt
+concept lab:
+  local fixture
+  toy circuit
+  fake verifier
+
+integration lab:
+  mock origin
+  synthetic account
+  local policy
+
+pilot:
+  test account only
+  approval gate
+  rollback plan
+```
+
+각 tier는 허용되는 data와 금지되는 data를 code로 강제해야 한다. "교육용"이라는 안내 문구만으로는 충분하지 않다. input component, network layer, environment variable, logging layer가 모두 production credential을 거부해야 안전한 lab이 된다.
+
+toy circuit:
+
+```txt
+private:
+  membershipTier
+
+public:
+  expectedTier = gold
+
+constraint:
+  membershipTier == expectedTier
+```
+
+production grid:
+
+```txt
+input:
+  origin response
+  parser witness
+  field path
+  redaction policy
+
+proof:
+  circuit id
+  proving key hash
+  public input schema
+  proof bytes
+
+verify:
+  verifier version
+  policy id
+  freshness
+  decision reason
+```
+
+supply chain artifact:
+
+```txt
+release:
+  verifier digest
+  circuit digest
+  proving key id
+  verification key id
+  SBOM
+  provenance
+```
+
+SLSA provenance tracks artifact back to where, when, and how it was produced. For zkTLS this includes verifier binary, circuit artifact, proving key, verification key, parser package, browser extension, and deployment image.
+
+release manifest:
+
+```txt
+zkTLS release:
+  verifier image digest
+  circuit bundle digest
+  parser package version
+  proving key id
+  verification key id
+  policy schema version
+  provenance reference
+```
+
+이 manifest는 proof verification event와 연결되어야 한다. 그래야 특정 circuit bug나 parser bug가 발견됐을 때 어떤 proof decisions가 영향을 받는지 찾을 수 있다.
+
+## Failure Mode
+
+첫 번째 실패는 under-constrained circuit이다. toy circuit이 tier equality만 확인하고 tier value가 TLS response field에서 왔다는 constraint를 빼면 prover가 임의 witness를 넣을 수 있다.
+
+두 번째 실패는 parser/circuit mismatch다. parser는 `membership.tier`를 읽는데 circuit spec은 `/member/tier`를 기대하면 honest proof가 실패하거나 wrong field가 accepted될 수 있다.
+
+세 번째 실패는 witness generator를 trusted code로 방치하는 것이다. circuit이 강해도 witness generator가 wrong response를 넣거나 public input을 과다 공개하면 privacy와 soundness가 깨진다.
+
+네 번째 실패는 key lifecycle 부재다. proving key, verification key, notary key, release signing key가 어떤 version인지 모르면 circuit upgrade와 incident response가 불가능하다.
+
+다섯 번째 실패는 performance cliff다. toy predicate는 milliseconds지만 real parser, hash, TLS transcript, large JSON, browser memory constraint를 만나면 user device에서 실패할 수 있다.
+
+여섯 번째 실패는 logs as leak surface다. proof failure debug log가 private witness, response snippet, cookie, URL query를 남기면 production monitoring이 privacy incident가 된다.
+
+일곱 번째 실패는 build provenance 부재다. verifier binary와 circuit artifact가 어떤 source와 builder에서 나왔는지 모르면 proof acceptance path를 신뢰하기 어렵다. SLSA v1.2 provenance와 Chapter 06 supply chain practice가 여기에 연결된다.
+
+여덟 번째 실패는 demo disclaimer로 product policy를 대체하는 것이다. "교육용"이라고 써도 product가 real account를 입력받으면 threat model은 production이다. 안전 경계는 text가 아니라 code path와 fixture-only enforcement로 만들어야 한다.
+
+아홉 번째 실패는 audit을 code review로만 처리하는 것이다. circuit audit, parser audit, witness generator audit, verifier policy review는 서로 다르다. 한 영역의 통과가 다른 영역의 통과를 의미하지 않는다.
+
+열 번째 실패는 verifier key rotation을 incident 후에 설계하는 것이다. verification key나 circuit parameter가 revoke되어야 할 때 old proofs를 어떻게 처리할지 미리 정해야 한다. accept list, deny list, deprecation window, replay policy가 필요하다.
+
+열한 번째 실패는 performance budget을 보안 밖으로 두는 것이다. proving이 느리면 사용자는 flow를 중단하거나 cached stale proof를 재사용하고 싶어 한다. timeout과 retry policy는 security policy와 연결된다.
+
+열두 번째 실패는 third-party library update를 circuit semantic change로 보지 않는 것이다. JSON parser, unicode normalization, bigint library, hash implementation이 바뀌면 witness semantics가 바뀔 수 있다. dependency update는 proof relation에 영향을 줄 수 있다.
+
+## Minimal Lab or Trace
+
+release and recall drill:
+
+```txt
+release includes:
+  circuit id
+  verifier digest
+  parser version
+  key id
+  provenance link
+
+recall asks:
+  affected decisions
+  affected proofs
+  active verifiers
+  replacement policy
+```
+
+readiness gate:
+
+| gate | pass condition |
+|---|---|
+| constraints | audit complete |
+| parser | fixture tests |
+| witness | no secret logs |
+| keys | rotation tested |
+| release | provenance present |
+| incident | recall rehearsed |
+
+이 drill은 production 이전에 반드시 실패시켜 봐야 한다. parser가 wrong field를 accept하는 상황, verification key가 revoke되는 상황, proof system dependency가 바뀌는 상황을 rehearsal하지 않으면 실제 incident에서 어떤 decision을 무효화해야 하는지 찾기 어렵다.
+
+safe lab:
+
+```txt
+fixture:
+  membershipTier: gold
+  accountId: test-only
+
+rule:
+  no external network
+  no real cookie
+  no pasted token
+  no production endpoint
+```
+
+expansion table:
+
+| toy step | production question |
+|---|---|
+| read field | parser audited? |
+| compare value | constraints complete? |
+| generate proof | witness safe? |
+| verify proof | policy bound? |
+| show success | audit event? |
+
+negative test:
+
+```txt
+wrong field path:
+  reject
+
+real token input:
+  blocked by UI
+
+large response:
+  bounded memory
+
+deprecated circuit:
+  policy reject
+
+debug logging:
+  no witness data
+```
+
+이 lab은 "작은 회로를 production처럼 믿지 말라"를 체화한다.
+
+production readiness drill:
+
+```txt
+bug found:
+  parser accepts wrong field
+
+ask:
+  which releases affected?
+  which proofs accepted?
+  which verifier keys used?
+  which customers notified?
+  which circuit deprecated?
+```
+
+이 drill에 답할 수 없으면 production observability가 부족하다. toy circuit은 이런 질문을 요구하지 않지만 real system은 요구한다.
+
+## zkTLS Bridge
+
+zkTLS에서 toy-to-production gap은 특히 크다. TLS provenance, parser semantics, ZK constraints, verifier policy가 모두 맞아야 claim이 된다. toy circuit이 predicate 하나를 증명해도 그 predicate가 특정 TLS response field와 정확히 연결되어 있다는 보장은 별도 artifact가 담당한다. 그래서 production bridge는 circuit diagram보다 release manifest와 incident recall table에 더 많이 의존한다.
+
+safe sample-data policy:
+
+```txt
+allowed:
+  generated accounts
+  deterministic fixtures
+  fake tokens
+  mock origins
+
+blocked:
+  pasted cookies
+  real bank data
+  production OAuth
+  personal documents
+```
+
+이 policy가 없으면 lab은 교육 자료가 아니라 credential collection surface가 된다. 최종 챕터의 결론은 간단하다. zkTLS proof를 만들 수 있다는 사실과 사용자의 private web data를 안전하게 다룰 수 있다는 사실은 서로 다른 주장이다.
+
+zkTLS labs는 교육과 안전을 동시에 만족해야 한다. 사용자가 실제 service credential을 넣어야만 이해할 수 있는 lab은 나쁜 lab이다. synthetic origin, deterministic fixture, toy transcript, local verifier만으로도 concept를 설명할 수 있어야 한다.
+
+production readiness checklist:
+
+```txt
+cryptography:
+  circuit audit
+  proof params
+  key lifecycle
+
+software:
+  parser tests
+  verifier build provenance
+  dependency SBOM
+
+privacy:
+  redaction tests
+  log review
+  consent text
+
+operations:
+  monitoring
+  incident recall
+  deprecation policy
+```
+
+이것이 최종 챕터의 마지막 bridge다. zkTLS는 proof demo가 아니라 secure system이다.
+
+최종적으로 lab은 three-tier로 나뉘어야 한다. concept lab은 fixture와 toy circuit만 사용한다. integration lab은 local TLS/mock origin과 synthetic account를 사용한다. production pilot은 별도 approval, test accounts, monitoring, rollback plan, privacy review를 거친다. 세 tier를 섞지 않는 것이 안전하다.
+
+## Verification Checklist
+
+- toy circuit과 production guarantee를 분리했는가?
+- 실제 계정, token, cookie 사용 금지를 명시했는가?
+- parser, witness generator, circuit, verifier policy를 artifact로 나눴는가?
+- key lifecycle과 circuit/proving/verifying key id를 다뤘는가?
+- build provenance와 SLSA v1.2를 최신 기준으로 연결했는가?
+- logging과 monitoring을 privacy risk로 포함했는가?
+- production readiness checklist가 cryptography, software, privacy, operations를 모두 포함하는가?
+
+## Visual Artifact Brief
+
+- Artifact key: toy-circuit-production-risk-grid
+- Purpose: toy predicate가 production proof system으로 확장될 때 추가되는 risk와 artifact를 보여준다.
+- Layout: 왼쪽에는 toy circuit 3줄, 오른쪽에는 production grid를 cryptography/software/privacy/operations quadrant로 배치한다.
+- Labels: witness, parser, circuit id, key lifecycle, provenance, SBOM, log redaction, incident recall.
+- Motion idea: toy circuit의 한 constraint가 여러 production artifacts로 확장되고, missing artifact는 red gap으로 표시된다.
+- Reduced-motion state: toy-to-production expansion table과 readiness checklist.
+
+## References
+
+- [NIST SP 800-218 SSDF](https://csrc.nist.gov/pubs/sp/800/218/final)
+- [SLSA v1.2 specification](https://slsa.dev/spec/v1.2/)
+- [SLSA v1.2 Provenance](https://slsa.dev/spec/v1.2/provenance)
+- [TLSNotary Introduction](https://tlsnotary.org/docs/intro/)
+- [TLSNotary FAQ](https://tlsnotary.org/docs/faq/)

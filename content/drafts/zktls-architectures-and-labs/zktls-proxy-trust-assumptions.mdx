@@ -1,0 +1,229 @@
+---
+title: Proxy 방식과 신뢰 가정
+chapter: ZKTLS Architectures and Labs
+chapterSlug: zktls-architectures-and-labs
+articleSlug: zktls-proxy-trust-assumptions
+status: draft
+difficulty: intermediate
+wordCountTarget: 7000
+visualKey: proof-pipeline
+branch: content/c08-a02-zktls-proxy-trust-assumptions
+readerQuestion: proxy 기반 zkTLS는 어떤 단순성을 얻고 어떤 신뢰를 새로 요구하는가?
+zktlsBridge: proxy 접근은 zkTLS architecture spectrum의 한쪽 끝으로, MPC-TLS와 비교해야 한다.
+references:
+  - https://tlsnotary.org/docs/intro/
+  - https://tlsnotary.org/docs/protocol/proxy-mode/
+  - https://tlsnotary.org/docs/faq/
+  - https://arxiv.org/abs/1909.00938
+  - https://www.deco.works/
+---
+
+# Proxy 방식과 신뢰 가정
+
+## Reader Question
+
+proxy 기반 zkTLS는 왜 매력적인가? client와 server 사이의 traffic을 proxy가 중계하고 관찰하면, prover와 verifier가 복잡한 MPC를 매번 수행하지 않아도 된다. 성능과 구현은 단순해질 수 있다. 하지만 proxy가 어떤 데이터를 보고, 어떤 network-path assumption을 새로 만드는지 정확히 말해야 한다.
+
+TLSNotary 문서는 MPC-TLS를 default and recommended mode로 두고, proxy mode를 bandwidth가 binding constraint이고 더 강한 MPC-TLS 보장을 완화할 수 있는 use case의 alternative로 설명한다. proxy mode에서는 verifier가 prover와 server 사이의 network proxy로 동작하고 encrypted TLS packets를 forward하며, 세션 후 prover의 zero-knowledge proof를 검증한다.
+
+## Why It Matters
+
+architecture는 보장 문장으로 이어진다. proxy가 plaintext를 못 본다고 해서 privacy risk가 0은 아니다. proxy는 timing, destination, packet sizes, TLS metadata, IP address, session frequency를 볼 수 있다. 또한 proxy가 network path에 들어가야 하므로 server가 proxy IP를 볼 수 있고, 일부 service는 proxy traffic을 차단하거나 다르게 응답할 수 있다.
+
+반대로 MPC-TLS는 stronger guarantee를 목표로 하지만 bandwidth와 latency 비용이 크다. 모든 product가 같은 보장을 필요로 하지는 않는다. high-frequency identity check, controlled verifier infrastructure, 낮은 latency requirement에서는 proxy mode가 실용적일 수 있다. 핵심은 어떤 보장을 포기하고 어떤 효율을 얻는지 정직하게 쓰는 것이다.
+
+## Core Model
+
+proxy trust model:
+
+```txt
+Client or Prover
+  -> Proxy or Verifier
+  -> Server
+
+Proxy observes:
+  encrypted packets
+  timing
+  endpoints
+  packet sizes
+  handshake metadata
+
+Proxy should not learn:
+  plaintext
+  hidden fields
+  session secret
+```
+
+comparison:
+
+| axis | proxy mode | MPC-TLS |
+|---|---|---|
+| bandwidth | lower | higher |
+| latency | lower | higher |
+| verifier online | yes | yes or notary |
+| privacy boundary | proxy path | MPC protocol |
+| guarantee | weaker | stronger |
+| server view | proxy path | normal client |
+
+이 표는 단순 우열이 아니다. product가 필요한 guarantee를 먼저 정하고 mode를 고른다.
+
+proxy mode의 mental model은 trusted middlebox가 아니라 network observer plus proof verifier다. proxy가 TLS plaintext를 읽지 못하더라도 packet forwarding 위치를 차지한다. 따라서 proxy identity, deployment region, log policy, TLS termination 여부, verifier와 proxy의 organizational boundary를 모두 trust model에 넣어야 한다.
+
+## Protocol or System Artifact
+
+proxy observer flow:
+
+```txt
+preprocess:
+  setup ZK circuits
+
+TLS session:
+  prover connects through proxy
+  proxy forwards encrypted packets
+  proxy records traffic
+  prover keeps master secret
+
+verification:
+  prover proves key derivation
+  verifier checks Finished data
+  verifier checks server records
+```
+
+TLSNotary proxy mode reference는 세 단계를 설명한다. preprocessing에서 key derivation 검증용 ZK circuit을 준비하고, TLS session에서 verifier proxy가 encrypted packets를 forwarding/recording하며, verification에서 prover가 TLS 1.2 PRF derivation과 GHASH key를 ZK로 증명해 observed traffic과 legitimate TLS session을 묶는다.
+
+관측 가능 데이터 table:
+
+| actor | sees |
+|---|---|
+| prover | plaintext and secrets |
+| proxy | encrypted traffic |
+| server | proxy network path |
+| verifier | proof and openings |
+
+이 artifact는 privacy claim을 검증하는 기준이다. "proxy가 plaintext를 못 본다"와 "proxy가 아무것도 모른다"는 다르다.
+
+## Failure Mode
+
+첫 번째 실패는 metadata leakage 무시다. encrypted traffic만 보더라도 domain, timing, response size, frequency, IP, failure pattern은 민감할 수 있다. health portal이나 financial endpoint에서는 metadata 자체가 private이다.
+
+두 번째 실패는 proxy trust boundary를 숨기는 것이다. proxy가 verifier와 같은 조직인지, third-party service인지, user device local component인지에 따라 threat model이 달라진다. diagram 없이 "proxy mode"라고만 쓰면 보장 문장이 비어 있다.
+
+세 번째 실패는 network-path assumption 과소평가다. server가 proxy IP를 보고 다른 content를 주거나 request를 block하면 proof가 사용자 실제 세션과 다를 수 있다. geo, bot detection, fraud system이 response semantics를 바꿀 수 있다.
+
+네 번째 실패는 weaker guarantee를 UX에서 숨기는 것이다. 사용자는 "zkTLS proof"라고만 보지만 backend는 proxy mode와 MPC mode를 섞을 수 있다. verifier policy와 proof metadata에는 mode가 명시되어야 한다.
+
+다섯 번째 실패는 proxy log retention이다. proxy가 encrypted traffic만 저장해도 traffic pattern과 proof correlation이 남는다. retention, deletion, audit, access control이 필요하다.
+
+여섯 번째 실패는 ZK proof가 proxy honesty를 대체한다고 오해하는 것이다. ZK proof는 특정 relation을 증명한다. proxy가 관찰한 traffic universe, session binding, network path assumption은 별도 policy다.
+
+일곱 번째 실패는 proxy와 verifier를 같은 actor로 뭉개는 것이다. 어떤 제품은 verifier infrastructure가 proxy를 운영하고, 어떤 제품은 third-party proxy를 쓴다. verifier가 proxy를 직접 운영하면 availability와 logging 책임을 가진다. third-party proxy라면 data processing agreement, retention proof, abuse handling, incident notification이 필요하다.
+
+여덟 번째 실패는 selective disclosure 이후의 parser를 proxy trust model 밖에 두는 것이다. proxy는 encrypted traffic만 보았고, verifier는 나중에 proof와 disclosure를 본다. 이 둘 사이에 parser가 있으면 parser version이 어떤 encrypted session과 어떤 public claim을 연결했는지 audit되어야 한다.
+
+## Minimal Lab or Trace
+
+observability lab:
+
+```txt
+actors:
+  prover
+  proxy
+  server
+  verifier
+
+record:
+  request time
+  destination
+  packet count
+  byte length
+  proof output
+  disclosed field
+```
+
+table:
+
+| data | prover | proxy | verifier |
+|---|---|---|---|
+| plaintext | yes | no | selected |
+| master secret | yes | no | no |
+| destination | yes | yes | policy |
+| timing | yes | yes | maybe |
+| hidden field | yes | no | no |
+
+negative tests:
+
+```txt
+server blocks proxy IP:
+  proof unavailable
+
+proxy stores logs:
+  retention risk
+
+wrong mode metadata:
+  policy reject
+
+oversized response:
+  metadata leak
+```
+
+이 lab은 proxy가 나쁜 방식이라는 주장이 아니다. proxy가 만든 observation surface를 구체적으로 적는 연습이다.
+
+mode selection worksheet:
+
+| requirement | proxy fit? |
+|---|---|
+| low latency | often yes |
+| server IP sensitivity | maybe no |
+| blind verifier | no |
+| low bandwidth | often yes |
+| strongest guarantee | use MPC |
+| controlled infra | maybe yes |
+
+이 worksheet는 security architecture review에서 사용한다. "proxy mode를 썼다"는 결론이 아니라 "이 verifier가 이 claim에 대해 proxy mode를 받아도 되는가"가 결론이어야 한다.
+
+## zkTLS Bridge
+
+proxy mode는 zkTLS architecture spectrum의 한쪽 끝이다. 빠르고 구현이 쉬울 수 있지만, privacy와 trust boundary가 더 넓어진다. MPC-TLS는 비용이 크지만 prover가 response를 위조하지 못하게 하는 강한 역할 분리를 제공한다.
+
+zkTLS product는 proof artifact에 mode를 넣어야 한다.
+
+```txt
+proof metadata:
+  mode = proxy
+  proxy identity
+  observed session id
+  proof relation id
+  disclosure policy
+  verifier challenge
+```
+
+이 metadata가 있어야 verifier가 proxy mode를 허용할지 결정할 수 있다. 모든 verifier가 모든 mode를 받아들일 필요는 없다.
+
+또한 proxy mode proof는 user-facing consent에 mode를 드러내야 한다. 사용자는 "이 proof에서 verifier infrastructure가 encrypted traffic의 endpoint와 timing을 관찰한다"는 사실을 알아야 한다. consent text는 cryptographic proof의 일부는 아니지만 product safety의 일부다.
+
+## Verification Checklist
+
+- proxy가 보는 데이터와 보지 못하는 데이터를 분리했는가?
+- TLSNotary가 MPC-TLS를 default/recommended로 둔다는 점을 반영했는가?
+- proxy mode의 lower bandwidth/latency와 weaker guarantee trade-off를 설명했는가?
+- server가 proxy path를 볼 수 있다는 network assumption을 포함했는가?
+- metadata leakage와 proxy log retention을 failure mode로 다뤘는가?
+- proof artifact에 mode와 proxy identity가 포함되는가?
+- MPC-TLS와 비교 가능한 축을 만들었는가?
+
+## Visual Artifact Brief
+
+- Artifact key: proxy-observer-trust-boundary-flow
+- Purpose: proxy mode에서 각 actor가 보는 데이터와 생기는 신뢰 경계를 보여준다.
+- Layout: Prover, Proxy, Server, Verifier 네 column을 두고 encrypted traffic, proof, disclosure flow를 다른 색으로 표시한다.
+- Labels: encrypted packets, timing, metadata, ZK proof, proxy identity, weaker guarantee, policy gate.
+- Motion idea: traffic이 proxy를 통과하며 metadata dots를 남기고, proof verification phase에서 selected claim만 verifier로 이동한다.
+- Reduced-motion state: actor observability table과 trust boundary map.
+
+## References
+
+- [TLSNotary Introduction](https://tlsnotary.org/docs/intro/)
+- [TLSNotary Proxy Mode](https://tlsnotary.org/docs/protocol/proxy-mode/)
+- [TLSNotary FAQ](https://tlsnotary.org/docs/faq/)
+- [DECO arXiv](https://arxiv.org/abs/1909.00938)
+- [DECO project site](https://www.deco.works/)
