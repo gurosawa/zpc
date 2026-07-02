@@ -869,7 +869,7 @@
       "order": 5,
       "title": "APPLICATION AND API SECURITY",
       "slug": "application-and-api-security",
-      "status": "planned",
+      "status": "draft",
       "visualKey": "api-authz-object-graph",
       "guidingQuestion": "애플리케이션과 API의 실패는 zkTLS claim의 신뢰성을 어떻게 흔드는가?",
       "articles": [
@@ -880,7 +880,7 @@
           "title": "OWASP Top 10 최신판 읽는 법",
           "slug": "owasp-top-10-reading",
           "branch": "content/c05-a01-owasp-top-10-reading",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "foundation",
           "wordCountTarget": 5000,
           "visualKey": "risk-matrix",
@@ -897,8 +897,14 @@
             "zkTLS claim 품질과 연결했는가?"
           ],
           "references": [
-            "https://owasp.org/www-project-top-ten/"
-          ]
+            "https://owasp.org/www-project-top-ten/",
+            "https://owasp.org/Top10/2025/",
+            "https://owasp.org/Top10/2025/0x00_2025-Introduction/",
+            "https://owasp.org/API-Security/editions/2023/en/0x11-t10/",
+            "https://owasp.org/www-project-application-security-verification-standard/",
+            "https://owasp.org/www-project-web-security-testing-guide/"
+          ],
+          "actualWordCount": 6176
         },
         {
           "id": "c05-a02",
@@ -907,7 +913,7 @@
           "title": "Broken Access Control과 BOLA",
           "slug": "broken-access-control-bola",
           "branch": "content/c05-a02-broken-access-control-bola",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "deep",
           "wordCountTarget": 8000,
           "visualKey": "api-authz-object-graph",
@@ -924,9 +930,15 @@
             "proof가 앱 버그를 고치지 못한다는 점을 적었는가?"
           ],
           "references": [
-            "https://owasp.org/www-project-api-security/",
-            "https://owasp.org/www-project-top-ten/"
-          ]
+            "https://owasp.org/Top10/2025/A01_2025-Broken_Access_Control/",
+            "https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/",
+            "https://owasp.org/API-Security/editions/2023/en/0xa3-broken-object-property-level-authorization/",
+            "https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html",
+            "https://csrc.nist.gov/pubs/sp/800/162/upd2/final",
+            "https://datatracker.ietf.org/doc/html/rfc9110",
+            "https://datatracker.ietf.org/doc/html/rfc7519"
+          ],
+          "actualWordCount": 8090
         },
         {
           "id": "c05-a03",
@@ -935,7 +947,7 @@
           "title": "Injection과 output encoding",
           "slug": "injection-output-encoding",
           "branch": "content/c05-a03-injection-output-encoding",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "intermediate",
           "wordCountTarget": 6600,
           "visualKey": "api-authz-object-graph",
@@ -952,8 +964,15 @@
             "오염된 응답 proof의 위험을 설명했는가?"
           ],
           "references": [
-            "https://owasp.org/www-project-top-ten/"
-          ]
+            "https://owasp.org/Top10/2025/A05_2025-Injection/",
+            "https://cheatsheetseries.owasp.org/cheatsheets/Injection_Prevention_Cheat_Sheet.html",
+            "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html",
+            "https://cheatsheetseries.owasp.org/cheatsheets/Query_Parameterization_Cheat_Sheet.html",
+            "https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html",
+            "https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html",
+            "https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html"
+          ],
+          "actualWordCount": 7353
         },
         {
           "id": "c05-a04",
@@ -962,7 +981,7 @@
           "title": "Authentication, session, token 실패",
           "slug": "authentication-session-token-failures",
           "branch": "content/c05-a04-authentication-session-token-failures",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "deep",
           "wordCountTarget": 7800,
           "visualKey": "transcript-receipt",
@@ -979,9 +998,18 @@
             "zkTLS proof 요청에서 토큰 노출 금지를 명시했는가?"
           ],
           "references": [
-            "https://owasp.org/www-project-top-ten/",
-            "https://owasp.org/www-project-api-security/"
-          ]
+            "https://owasp.org/Top10/2025/A07_2025-Authentication_Failures/",
+            "https://owasp.org/API-Security/editions/2023/en/0xa2-broken-authentication/",
+            "https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html",
+            "https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html",
+            "https://pages.nist.gov/800-63-4/sp800-63b.html",
+            "https://datatracker.ietf.org/doc/html/rfc9700",
+            "https://datatracker.ietf.org/doc/html/rfc6749",
+            "https://datatracker.ietf.org/doc/html/rfc6750",
+            "https://datatracker.ietf.org/doc/html/rfc7519",
+            "https://openid.net/specs/openid-connect-core-1_0.html"
+          ],
+          "actualWordCount": 8283
         },
         {
           "id": "c05-a05",
@@ -990,7 +1018,7 @@
           "title": "API inventory, shadow API, rate limit",
           "slug": "api-inventory-shadow-api-rate-limit",
           "branch": "content/c05-a05-api-inventory-shadow-api-rate-limit",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "intermediate",
           "wordCountTarget": 6200,
           "visualKey": "api-authz-object-graph",
@@ -1007,8 +1035,16 @@
             "proof fetch 단계의 호출 정책을 연결했는가?"
           ],
           "references": [
-            "https://owasp.org/www-project-api-security/"
-          ]
+            "https://owasp.org/API-Security/editions/2023/en/0xa9-improper-inventory-management/",
+            "https://owasp.org/API-Security/editions/2023/en/0xa4-unrestricted-resource-consumption/",
+            "https://owasp.org/API-Security/editions/2023/en/0xa6-unrestricted-access-to-sensitive-business-flows/",
+            "https://owasp.org/API-Security/editions/2023/en/0x11-t10/",
+            "https://spec.openapis.org/oas/latest.html",
+            "https://datatracker.ietf.org/doc/html/rfc6585",
+            "https://datatracker.ietf.org/doc/html/rfc9110",
+            "https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final"
+          ],
+          "actualWordCount": 7592
         },
         {
           "id": "c05-a06",
@@ -1017,7 +1053,7 @@
           "title": "Logging, alerting, exceptional conditions",
           "slug": "logging-alerting-exceptional-conditions",
           "branch": "content/c05-a06-logging-alerting-exceptional-conditions",
-          "status": "planned",
+          "status": "draft",
           "difficulty": "intermediate",
           "wordCountTarget": 6200,
           "visualKey": "risk-matrix",
@@ -1034,9 +1070,16 @@
             "proof id와 policy version을 포함했는가?"
           ],
           "references": [
+            "https://owasp.org/Top10/2025/A09_2025-Security_Logging_and_Alerting_Failures/",
+            "https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html",
+            "https://cheatsheetseries.owasp.org/cheatsheets/Logging_Vocabulary_Cheat_Sheet.html",
+            "https://cheatsheetseries.owasp.org/cheatsheets/Error_Handling_Cheat_Sheet.html",
+            "https://datatracker.ietf.org/doc/html/rfc9457",
+            "https://csrc.nist.gov/pubs/sp/800/92/final",
             "https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final",
-            "https://owasp.org/www-project-top-ten/"
-          ]
+            "https://datatracker.ietf.org/doc/html/rfc9110"
+          ],
+          "actualWordCount": 8102
         }
       ]
     },

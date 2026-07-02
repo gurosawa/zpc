@@ -1,0 +1,244 @@
+---
+title: Authentication, session, token 실패
+chapter: Application and API Security
+chapterSlug: application-and-api-security
+articleSlug: authentication-session-token-failures
+status: draft
+difficulty: deep
+wordCountTarget: 7800
+visualKey: transcript-receipt
+branch: content/c05-a04-authentication-session-token-failures
+readerQuestion: 세션과 토큰은 어떤 수명, 저장 위치, binding을 잃을 때 깨지는가?
+zktlsBridge: zkTLS proof flow는 사용자 세션을 외부로 넘기지 않고 consent와 최소 공개만 가져가야 한다.
+references:
+  - https://owasp.org/Top10/2025/A07_2025-Authentication_Failures/
+  - https://owasp.org/API-Security/editions/2023/en/0xa2-broken-authentication/
+  - https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html
+  - https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html
+  - https://pages.nist.gov/800-63-4/sp800-63b.html
+  - https://datatracker.ietf.org/doc/html/rfc9700
+  - https://datatracker.ietf.org/doc/html/rfc6749
+  - https://datatracker.ietf.org/doc/html/rfc6750
+  - https://datatracker.ietf.org/doc/html/rfc7519
+  - https://openid.net/specs/openid-connect-core-1_0.html
+---
+
+# Authentication, session, token 실패
+
+## Reader Question
+
+로그인에 성공했는데도 왜 계정 탈취, 세션 하이재킹, 토큰 재사용이 계속 발생하는가? 이유는 authentication이 단일 event가 아니라 authenticator, session, token, recovery, reauthentication, logout, resource access가 이어진 lifecycle이기 때문이다. 어느 한 단계가 약하면 전체 chain이 약해진다.
+
+OWASP Top 10 2025는 Authentication Failures를 A07로 다룬다. OWASP API Security Top 10 2023은 API2 Broken Authentication을 별도 category로 다루며, login뿐 아니라 reset password, OTP, token handling, automated abuse까지 포함한다. NIST SP 800-63B는 authenticator와 session management를 분리해 요구사항을 둔다. OAuth 2.0 Security Best Current Practice인 RFC 9700은 redirect URI, PKCE, token leakage, browser-based attack 같은 OAuth threat를 다룬다.
+
+## Why It Matters
+
+인증 실패는 "비밀번호 검증이 약하다"로 끝나지 않는다. 사용자가 control하는 authenticator가 있고, 서버는 그 결과로 session secret이나 token을 발급한다. 그 token은 API를 호출하는 bearer capability가 된다. bearer token은 소유한 사람이 곧 사용자라는 의미가 아니라, token을 가진 요청이 통과된다는 의미다. 그러므로 token이 URL, log, referrer, browser history, mobile storage, third-party script로 새면 authentication event가 아무리 강해도 resource access는 탈취된다.
+
+zkTLS proof flow는 사용자의 authenticated session에서 응답을 fetch하는 경우가 많다. 이때 session cookie나 bearer token을 verifier에게 넘기면 proof가 아니라 credential sharing이 된다. proof system은 session secret을 witness로 다루고, 공개 claim은 최소화해야 한다. 또한 verifier는 "이 응답이 어떤 authenticated context에서 왔는가"와 "사용자 credential이 노출되지 않았는가"를 동시에 봐야 한다.
+
+좋은 authentication 설계는 identity proofing, authenticator strength, session secret, token audience, resource authorization을 분리한다. OAuth access token, OIDC ID Token, session cookie, API key는 같은 물건이 아니다. 혼동이 시작되면 검증도 실패한다.
+
+## Core Model
+
+기본 mental model은 다음 chain이다.
+
+```txt
+claimant
+  -> authenticator
+  -> verifier / identity provider
+  -> session
+  -> token issuer
+  -> resource server
+  -> protected object
+```
+
+`claimant`는 자신이 어떤 subscriber라고 주장하는 주체다. `authenticator`는 password, OTP app, passkey, hardware key, recovery code처럼 그 주장을 증명하는 수단이다. `session`은 성공한 authentication 이후 user agent와 relying party 사이에 유지되는 state다. `access token`은 resource server가 API 요청을 허용할 때 쓰는 delegated capability다. `ID Token`은 OIDC에서 authentication result를 client에게 전달하는 assertion이다.
+
+각 단계는 다른 failure property를 가진다.
+
+| artifact | 주요 질문 |
+|---|---|
+| password/MFA/passkey | claimant가 authenticator를 control하는가? |
+| session cookie | secret이 안전하게 저장되고 회전되는가? |
+| access token | audience, scope, expiry, sender가 맞는가? |
+| refresh token | 장기 secret이 rotation과 revocation을 갖는가? |
+| ID Token | issuer, audience, nonce, signature가 검증되는가? |
+| recovery flow | login보다 약한 우회 경로가 아닌가? |
+
+NIST 800-63B의 session 관점은 중요하다. session에는 overall timeout과 inactivity timeout이 있고, 민감한 행위에는 reauthentication 또는 step-up이 필요할 수 있다. session 유지가 길수록 usability는 좋아지지만 token theft의 영향도 커진다.
+
+## Protocol or System Artifact
+
+Session cookie artifact:
+
+```txt
+Set-Cookie: sid=opaque-random-value;
+  Secure;
+  HttpOnly;
+  SameSite=Lax;
+  Path=/;
+  Max-Age=...
+```
+
+좋은 session ID는 opaque하고 충분히 random하며 privilege change 후 회전된다. login 전 anonymous session과 login 후 authenticated session을 같은 ID로 유지하면 session fixation 위험이 있다. logout은 client cookie 삭제만이 아니라 server-side invalidation을 포함해야 한다.
+
+JWT artifact:
+
+```txt
+header:
+  alg, kid, typ
+payload:
+  iss, sub, aud, exp, nbf, iat, jti, scope
+signature:
+  validated with expected key
+  validated with expected algorithm
+```
+
+JWT는 decode만 하면 안 된다. signature, algorithm allow-list, issuer, audience, expiry, not-before, key selection, token type을 검증해야 한다. `alg=none` 같은 역사적 실패만 기억하는 것으로 부족하다. 더 흔한 실패는 wrong audience token을 받아들이거나, access token과 ID token을 바꿔 쓰거나, `exp`를 무시하는 것이다.
+
+OAuth artifact:
+
+```txt
+authorization request:
+  response_type=code
+  client_id
+  redirect_uri
+  scope
+  state
+  code_challenge
+
+token request:
+  code
+  redirect_uri
+  code_verifier
+
+resource request:
+  Authorization: Bearer access_token
+```
+
+RFC 9700은 OAuth deployment에서 authorization code flow와 PKCE, redirect URI 검증, token leakage 방지를 중요하게 다룬다. Bearer token을 쓰는 경우 TLS 보호 channel, short lifetime, audience 제한, refresh token rotation, sender constraint를 함께 고려해야 한다. API key를 user authentication으로 쓰는 것도 흔한 오해다. API key는 client나 integration 식별에는 쓸 수 있지만 user identity와 session assurance를 대체하지 않는다.
+
+## Failure Mode
+
+첫 번째 실패는 recovery flow가 login보다 약한 것이다. password reset, email change, OTP resend, backup code, device enrollment는 모두 authentication surface다. 공격자는 정문 login보다 recovery endpoint를 노린다. reset token이 길게 살아 있거나, email link가 log에 남거나, OTP가 rate limit 없이 재시도되면 MFA를 켜도 우회된다.
+
+두 번째 실패는 session rotation 누락이다. 로그인 전 session ID를 로그인 후에도 유지하거나, privilege escalation, MFA 완료, role switch 후 session을 회전하지 않으면 fixation과 confused session 문제가 생긴다. 특히 admin 전환, payment confirmation, key export 같은 sensitive operation은 reauthentication과 fresh session signal이 필요하다.
+
+세 번째 실패는 bearer token 노출이다. access token을 URL query에 넣으면 browser history, proxy log, referrer, screenshot, analytics에 남을 수 있다. Authorization header를 application log에 그대로 남기는 것도 같은 문제다. token은 password처럼 다뤄야 한다. hash 또는 fingerprint만 로그에 남겨 correlation에 쓰고, 원문은 저장하지 않는다.
+
+네 번째 실패는 JWT validation shortcut이다. front-end에서 decode한 payload를 신뢰하거나, resource server가 `aud`를 확인하지 않거나, issuer별 key set을 혼동하거나, expired token을 clock skew 핑계로 넓게 허용하면 token replay가 가능해진다. JWT가 signed되었다는 사실은 "이 API를 위한 token"이라는 뜻이 아니다.
+
+다섯 번째 실패는 GraphQL batching과 credential stuffing이다. login endpoint에 per-request rate limit을 걸어도 한 request가 여러 login attempt를 담을 수 있으면 우회된다. rate limit key가 IP 하나뿐이면 botnet이나 NAT 환경에서 부정확해진다. authentication abuse는 account, device, credential pair, ASN, user agent, risk signal을 조합해 봐야 한다.
+
+여섯 번째 실패는 RP session과 IdP session을 섞는 것이다. OIDC에서 identity provider logout이 relying party session을 자동으로 지우는 것은 아니다. 반대로 RP logout이 IdP session을 끝내지 않을 수도 있다. 사용자에게 "로그아웃"이라고 보여줄 때 어떤 session이 종료되는지 명확해야 한다.
+
+## Minimal Lab or Trace
+
+실험은 token을 실제로 탈취하려는 목적이 아니라 lifecycle boundary를 확인하는 목적이어야 한다.
+
+```txt
+cookie trace:
+  1. anonymous visit -> sid_a
+  2. login success -> sid_b
+  3. MFA step-up
+     -> sid_c
+     -> elevated session marker
+  4. logout -> sid invalidated server-side
+```
+
+기대 결과는 login 후 session identifier가 회전되고, logout 후 이전 cookie로 protected resource에 접근할 수 없는 것이다.
+
+```txt
+JWT trace:
+  valid token:
+    iss=expected
+    aud=api://orders
+    exp=future
+    alg=RS256
+
+negative tests:
+  wrong aud
+  expired exp
+  wrong issuer
+  changed alg
+  missing signature
+```
+
+resource server는 negative test를 모두 거부해야 한다. failure log에는 token 원문이 아니라 reason code와 token fingerprint만 남긴다.
+
+```txt
+OAuth trace:
+  authorization request:
+    includes state
+    includes PKCE
+  redirect_uri:
+    exactly matches registered value
+  token exchange repeats redirect_uri
+  access token:
+    used only at intended resource server
+```
+
+GraphQL batching test는 낮은 횟수와 sandbox 계정으로 한다. 목표는 실제 부하가 아니라 "하나의 HTTP request 안 attempt 수가 control에 반영되는지"를 보는 것이다.
+
+## zkTLS Bridge
+
+zkTLS에서 session과 token은 proof의 private witness에 가깝다. 사용자 브라우저나 client가 authenticated response를 fetch할 때 cookie나 bearer token이 필요할 수 있지만, verifier에게 그 값을 공개하면 verifier가 사용자의 계정에 접근할 수 있게 된다. 이는 proof가 아니라 credential delegation이다.
+
+좋은 proof statement는 다음을 분리한다.
+
+```txt
+public:
+  origin
+  endpoint class
+  selected response field
+  time or freshness bound
+  account binding predicate
+
+private witness:
+  session cookie
+  bearer token
+  CSRF token
+  full transcript secret material
+
+policy:
+  no raw token disclosure
+  no token in URL
+  no token in audit log
+  proof expires with freshness window
+```
+
+또한 verifier는 "사용자 현존"을 자동으로 가정하지 말아야 한다. bearer token replay로 만든 proof와 사용자가 방금 consent한 proof는 다르다. proof flow가 user consent UI, nonce, challenge, short freshness window, origin binding을 갖는 이유가 여기에 있다. session-derived response를 다루는 zkTLS는 authentication lifecycle을 생략할 수 없다.
+
+## Verification Checklist
+
+- OAuth access token, OIDC ID Token, session cookie, API key를 구분했는가?
+- bearer token이 possession 기반 capability이며 사용자 현존 증명이 아님을 설명했는가?
+- JWT 검증에 signature, allowed algorithm, `iss`, `aud`, `exp`, `nbf`, token type이 포함되는가?
+- login, recovery, OTP, email change, device enrollment endpoint를 같은 authentication surface로 다뤘는가?
+- session ID가 login, MFA, privilege change 후 회전되는가?
+- token과 session ID가 URL, log, referrer, analytics에 남지 않는가?
+- GraphQL batching이나 bulk endpoint가 authentication rate limit을 우회하지 않는가?
+- zkTLS proof flow가 raw session secret을 verifier에게 공개하지 않는가?
+
+## Visual Artifact Brief
+
+- Artifact key: auth-session-token-failure-chain
+- Purpose: authenticator, session, token, resource API가 각각 다른 실패 지점을 가진다는 점을 설명한다.
+- Layout: User, Authenticator, Session Store, Token Issuer, Resource API swimlane을 그리고 각 lane 사이에 secret, assertion, bearer token, policy decision을 표시한다.
+- Labels: reauthentication, session rotation, bearer replay, audience, scope, refresh rotation, sender constraint, token fingerprint, no raw secret.
+- Motion idea: 탈취된 bearer token이 다른 client에서 replay되는 path와 sender-constrained token이 막히는 path를 비교 점등한다.
+- Reduced-motion state: lifecycle 단계별 failure gate와 mitigation badge가 있는 정적 흐름도.
+
+## References
+
+- [OWASP Top 10:2025 A07 Authentication Failures](https://owasp.org/Top10/2025/A07_2025-Authentication_Failures/)
+- [OWASP API2:2023 Broken Authentication](https://owasp.org/API-Security/editions/2023/en/0xa2-broken-authentication/)
+- [OWASP Authentication Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html)
+- [OWASP Session Management Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html)
+- [NIST SP 800-63B](https://pages.nist.gov/800-63-4/sp800-63b.html)
+- [RFC 9700: Best Current Practice for OAuth 2.0 Security](https://datatracker.ietf.org/doc/html/rfc9700)
+- [RFC 6749: OAuth 2.0 Authorization Framework](https://datatracker.ietf.org/doc/html/rfc6749)
+- [RFC 6750: OAuth 2.0 Bearer Token Usage](https://datatracker.ietf.org/doc/html/rfc6750)
+- [RFC 7519: JSON Web Token](https://datatracker.ietf.org/doc/html/rfc7519)
+- [OpenID Connect Core 1.0](https://openid.net/specs/openid-connect-core-1_0.html)

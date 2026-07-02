@@ -1,0 +1,246 @@
+---
+title: Logging, alerting, exceptional conditions
+chapter: Application and API Security
+chapterSlug: application-and-api-security
+articleSlug: logging-alerting-exceptional-conditions
+status: draft
+difficulty: intermediate
+wordCountTarget: 6200
+visualKey: risk-matrix
+branch: content/c05-a06-logging-alerting-exceptional-conditions
+readerQuestion: 예외 상황과 실패 로그는 어떻게 보안 통제의 일부가 되는가?
+zktlsBridge: zkTLS verifier는 proof id, policy version, result, reason code를 남겨야 claim audit이 가능하다.
+references:
+  - https://owasp.org/Top10/2025/A09_2025-Security_Logging_and_Alerting_Failures/
+  - https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html
+  - https://cheatsheetseries.owasp.org/cheatsheets/Logging_Vocabulary_Cheat_Sheet.html
+  - https://cheatsheetseries.owasp.org/cheatsheets/Error_Handling_Cheat_Sheet.html
+  - https://datatracker.ietf.org/doc/html/rfc9457
+  - https://csrc.nist.gov/pubs/sp/800/92/final
+  - https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final
+  - https://datatracker.ietf.org/doc/html/rfc9110
+---
+
+# Logging, alerting, exceptional conditions
+
+## Reader Question
+
+로그를 많이 남기면 탐지가 되는가? 아니다. 좋은 질문은 "어떤 exceptional condition을 어떤 structured evidence로 남기고, 누가 어떤 alert로 해석하는가"다. 로그는 디버그 문자열이 아니라 detection, response, audit을 위한 시스템 artifact다. 반대로 무분별한 로그는 token, session ID, password reset code, internal hostname, stack trace를 새로 유출하는 표면이 된다.
+
+OWASP Top 10 2025는 Security Logging and Alerting Failures를 A09로 다룬다. OWASP Logging Cheat Sheet는 application log가 infrastructure log만으로는 보이지 않는 subject, object, action, result 맥락을 제공해야 한다고 본다. NIST SP 800-53의 AU control family는 audit event, audit record generation, audit review, audit failure response를 분리한다.
+
+## Why It Matters
+
+application/API security에서 많은 실패는 정상 HTTP path 안에서 발생한다. invalid token, expired token, audience mismatch, authorization deny, rate limit exceeded, parser rejection, impossible workflow, excessive export, repeated password reset, proof verification failed 같은 사건은 500 error가 아닐 수 있다. 정상적으로 401, 403, 409, 422, 429를 반환해도 보안적으로는 관측해야 할 event다.
+
+zkTLS verifier도 예외가 아니다. proof가 실패했을 때 "invalid"만 표시하고 이유, policy version, proof id, origin, timestamp를 남기지 않으면 나중에 replay attempt, stale policy, circuit mismatch, malicious prover, 단순 사용자 실수를 구분할 수 없다. 그러나 witness, session cookie, bearer token, full private transcript를 로그에 남기면 proof system이 보호하려던 privacy가 깨진다.
+
+따라서 logging은 두 가지 경계를 동시에 지켜야 한다. 하나는 관측 가능성이다. 공격과 장애를 조사할 만큼 구조화된 evidence가 있어야 한다. 다른 하나는 최소 공개다. secret과 민감정보는 client error, server log, alert, ticket 어디에도 원문으로 남지 않아야 한다.
+
+## Core Model
+
+보안 logging의 mental model:
+
+```txt
+event
+  -> structured log
+  -> protected pipeline
+  -> detection rule
+  -> alert
+  -> investigation
+  -> control improvement
+```
+
+`event`는 application이 보안적으로 의미 있는 상태 변화를 관측한 순간이다. `structured log`는 event를 field로 나눈 record다. `protected pipeline`은 log collector, queue, storage, retention, access control, integrity protection을 포함한다. `detection rule`은 반복, threshold, impossible transition, policy mismatch를 alert로 승격한다. `investigation`은 trace ID와 audit record를 통해 사건을 재구성한다.
+
+event schema는 최소한 다음 질문에 답해야 한다.
+
+```txt
+when:
+  timestamp, monotonic order when possible
+where:
+  service
+  environment
+  host
+  route
+  version
+who:
+  subject id or pseudonymous identifier
+what:
+  action
+  object type
+  object id hash
+  policy
+result:
+  allow, deny, error, challenge, throttled
+reason:
+  reason code
+  rule id
+  validation error class
+correlation:
+  request id
+  trace id
+  session handle fingerprint
+  token jti hash
+```
+
+모든 field가 모든 event에 필요한 것은 아니다. 하지만 free-form string만 남기면 검색, alert, audit, redaction이 어렵다.
+
+## Protocol or System Artifact
+
+HTTP error artifact는 client와 server를 나눠야 한다. RFC 9457의 problem details는 client에게 machine-readable error structure를 제공할 수 있다.
+
+```json
+{
+  "type": "https://e.example/authn",
+  "title": "Authentication failed",
+  "status": 401,
+  "detail": "Authentication failed.",
+  "instance": "/problems/req_01H..."
+}
+```
+
+client detail은 안전해야 한다. 내부 stack trace, SQL error, key id confusion, token claim 원문을 넣지 않는다. server log에는 더 자세한 reason code를 남길 수 있지만 secret 원문은 넣지 않는다.
+
+Server event example:
+
+```txt
+event_type=auth.token_rejected
+result=deny
+reason=audience_mismatch
+subject_hash=unknown
+token_jti_hash=sha256:...
+route=/api/statements/{id}
+request_id=req_...
+policy_version=authz-2026-07
+```
+
+zkTLS verification event:
+
+```txt
+event_type=proof.verification_failed
+proof_id=prf_...
+origin=https://api.example.com
+policy_version=zktls-policy-12
+result=reject
+reason=expired_freshness_window
+request_id=req_...
+```
+
+NIST SP 800-53 관점에서는 AU-2가 어떤 event를 audit 대상으로 삼을지, AU-12가 audit record 생성, AU-5가 audit processing failure response, AU-6이 audit review와 analysis, SI-4가 monitoring을 다룬다. 이 구분은 "로그 저장"과 "탐지 운영"을 혼동하지 않게 해 준다.
+
+## Failure Mode
+
+첫 번째 실패는 success-only logging이다. 성공한 login과 API call만 남기면 공격자는 실패 흔적 없이 credential stuffing, BOLA probing, JWT audience mismatch, parser rejection을 반복할 수 있다. deny와 reject는 noise가 아니라 security signal이다.
+
+두 번째 실패는 secret logging이다. Authorization header, cookie, session ID, API key, password reset token, OTP, private proof witness, full transcript를 log에 남기면 log system이 credential vault가 된다. 운영자가 보기 편하다는 이유로 원문을 남기면 breach impact가 커진다. fingerprint와 reason code로 충분한 경우가 많다.
+
+세 번째 실패는 client에게 너무 많은 error detail을 주는 것이다. stack trace, SQL error, internal class name, host name, policy rule internals는 attacker에게 reconnaissance data가 된다. client response는 safe problem detail, server log는 제한된 내부 detail로 나눈다.
+
+네 번째 실패는 alert rule이 business flow를 모르는 것이다. `429`가 발생했다는 사실보다 어느 principal이 어떤 operation을 어떤 속도로 반복하는지가 중요하다. password reset, OTP, account creation, export, proof generation은 각각 다른 threshold와 suppression rule이 필요하다.
+
+다섯 번째 실패는 log pipeline failure를 설계하지 않는 것이다. log collector가 내려가면 application은 어떻게 할 것인가? 모든 요청을 막을 것인가, buffer할 것인가, security-critical event만 local fallback에 남길 것인가? AU-5 관점에서 audit processing failure response가 필요하다. 무조건 drop하면 탐지가 사라지고, 무조건 fail-close하면 availability incident가 된다.
+
+여섯 번째 실패는 correlation 부재다. API gateway, app server, database audit, proof verifier, SIEM alert가 서로 다른 request ID를 쓰면 사건 재구성이 어렵다. trace ID가 있어도 user-controlled header를 그대로 신뢰하면 log forging과 attribution 문제가 생긴다.
+
+일곱 번째 실패는 exceptional condition을 일반 500으로 뭉개는 것이다. "unexpected method", "policy version missing", "signature key not found", "proof circuit mismatch", "rate budget exhausted"는 서로 다른 response와 alert를 가져야 한다. 같은 500이라도 cause class를 구조화해야 한다.
+
+## Minimal Lab or Trace
+
+작은 trace는 정상 event와 실패 event를 함께 만든다.
+
+```txt
+events:
+  login_success
+  login_failed_bad_password
+  token_rejected_expired
+  token_rejected_wrong_audience
+  authorization_denied_foreign_object
+  rate_limit_exceeded
+  proof_verification_failed
+  unhandled_exception
+```
+
+각 event마다 client response와 server log를 비교한다.
+
+| event | client response | server log |
+|---|---|---|
+| wrong audience | 401 safe problem | reason=audience_mismatch, token fingerprint |
+| foreign object | 403 or 404 safe problem | subject, object hash, decision=deny |
+| rate limit | 429, optional Retry-After | budget key, operation, threshold |
+| proof failed | reject with safe reason | proof id, policy version, reason code |
+
+redaction test:
+
+```txt
+search logs for:
+  Authorization:
+  Cookie:
+  access_token
+  refresh_token
+  password
+  otp
+  session=
+  private witness
+```
+
+log injection test는 user-controlled string에 newline, tab, JSON delimiter를 넣고 structured log가 깨지지 않는지 본다. collector failure test는 sandbox에서 log sink를 일시 중단하고 buffering, fallback, alert가 기대대로 동작하는지 확인한다.
+
+## zkTLS Bridge
+
+zkTLS proof와 logging은 서로 다른 evidence다. proof는 cryptographic evidence이고, log는 operational evidence다. proof가 통과했다는 log는 proof 자체가 아니다. 반대로 proof artifact가 있다고 해서 운영자가 어떤 policy로 받아들였는지가 자동으로 남는 것도 아니다. 두 evidence를 연결하려면 stable proof id, policy version, verifier identity, result, reason code가 필요하다.
+
+좋은 zkTLS verifier log:
+
+```txt
+proof_id=prf_8d...
+origin=https://api.example.com
+claim_type=account_balance_threshold
+policy_version=v2026-07-03
+verifier_version=1.4.2
+result=accept
+reason=predicate_satisfied
+public_fields_hash=sha256:...
+```
+
+나쁜 zkTLS verifier log:
+
+```txt
+cookie=sid=...
+authorization=Bearer ...
+full_response={...sensitive fields...}
+witness=...
+```
+
+또한 client response와 log를 연결할 때 `instance`나 `request_id`는 공개 가능해야 하지만, 그 ID만으로 private record를 열람할 수 있으면 안 된다. verifier가 사용자에게 proof failure를 설명할 때도 "expired freshness window"처럼 안전한 reason을 주고, 내부 parser dump나 secret material은 감춘다.
+
+## Verification Checklist
+
+- security event와 operational debug event를 구분했는가?
+- authentication, authorization, session, token, rate-limit, proof verification failure가 구조화 로그로 남는가?
+- 로그에 access token, session ID, password reset token, OTP, private witness 원문이 남지 않는가?
+- client error detail과 server internal reason을 분리했는가?
+- RFC 9457 problem detail을 safe client artifact로 설명했는가?
+- AU-2, AU-5, AU-6, AU-12, SI-4 관점에서 생성, 실패 대응, review, monitoring을 나눴는가?
+- alert rule이 business operation과 failure mode에 연결되는가?
+- zkTLS verifier가 proof id, policy version, result, reason code를 남기되 witness를 로그에 남기지 않는가?
+
+## Visual Artifact Brief
+
+- Artifact key: exceptional-condition-observability-pipeline
+- Purpose: exceptional condition이 client error, structured log, detection rule, alert, investigation case로 변환되는 경로를 설명한다.
+- Layout: API handler에서 problem response와 structured log가 갈라지고, log는 collector, detection rule, alert/case로 이어지는 split-flow diagram을 그린다.
+- Labels: safe client detail, internal reason, correlation id, secret redaction, audit event, alert threshold, proof id, policy version.
+- Motion idea: invalid token event가 response와 log로 갈라지고, 반복 패턴에서 alert로 승격되며 secret field는 redaction gate에서 제거된다.
+- Reduced-motion state: split-flow diagram과 redaction callout, event schema table.
+
+## References
+
+- [OWASP Top 10:2025 A09 Security Logging and Alerting Failures](https://owasp.org/Top10/2025/A09_2025-Security_Logging_and_Alerting_Failures/)
+- [OWASP Logging Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html)
+- [OWASP Logging Vocabulary Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Logging_Vocabulary_Cheat_Sheet.html)
+- [OWASP Error Handling Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Error_Handling_Cheat_Sheet.html)
+- [RFC 9457: Problem Details for HTTP APIs](https://datatracker.ietf.org/doc/html/rfc9457)
+- [NIST SP 800-92: Guide to Computer Security Log Management](https://csrc.nist.gov/pubs/sp/800/92/final)
+- [NIST SP 800-53 Rev. 5](https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final)
+- [RFC 9110: HTTP Semantics](https://datatracker.ietf.org/doc/html/rfc9110)

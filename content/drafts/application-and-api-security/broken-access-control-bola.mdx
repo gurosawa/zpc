@@ -1,0 +1,262 @@
+---
+title: Broken Access Control과 BOLA
+chapter: Application and API Security
+chapterSlug: application-and-api-security
+articleSlug: broken-access-control-bola
+status: draft
+difficulty: deep
+wordCountTarget: 8000
+visualKey: api-authz-object-graph
+branch: content/c05-a02-broken-access-control-bola
+readerQuestion: 사용자가 로그인했는데도 왜 다른 객체에 접근할 수 있는가?
+zktlsBridge: zkTLS verifier는 proof된 응답이 application authorization bug의 결과일 수 있음을 threat model에 넣어야 한다.
+references:
+  - https://owasp.org/Top10/2025/A01_2025-Broken_Access_Control/
+  - https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/
+  - https://owasp.org/API-Security/editions/2023/en/0xa3-broken-object-property-level-authorization/
+  - https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html
+  - https://csrc.nist.gov/pubs/sp/800/162/upd2/final
+  - https://datatracker.ietf.org/doc/html/rfc9110
+  - https://datatracker.ietf.org/doc/html/rfc7519
+---
+
+# Broken Access Control과 BOLA
+
+## Reader Question
+
+사용자가 이미 로그인했고 API endpoint도 정상적으로 존재한다면, 왜 path의 object ID를 바꾸는 것만으로 다른 사용자의 데이터를 볼 수 있는가? 답은 authentication과 authorization이 서로 다른 판단이기 때문이다. authentication은 "이 요청을 보낸 주체가 누구인가"를 확인한다. authorization은 "그 주체가 이 객체에 이 행위를 해도 되는가"를 매 요청마다 결정한다.
+
+OWASP Top 10 2025에서 Broken Access Control은 A01이다. API Security Top 10 2023에서는 Broken Object Level Authorization, 즉 BOLA가 API1이다. BOLA는 API endpoint 접근 자체가 막혀야 하는 상황이 아니다. 공격자는 endpoint를 호출할 권한이 있을 수 있다. 실패는 client가 제공한 object identifier로 특정 record를 읽거나 수정할 때, 서버가 그 object와 subject의 관계를 다시 검증하지 않는 지점에서 난다.
+
+## Why It Matters
+
+API는 UI보다 객체 ID를 더 직접적으로 노출한다. browser network panel, mobile app traffic, GraphQL variables, JSON body, query string, header에 object ID가 들어간다. ID가 순차 정수든 UUID든 generic string이든 공격자는 요청에서 찾을 수 있다. ID가 랜덤하면 추측 비용은 올라가지만 authorization을 대체하지는 않는다.
+
+zkTLS에서는 이 문제가 더 중요하다. proof가 성공하면 verifier는 "origin이 이 응답을 보냈다"는 사실에 집중하기 쉽다. 그러나 origin이 취약한 authorization path를 통해 다른 사람의 invoice를 반환했다면, proof는 정상 claim이 아니라 authorization failure를 증명한다. 그래서 BOLA는 zkTLS verifier가 application semantics를 평가할 때 반드시 포함해야 할 실패 모드다.
+
+권한 결정은 login session, role, object ownership, tenant, object state, action, time, policy version이 합쳐진 결과다. JWT의 `sub` claim만 읽는 것으로 충분하지 않다. path의 `userId`와 token의 `sub`를 비교하는 것도 일부 case만 다룬다. 실제로 접근하려는 invoice, document, device, shop, vehicle이 그 subject에게 허용되는지 data source 근처에서 확인해야 한다.
+
+## Core Model
+
+BOLA의 mental model은 다음 함수다.
+
+```txt
+authorize(input) -> allow | deny
+
+subject:
+  authenticated user
+  service
+  client app
+  tenant
+object:
+  invoice
+  order
+  document
+  vehicle
+  account
+  report
+action:
+  read
+  create
+  update
+  delete
+  approve
+  export
+context:
+  tenant
+  ownership
+  relationship
+  object state
+  risk signal
+  policy version
+```
+
+Broken Access Control은 더 넓은 범주다. function-level authorization, object-level authorization, object property-level authorization, CORS, forced browsing, privilege escalation, metadata exposure까지 포함할 수 있다. BOLA는 그중 object-level decision이 빠진 API 특화 실패다.
+
+두 개의 문장을 구분해야 한다.
+
+```txt
+The user may call GET /api/invoices/{id}.
+The user may read invoice inv_9281.
+```
+
+첫 문장은 function 또는 route authorization이다. 둘째 문장은 object authorization이다. BOLA는 첫 문장이 참인 상황에서 둘째 문장을 검증하지 않을 때 발생한다. admin route 접근을 일반 사용자에게 열어둔 것은 BFLA에 가깝고, 같은 route에서 object ID만 바꿔 타인의 data를 읽는 것은 BOLA다.
+
+좋은 access control은 deny-by-default로 시작하고, 서버 측 policy decision을 단일 helper나 middleware 뒤에 숨기되, object lookup 직후 또는 data access layer에서 다시 강제한다. UI에서 button을 숨기는 것은 보조 UX일 뿐 통제가 아니다. client-side authorization은 공격자가 바꿀 수 있는 입력이다.
+
+## Protocol or System Artifact
+
+HTTP request artifact는 다음 정보로 나뉜다.
+
+```txt
+GET /api/accounts/{accountId}
+  /statements/{id}
+Authorization: Bearer eyJ...
+X-Tenant: tenant_a
+
+derived:
+  subject = user_123
+  tenant = tenant_a
+  action = read_statement
+  object = st_2026_06
+  parent = acct_8841
+```
+
+서버의 authorization artifact는 다음처럼 생겨야 한다.
+
+```txt
+policy input:
+  subject.id = user_123
+  subject.roles = ["member"]
+  object.id = st_2026_06
+  object.accountOwner = user_456
+  object.tenant = tenant_a
+  action = read_statement
+  context.sessionAal = 2
+
+decision:
+  deny
+
+reason:
+  subject does not own account
+  delegated access missing
+```
+
+JWT는 이 흐름에서 identity와 일부 attribute를 전달하는 container다. JWT가 signed되었다는 사실은 token claims가 발급자에 의해 만들어졌다는 뜻이지, 특정 object 접근이 허용된다는 뜻이 아니다. token의 `aud`, `iss`, `exp`, `scope`를 검증해도 object ownership 검사는 별도로 필요하다.
+
+ABAC 관점에서는 subject, object, action, environment attribute를 평가한다. RBAC는 role 중심으로 단순화하지만 object relation이 많은 API에서는 부족할 수 있다. ReBAC나 relationship-based model이 필요한 경우도 있다. 어떤 모델을 쓰든 중요한 것은 policy decision이 record 접근 전에 실제 object와 연결되어야 한다는 점이다.
+
+## Failure Mode
+
+첫 번째 실패는 path parameter만 신뢰하는 것이다.
+
+```txt
+GET /api/users/user_123/orders/order_777
+```
+
+서버가 token의 `sub=user_123`과 path의 `user_123`만 비교하고 `order_777`의 소유자를 확인하지 않으면, user가 자기 path 아래에 다른 order ID를 넣는 방식으로 data를 읽을 수 있다. parent ID 검증과 child object 검증은 별개다.
+
+두 번째 실패는 UUID를 authorization으로 착각하는 것이다. UUID는 enumeration을 어렵게 할 수 있지만, leaked URL, browser cache, log, referrer, support ticket, mobile app storage, collaborator link에서 object ID가 노출될 수 있다. OWASP API1은 object ID의 data type과 무관하게 object-level check가 필요하다고 본다.
+
+세 번째 실패는 batch와 GraphQL에서 반복된다.
+
+```txt
+POST /graphql
+variables:
+  documentIds:
+    - doc_a
+    - doc_b
+    - doc_foreign
+```
+
+서버가 mutation을 호출할 function 권한만 검사하고 배열의 각 document에 대한 ownership check를 하지 않으면, 한 요청에서 대량 조작이 가능하다. bulk export, batch delete, bulk approval도 같은 문제를 갖는다.
+
+네 번째 실패는 object property-level authorization 누락이다. API3 BOPLA는 객체 전체 접근뿐 아니라 속성 단위 노출과 쓰기 권한을 다룬다. 예를 들어 `isAdmin`, `creditLimit`, `riskScore`, `internalNote` 같은 property가 response에 과다 포함되거나 request body에서 mass assignment로 수정되면, BOLA와 다른 형태의 authorization failure가 된다.
+
+다섯 번째 실패는 audit log를 access control로 착각하는 것이다. 로그가 남아도 응답이 이미 나갔다면 통제는 실패했다. audit은 탐지와 사후 검증을 돕지만, allow/deny decision을 대체하지 않는다. 좋은 로그는 subject, object, action, decision, reason, policy version을 남겨 regression을 찾게 한다.
+
+여섯 번째 실패는 404로 숨기는 것만으로 끝내는 것이다. unauthorized object에 404를 반환하는 것은 enumeration을 줄이는 UX일 수 있다. 그러나 내부 decision이 allow 후 masking이거나, 일부 endpoint는 403이고 일부는 200이면 여전히 취약하다. 테스트는 status code뿐 아니라 data access와 policy decision 로그를 봐야 한다.
+
+일곱 번째 실패는 cache와 authorization을 분리하지 않는 것이다. CDN, reverse proxy, application cache가 object response를 subject나 tenant와 분리해 keying하지 않으면, origin의 policy decision이 맞아도 다른 사용자에게 cached body가 전달될 수 있다. BOLA는 항상 database query만의 문제가 아니다. response cache key, signed URL, pre-signed download link, export file storage도 object-level authorization의 일부다.
+
+## Minimal Lab or Trace
+
+작은 BOLA lab은 두 사용자와 네 객체면 충분하다.
+
+```txt
+users:
+  alice -> tenant_a
+  bob   -> tenant_a
+  carol -> tenant_b
+
+objects:
+  inv_a1 owner=alice tenant=tenant_a
+  inv_b1 owner=bob   tenant=tenant_a
+  inv_c1 owner=carol tenant=tenant_b
+  inv_admin
+    owner=finance
+    tenant=tenant_a
+    restricted=true
+```
+
+테스트 matrix:
+
+| token | object | action | expected |
+|---|---|---|---|
+| alice | inv_a1 | read | allow |
+| alice | inv_b1 | read | deny |
+| alice | inv_c1 | read | deny |
+| alice | inv_admin | read | deny 또는 step-up |
+| bob | inv_b1 | update | allow if owner update permitted |
+| bob | inv_a1 | delete | deny |
+
+trace는 endpoint 앞뒤를 나눠서 기록한다.
+
+```txt
+1. authenticate token
+2. resolve subject
+3. parse object ID from request
+4. load object with tenant guard
+5. evaluate policy
+6. return response only on allow
+7. log decision without object body
+```
+
+검증 포인트는 "foreign object ID를 넣었을 때 data source에서 record가 조회되었는가"다. 더 안전한 구조는 tenant guard를 query에 포함해 unauthorized object가 애초에 application memory로 올라오지 않게 한다. 그래도 최종 allow/deny decision은 명시적으로 기록해야 한다.
+
+## zkTLS Bridge
+
+zkTLS verifier가 계좌 잔액, 구매 내역, 신용 점수 같은 응답을 받을 때, "응답이 origin에서 왔다"는 검증만으로는 business claim을 완성할 수 없다. BOLA가 있으면 prover가 자기 계정이 아닌 object를 fetch하고, 그 응답을 proof로 제시할 수 있다. proof는 위조가 아니지만 claim semantics는 잘못된다.
+
+따라서 zkTLS statement에는 최소한 다음 중 일부가 필요하다.
+
+```txt
+origin:
+  https://api.example.com
+subject evidence:
+  user binding or session-owned endpoint
+object evidence:
+  account id
+  owner relation
+  tenant
+  path binding
+policy evidence:
+  server-side authorization decision
+  verifier-side constraint
+claim:
+  selected fields from authorized object
+```
+
+privacy를 위해 모든 identifier를 공개할 필요는 없다. 하지만 verifier가 "이 데이터가 prover 자신의 객체에서 왔다"는 조건을 요구한다면, selective disclosure는 owner relation을 숨기면서도 그 조건을 증명할 방법을 가져야 한다. 예를 들어 raw account ID는 숨기되, response 안의 `ownerUserId == sessionUserId` predicate를 증명하거나, origin이 제공하는 scoped endpoint만 허용할 수 있다.
+
+이 연결은 zkTLS 설계자에게 불편한 질문을 던진다. fetch URL을 prover가 임의로 고를 수 있는가? verifier policy가 endpoint pattern과 object relation을 제한하는가? proof viewer가 subject와 object를 구분해 표시하는가? replay된 old proof가 revoked object access를 계속 주장하지 못하게 하는가? BOLA를 threat model에 넣으면 이런 질문이 자연스럽게 나온다.
+
+## Verification Checklist
+
+- authentication, function authorization, object authorization을 문서와 코드에서 분리했는가?
+- client가 제공한 모든 object ID에 서버 측 object-level authorization check가 있는가?
+- token의 `sub`, `scope`, `role`을 object ownership 검사의 대체물로 쓰지 않았는가?
+- UUID, random ID, 404 masking을 authorization으로 착각하지 않았는가?
+- batch request, GraphQL mutation, bulk export의 각 object에 권한 검사가 있는가?
+- object property-level exposure와 mass assignment를 별도 failure mode로 다뤘는가?
+- policy decision 로그가 subject, object, action, decision, reason, policy version을 남기는가?
+- zkTLS verifier policy가 proof된 응답이 권한 버그의 결과일 수 있음을 고려하는가?
+
+## Visual Artifact Brief
+
+- Artifact key: bola-object-policy-gate
+- Purpose: BOLA를 endpoint 접근 실패가 아니라 object-level policy decision 실패로 설명한다.
+- Layout: client token, API route, object ID resolver, policy engine, datastore를 좌에서 우로 배치하고, policy input에는 subject/object/action/context를 네 갈래로 넣는다.
+- Labels: subject, object, action, tenant, ownership, policy version, allow, deny, BOLA, BFLA, BOPLA.
+- Motion idea: 같은 endpoint에서 object ID만 바뀔 때 policy gate가 green allow와 red deny로 갈라지고, gate를 생략한 path가 BOLA로 표시된다.
+- Reduced-motion state: request trace와 2x4 authorization matrix를 나란히 표시한다.
+
+## References
+
+- [OWASP Top 10:2025 A01 Broken Access Control](https://owasp.org/Top10/2025/A01_2025-Broken_Access_Control/)
+- [OWASP API1:2023 Broken Object Level Authorization](https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/)
+- [OWASP API3:2023 Broken Object Property Level Authorization](https://owasp.org/API-Security/editions/2023/en/0xa3-broken-object-property-level-authorization/)
+- [OWASP Authorization Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html)
+- [NIST SP 800-162: Attribute Based Access Control](https://csrc.nist.gov/pubs/sp/800/162/upd2/final)
+- [RFC 9110: HTTP Semantics](https://datatracker.ietf.org/doc/html/rfc9110)
+- [RFC 7519: JSON Web Token](https://datatracker.ietf.org/doc/html/rfc7519)

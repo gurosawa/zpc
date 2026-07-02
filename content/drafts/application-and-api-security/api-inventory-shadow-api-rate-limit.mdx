@@ -1,0 +1,248 @@
+---
+title: API inventory, shadow API, rate limit
+chapter: Application and API Security
+chapterSlug: application-and-api-security
+articleSlug: api-inventory-shadow-api-rate-limit
+status: draft
+difficulty: intermediate
+wordCountTarget: 6200
+visualKey: api-authz-object-graph
+branch: content/c05-a05-api-inventory-shadow-api-rate-limit
+readerQuestion: 보이지 않는 API와 제한 없는 호출은 왜 인증된 시스템에서도 위험한가?
+zktlsBridge: zkTLS client와 verifier는 proof 대상 endpoint의 사용량, consent, rate policy를 존중해야 한다.
+references:
+  - https://owasp.org/API-Security/editions/2023/en/0xa9-improper-inventory-management/
+  - https://owasp.org/API-Security/editions/2023/en/0xa4-unrestricted-resource-consumption/
+  - https://owasp.org/API-Security/editions/2023/en/0xa6-unrestricted-access-to-sensitive-business-flows/
+  - https://owasp.org/API-Security/editions/2023/en/0x11-t10/
+  - https://spec.openapis.org/oas/latest.html
+  - https://datatracker.ietf.org/doc/html/rfc6585
+  - https://datatracker.ietf.org/doc/html/rfc9110
+  - https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final
+---
+
+# API inventory, shadow API, rate limit
+
+## Reader Question
+
+문서화된 public API에는 authentication, authorization, rate limit이 붙어 있는데, 왜 beta host, old version, internal endpoint, GraphQL batch route에서는 같은 통제가 빠지는가? 답은 단순하다. inventory가 없으면 control coverage도 없다. 보안 통제는 존재하는 API 표면 전체에 붙어야 하는데, 조직이 그 표면을 모르면 빠진 endpoint가 생긴다.
+
+OWASP API Security Top 10 2023에서 API9 Improper Inventory Management는 API host, deployed version, 문서화, retirement plan의 부재를 다룬다. API4 Unrestricted Resource Consumption은 CPU, memory, storage, bandwidth, third-party billing 같은 resource 제한 실패를 다룬다. API6 Unrestricted Access to Sensitive Business Flows는 구현 bug가 없어도 자동화 남용이 business harm을 만들 수 있음을 다룬다.
+
+## Why It Matters
+
+API는 웹 페이지보다 빠르게 늘어난다. mobile app용 route, partner integration, admin batch job, beta endpoint, old version, staging host, webhook receiver, GraphQL resolver, export job이 각각 다른 팀에서 나온다. 문서화되지 않은 endpoint가 production data에 연결되면 shadow API가 된다. shadow API는 "숨겨졌으니 안전하다"가 아니라 "통제와 소유자가 보이지 않는다"는 뜻이다.
+
+Rate limit도 request count만의 문제가 아니다. 하나의 request가 PDF export, face verification, SMS 발송, AI inference, large search, GraphQL nested query를 유발할 수 있다. per-IP limit만 있으면 token rotation, botnet, NAT, partner gateway를 제대로 다루지 못한다. 비용과 위험은 principal, operation, object, payload, concurrency, downstream dependency에 따라 달라진다.
+
+zkTLS에서 proof client는 origin API를 반복 호출할 수 있다. verifier가 많은 사용자에게 같은 proof를 요구하면 proof ecosystem이 해당 API에 traffic pressure를 만든다. 따라서 proof 대상 endpoint의 inventory와 rate policy를 이해하지 못하면, privacy-preserving proof가 서비스 남용이나 data scraping으로 바뀔 수 있다.
+
+## Core Model
+
+API 보안의 기본 row는 다음처럼 잡는다.
+
+```txt
+api_inventory_row:
+  host
+  environment
+  version
+  route
+  method
+  operation
+  owner
+  data_class
+  auth_scheme
+  authorization_model
+  rate_policy
+  schema_source
+  lifecycle_state
+  retirement_date
+```
+
+이 row가 있어야 control coverage를 물을 수 있다.
+
+```txt
+coverage(api) =
+  authn
+  + authz
+  + input schema
+  + quota/resource budget
+  + logging/alerting
+  + owner/on-call
+  + deprecation plan
+```
+
+Rate limit은 budget model로 기억한다.
+
+```txt
+budget key:
+  user
+  client_id
+  tenant
+  token subject
+  IP
+  device
+  operation
+
+budget dimension:
+  request count
+  concurrency
+  payload size
+  page size
+  compute time
+  storage
+  downstream cost
+  business action count
+```
+
+이 모델은 "API gateway에 rate limiter가 있다"보다 구체적이다. endpoint마다 cost와 abuse pattern이 다르기 때문이다. password reset과 catalog read, statement export와 profile read, SMS send와 balance check는 같은 quota를 공유하면 안 된다.
+
+## Protocol or System Artifact
+
+OpenAPI document는 inventory의 한 입력이다. paths, methods, parameters, request/response schema, security scheme을 선언한다. 그러나 OpenAPI만이 truth는 아니다. runtime gateway route, service registry, access log, DNS, cloud load balancer, code route table, WAF log와 비교해야 한다.
+
+```txt
+declared:
+  OpenAPI paths
+  API gateway config
+  service catalog
+
+observed:
+  access logs
+  DNS and host inventory
+  traffic graph
+  error logs
+  client SDK calls
+
+diff:
+  declared but unused
+  observed but undocumented
+  old version still receiving traffic
+  public host with internal auth policy
+```
+
+Rate limit artifact는 HTTP response에도 나타난다. RFC 6585는 `429 Too Many Requests` status code를 정의한다. HTTP semantics에 맞게 `Retry-After`를 사용할 수 있다. RateLimit header fields는 계속 발전해 온 HTTP API 논의가 있으므로, 특정 배포 시점의 draft나 구현 문서를 확정 표준처럼 쓰지 않아야 한다. 원고에서는 안정적인 429와 Retry-After 개념을 중심으로 설명한다.
+
+GraphQL이나 bulk API는 route 하나가 여러 operation을 담을 수 있다.
+
+```txt
+POST /graphql
+operations:
+  searchUsers(depth=4)
+  exportInvoices(limit=5000)
+  sendOtp(count=3)
+```
+
+이 경우 route-level count가 아니라 operation-level cost accounting이 필요하다.
+
+## Failure Mode
+
+첫 번째 실패는 host coverage gap이다. `api.example.com`은 gateway와 WAF 뒤에 있지만 `beta-api.example.com`은 같은 database에 직접 연결된다. QA용 host가 production data를 쓰거나, old mobile app을 위해 남긴 `v1` route가 최신 authz helper를 타지 않으면 inventory failure가 된다.
+
+두 번째 실패는 문서와 runtime의 drift다. OpenAPI spec에는 없는 `/internal/export-all` endpoint가 access log에서 보이거나, gateway에는 route가 있는데 owner가 없는 경우가 있다. documentation이 outdated하면 developer는 안전한 client를 만들 수 없고, security team은 어떤 control이 적용되는지 알 수 없다.
+
+세 번째 실패는 per-IP rate limit 과신이다. 공격자는 여러 IP를 쓸 수 있고, 정상 사용자도 NAT 뒤에서 같은 IP를 공유한다. 인증된 API에서는 user, client ID, tenant, token subject, device, operation을 같이 봐야 한다. IP는 하나의 signal이지 identity가 아니다.
+
+네 번째 실패는 resource dimension 누락이다. request count가 낮아도 `pageSize=100000`, file upload, report export, GraphQL deep query, image processing, biometric verification이 비용을 만든다. API4는 network bandwidth, CPU, memory, storage뿐 아니라 SMS, email, phone call, biometrics 같은 paid API integration도 resource로 본다.
+
+다섯 번째 실패는 business flow abuse다. ticket purchase, comment posting, password reset, account creation, coupon issue, proof generation 같은 flow는 구현 bug 없이도 자동화로 business harm을 만든다. API6는 바로 이 지점을 지적한다. rate limit은 infrastructure 보호만이 아니라 business invariant 보호다.
+
+여섯 번째 실패는 429만 있고 alert가 없는 것이다. client에게 Too Many Requests를 반환해도, security event와 trend가 남지 않으면 credential stuffing, scraping, proof farming을 탐지할 수 없다. quota decision은 logging/alerting과 연결되어야 한다.
+
+## Minimal Lab or Trace
+
+작은 inventory lab:
+
+```txt
+1. collect declared routes from OpenAPI
+2. collect gateway routes
+3. collect 24h access log route patterns
+4. normalize method + host + path template
+5. diff declared vs observed
+6. add owner, auth, data class, rate
+```
+
+결과 table:
+
+| host | route | state | owner | auth | rate | finding |
+|---|---|---|---|---|---|---|
+| api.example.com | GET /v2/accounts/{id} | documented | accounts | OAuth | user+operation | ok |
+| beta.example.com | GET /v2/accounts/{id} | observed only | unknown | cookie | none | shadow |
+| api.example.com | GET /v1/export | deprecated | reports | API key | IP only | retire |
+
+rate trace:
+
+```txt
+request burst:
+  20 requests / 10 seconds
+expected:
+  429 after policy threshold
+  Retry-After present when applicable
+  log event includes principal
+  log event includes operation
+  no secret in log
+```
+
+resource trace:
+
+```txt
+boundary values:
+  pageSize = max + 1
+  uploadSize = max + 1
+  graphqlDepth = max + 1
+  exportRows = max + 1
+  concurrentJobs = limit + 1
+```
+
+목표는 부하를 거는 것이 아니라 boundary decision을 확인하는 것이다. production이 아니라 sandbox에서 실행하고, 실제 third-party 비용이 발생하는 endpoint는 mock이나 test account를 사용한다.
+
+## zkTLS Bridge
+
+zkTLS verifier는 "증명 가능한 endpoint"와 "허용된 proof source"를 구분해야 한다. shadow API가 같은 data를 반환한다면 zkTLS는 그 응답도 origin에서 왔다고 증명할 수 있다. 그러나 product가 승인한 API contract, consent text, rate policy, data minimization boundary가 없는 endpoint라면 claim source로 부적절할 수 있다.
+
+proof request에는 endpoint inventory metadata가 필요하다.
+
+```txt
+proof_source_policy:
+  allowed_host
+  allowed_path_template
+  allowed_method
+  required_auth_context
+  maximum_frequency
+  freshness_window
+  data_fields
+  owner_contact
+```
+
+또한 verifier는 repeated proof 요구로 origin을 압박하지 않아야 한다. 같은 사용자가 같은 statement를 여러 번 증명해야 한다면 caching, freshness window, replay protection, consent renewal, rate coordination이 필요하다. zkTLS client는 origin API의 published policy와 robots-like expectation을 존중해야 하며, hidden endpoint scraping을 proof feature로 포장하면 안 된다.
+
+## Verification Checklist
+
+- API9 inventory failure와 API4 resource consumption failure를 구분했는가?
+- API6 sensitive business flow abuse를 구현 bug와 별개로 설명했는가?
+- host, environment, version, route, method, owner, data class, auth scheme, rate policy가 inventory row에 있는가?
+- OpenAPI spec과 runtime route, gateway log, access log를 diff할 수 있는가?
+- rate limit key가 IP 하나에만 의존하지 않는가?
+- payload size, page size, batch depth, concurrency, third-party cost를 제한했는가?
+- 429와 Retry-After를 안정적인 HTTP artifact로 설명했는가?
+- zkTLS proof source policy가 allowed endpoint와 rate expectation을 포함하는가?
+
+## Visual Artifact Brief
+
+- Artifact key: api-inventory-control-coverage-map
+- Purpose: documented API, shadow API, old version, beta host에 auth, authz, quota, logging control이 어디 붙고 빠지는지 보여준다.
+- Layout: 왼쪽에는 inventory table, 오른쪽에는 observed runtime traffic graph, 아래에는 control coverage heatmap을 배치한다.
+- Labels: documented, observed, shadow, deprecated, owner, auth, authz, quota, 429, Retry-After, business flow, proof source policy.
+- Motion idea: access log에서 새 endpoint가 관측되면 inventory row가 없어서 red gap으로 점등되고, owner와 rate policy가 채워지면 green coverage로 바뀐다.
+- Reduced-motion state: route diff table과 coverage matrix의 정적 버전.
+
+## References
+
+- [OWASP API9:2023 Improper Inventory Management](https://owasp.org/API-Security/editions/2023/en/0xa9-improper-inventory-management/)
+- [OWASP API4:2023 Unrestricted Resource Consumption](https://owasp.org/API-Security/editions/2023/en/0xa4-unrestricted-resource-consumption/)
+- [OWASP API6:2023 Unrestricted Access to Sensitive Business Flows](https://owasp.org/API-Security/editions/2023/en/0xa6-unrestricted-access-to-sensitive-business-flows/)
+- [OWASP API Security Top 10 2023](https://owasp.org/API-Security/editions/2023/en/0x11-t10/)
+- [OpenAPI Specification](https://spec.openapis.org/oas/latest.html)
+- [RFC 6585: Additional HTTP Status Codes](https://datatracker.ietf.org/doc/html/rfc6585)
+- [RFC 9110: HTTP Semantics](https://datatracker.ietf.org/doc/html/rfc9110)
+- [NIST SP 800-53 Rev. 5](https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final)

@@ -1,0 +1,230 @@
+---
+title: Injection과 output encoding
+chapter: Application and API Security
+chapterSlug: application-and-api-security
+articleSlug: injection-output-encoding
+status: draft
+difficulty: intermediate
+wordCountTarget: 6600
+visualKey: api-authz-object-graph
+branch: content/c05-a03-injection-output-encoding
+readerQuestion: Injection은 입력 검증 문제가 아니라 interpreter boundary 문제라는 말은 무슨 뜻인가?
+zktlsBridge: zkTLS는 오염된 response의 provenance를 증명할 수 있으므로 source application의 data integrity도 고려해야 한다.
+references:
+  - https://owasp.org/Top10/2025/A05_2025-Injection/
+  - https://cheatsheetseries.owasp.org/cheatsheets/Injection_Prevention_Cheat_Sheet.html
+  - https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html
+  - https://cheatsheetseries.owasp.org/cheatsheets/Query_Parameterization_Cheat_Sheet.html
+  - https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html
+  - https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html
+  - https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html
+---
+
+# Injection과 output encoding
+
+## Reader Question
+
+Injection은 "입력에 이상한 문자가 들어왔다"는 문제가 아니다. 더 정확한 질문은 "untrusted data가 어느 interpreter boundary에서 command, query, markup, code로 해석되는가"다. OWASP Top 10 2025에서 Injection은 A05다. 이 번호를 2021판의 순서와 섞으면 안 된다. category의 핵심은 SQL, NoSQL, OS command, ORM query, LDAP, expression language, browser DOM처럼 데이터를 해석하는 경계에서 code와 data가 분리되지 않는 것이다.
+
+Output encoding은 injection 전체의 보편 처방이 아니라, 주로 browser rendering context에서 untrusted data가 HTML, attribute, JavaScript, CSS, URL code로 실행되지 않도록 만드는 context-specific 방어다. SQL injection의 primary defense는 parameterized query다. XSS의 primary defense는 safe sink와 context별 output encoding이다. OS command injection의 가장 강한 방어는 shell 호출 자체를 피하고 안전한 API나 argv 기반 실행을 쓰는 것이다.
+
+## Why It Matters
+
+zkTLS proof가 서버 응답의 provenance를 보장하더라도, 응답이 injection으로 오염되었으면 claim의 의미는 깨진다. 예를 들어 reward API가 user-controlled `displayName`을 HTML fragment로 반환하고, verifier UI가 그 fragment를 그대로 렌더링하면 "검증된 응답"이 verifier 쪽 XSS payload가 될 수 있다. provenance가 높아질수록 소비자는 그 데이터를 더 믿기 때문에, output handling 실패가 더 위험해진다.
+
+Injection은 흔히 input validation과 혼동된다. input validation은 데이터 shape를 제한한다. 숫자는 숫자로, 날짜는 날짜로, email은 email-like string으로 제한할 수 있다. 하지만 validation만으로 모든 interpreter boundary를 안전하게 만들 수는 없다. 이름에는 apostrophe가 들어갈 수 있고, 검색어에는 기호가 들어갈 수 있으며, JSON value에는 quote가 들어갈 수 있다. 방어는 각 sink에서 code와 data를 분리해야 한다.
+
+따라서 좋은 설명은 "나쁜 문자열을 지운다"가 아니라 "데이터가 어떤 sink에 들어갈 때 어떤 구조로 전달되는지"를 보여준다. SQL은 bind parameter로, HTML text node는 HTML entity encoding으로, JavaScript string은 JavaScript string context encoding으로, shell command는 argv array 또는 shell-free API로 다룬다.
+
+## Core Model
+
+Injection의 mental model은 네 칸이다.
+
+```txt
+source -> transform -> sink -> interpreter
+
+source:
+  query
+  path
+  body
+  header
+  cookie
+  database value
+  third-party API
+
+transform:
+  parse
+  validate
+  normalize
+  template
+  concatenate
+  encode
+
+sink:
+  SQL query
+  HTML template
+  DOM API
+  shell command
+  LDAP filter
+
+interpreter:
+  database engine
+  browser parser
+  shell
+  expression evaluator
+```
+
+취약점은 source가 위험해서 생기는 것이 아니라, transform과 sink가 interpreter에게 data boundary를 보존하지 못할 때 생긴다. 문자열 연결은 data와 command를 같은 buffer에 넣는다. escaping은 특정 context를 가정한다. context가 바뀌면 escape rule도 바뀐다. parameterization은 query structure와 value를 protocol 수준에서 분리하므로 더 강한 방어다.
+
+Output encoding은 context table로 기억한다.
+
+| output context | 필요한 판단 |
+|---|---|
+| HTML body text | HTML entity encoding |
+| HTML attribute | attribute context encoding과 quote 사용 |
+| JavaScript string | JS string encoding, executable context 회피 |
+| URL parameter | parameter value encoding |
+| DOM sink | safe sink 사용, unsafe sink 회피 |
+
+한 context의 encoding을 다른 context에 재사용하면 실패한다. HTML body용 encoding은 JavaScript string context에서 충분하지 않을 수 있다. URL 전체를 encoding하면 routing semantics가 깨질 수 있고, parameter value만 encoding해야 할 때가 많다.
+
+## Protocol or System Artifact
+
+SQL artifact:
+
+```txt
+bad:
+  sql =
+    "SELECT * FROM users WHERE email = '"
+    + email
+    + "'"
+
+good:
+  "SELECT * FROM users WHERE email = ?"
+  bind[0] = email
+```
+
+좋은 경우 database driver는 query template과 value를 분리해 보낸다. database는 value를 SQL grammar로 다시 parse하지 않는다. 동적 table name이나 column name처럼 bind parameter가 적용되지 않는 위치가 필요하다면 allow-list와 별도 query builder가 필요하다.
+
+Browser artifact:
+
+```txt
+data:
+  displayName = user-controlled text
+
+safe target:
+  text node
+  attribute value with proper encoding
+
+danger target:
+  innerHTML
+  inline event handler
+  script block
+```
+
+OS command artifact:
+
+```txt
+bad:
+  shell("convert " + fileName)
+
+better:
+  execFile("convert", [safeInputPath])
+
+best:
+  use a library API
+  avoid shell command execution
+```
+
+REST API artifact도 중요하다. path, query, body, header, cookie는 모두 source가 될 수 있다. 또한 database에서 읽어온 값도 untrusted data일 수 있다. "우리 DB에 저장된 값"은 "렌더링해도 안전한 값"이 아니다. stored XSS는 바로 이 점을 이용한다.
+
+## Failure Mode
+
+첫 번째 실패는 sanitize-once 패턴이다. 입력을 받을 때 한 번 escape하고 여러 sink에 재사용하면, sink마다 다른 grammar를 놓친다. SQL용 quote escaping을 HTML 출력에 쓰거나, HTML entity encoding된 값을 다시 URL에 넣는 식이다. 저장은 canonical data로 하고, encoding은 output context 바로 앞에서 적용하는 편이 안전하다.
+
+두 번째 실패는 escaping을 parameterization 대신 쓰는 것이다. SQL injection 방어에서 prepared statement와 bind parameter가 가능한데도 문자열 escape를 직접 구현하면 encoding bug, character set issue, driver mismatch가 생긴다. OWASP SQL Injection Prevention Cheat Sheet도 prepared statement와 parameterized query를 핵심 방어로 다룬다.
+
+세 번째 실패는 HTML context 혼동이다. template engine이 HTML body를 자동 escape해도, developer가 `innerHTML`이나 unsafe DOM sink를 쓰면 보호가 사라진다. attribute context, URL context, JavaScript context는 별도 rule이 필요하다.
+
+네 번째 실패는 shell escaping 과신이다. command injection은 semicolon 같은 metacharacter만 문제가 아니다. `--output=/sensitive/path` 같은 argument injection도 가능하다. shell을 피하고 library API를 쓰는 것이 더 강하다. 꼭 command를 호출해야 한다면 argv array, allow-list, fixed command, working directory, permission boundary를 함께 써야 한다.
+
+다섯 번째 실패는 AI prompt injection을 전통적 injection과 그대로 섞는 것이다. LLM prompt injection도 instruction과 data boundary가 무너지는 문제라는 비유는 유용하다. 그러나 database engine이나 shell처럼 결정적 grammar와 권한 모델이 있는 interpreter와는 다르다. 이 장에서는 전통적인 application/API sink를 중심으로 설명하고, LLM은 별도 threat model이 필요하다고 표시하는 것이 안전하다.
+
+## Minimal Lab or Trace
+
+세 개의 작은 trace를 만든다.
+
+```txt
+SQL trace:
+  input = "' OR '1'='1"
+  vulnerable query:
+    SELECT * FROM accounts
+    WHERE owner = '' OR '1'='1'
+  parameterized query:
+    SELECT * FROM accounts
+    WHERE owner = ?
+  bind value = "' OR '1'='1"
+```
+
+관찰 포인트는 database log나 prepared statement trace에서 input이 grammar가 아니라 value로 처리되는지다.
+
+```txt
+HTML trace:
+  input = "<img src=x onerror=alert(1)>"
+  HTML body output = escaped text
+  attribute output:
+    quoted and attribute-encoded value
+  JS string output:
+    not allowed
+    unless specifically encoded
+  DOM sink = textContent, not innerHTML
+```
+
+관찰 포인트는 browser가 payload를 element나 event handler로 실행하지 않는지다. verifier UI도 같은 테스트를 받아야 한다.
+
+```txt
+command trace:
+  input = "--help"
+  shell string = dangerous ambiguity
+  argv array = one argument
+  library API = no command interpreter
+```
+
+실제 lab에서는 무해한 command와 sandbox만 사용한다. 목표는 payload를 실행하는 것이 아니라 boundary가 어디서 보존되는지 확인하는 것이다.
+
+## zkTLS Bridge
+
+zkTLS proof viewer는 검증된 응답을 사람에게 보여준다. 이때 "검증된 데이터"를 "안전한 HTML"로 착각하면 안 된다. origin이 보낸 JSON field가 user-controlled text라면, verifier는 그 field를 text로 렌더링해야 한다. HTML fragment를 proof 대상으로 삼는 경우에도, verifier UI는 sandbox, sanitization, context encoding, content type policy를 별도로 가져야 한다.
+
+또 다른 연결은 claim extraction이다. prover가 API 응답에서 `tier = "gold"`를 증명한다고 하자. 응답이 injection으로 조작되어 `tier` field가 다른 parser에서는 다르게 해석된다면, circuit이나 verifier가 어떤 canonicalization을 쓰는지가 중요해진다. JSON parser, HTML parser, regex extractor가 같은 bytes를 다르게 읽으면 proof statement가 모호해진다.
+
+따라서 zkTLS article에서는 injection을 "source app의 취약점"으로만 두지 않는다. proof generation과 proof consumption 모두 interpreter boundary를 갖는다. response parser, redaction engine, visual renderer, audit log writer가 각각 sink다. 각 sink에서 code와 data를 분리해야 proof가 안전하게 소비된다.
+
+## Verification Checklist
+
+- Injection을 "나쁜 입력"이 아니라 interpreter boundary 실패로 설명했는가?
+- OWASP Top 10 2025에서 Injection이 A05임을 확인했는가?
+- SQL 방어에서 prepared statement와 parameterized query를 우선으로 제시했는가?
+- output encoding을 HTML body, attribute, JavaScript, URL, DOM context별로 분리했는가?
+- OS command injection에서 shell 회피, argv array, allow-list를 다뤘는가?
+- input validation의 역할과 한계를 분리했는가?
+- zkTLS proof viewer와 claim extractor도 sink라는 점을 명시했는가?
+
+## Visual Artifact Brief
+
+- Artifact key: injection-interpreter-boundary-map
+- Purpose: Injection과 output encoding을 data/code boundary 관점으로 설명한다.
+- Layout: 좌측 sources, 중앙 transforms, 우측 interpreters를 배치하고 SQL, browser, shell, LDAP sink를 각각 다른 lane으로 그린다.
+- Labels: untrusted input, canonical data, parameterization, output encoding, safe sink, interpreter, command, code, value.
+- Motion idea: 같은 input이 SQL lane에서는 bind value, browser lane에서는 encoded text, shell lane에서는 argv item으로 분기하고 문자열 연결 lane은 red failure로 표시된다.
+- Reduced-motion state: source-transform-sink-interpreter matrix와 context별 encoding table.
+
+## References
+
+- [OWASP Top 10:2025 A05 Injection](https://owasp.org/Top10/2025/A05_2025-Injection/)
+- [OWASP Injection Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Injection_Prevention_Cheat_Sheet.html)
+- [OWASP SQL Injection Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html)
+- [OWASP Query Parameterization Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Query_Parameterization_Cheat_Sheet.html)
+- [OWASP Cross Site Scripting Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html)
+- [OWASP OS Command Injection Defense Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html)
+- [OWASP Input Validation Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html)

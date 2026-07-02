@@ -1,0 +1,163 @@
+---
+title: OWASP Top 10 최신판 읽는 법
+chapter: Application and API Security
+chapterSlug: application-and-api-security
+articleSlug: owasp-top-10-reading
+status: draft
+difficulty: foundation
+wordCountTarget: 5000
+visualKey: risk-matrix
+branch: content/c05-a01-owasp-top-10-reading
+readerQuestion: OWASP Top 10은 순위표가 아니라 어떤 위험 언어로 읽어야 하는가?
+zktlsBridge: zkTLS proof는 application risk를 제거하지 않으므로 claim source의 앱 보안 맥락을 함께 평가해야 한다.
+references:
+  - https://owasp.org/www-project-top-ten/
+  - https://owasp.org/Top10/2025/
+  - https://owasp.org/Top10/2025/0x00_2025-Introduction/
+  - https://owasp.org/API-Security/editions/2023/en/0x11-t10/
+  - https://owasp.org/www-project-application-security-verification-standard/
+  - https://owasp.org/www-project-web-security-testing-guide/
+---
+
+# OWASP Top 10 최신판 읽는 법
+
+## Reader Question
+
+OWASP Top 10은 "가장 위험한 취약점 10개"를 외우는 문서인가, 아니면 애플리케이션 위험을 읽는 공통 언어인가? 이 글의 답은 두 번째다. OWASP 공식 Top Ten 프로젝트 페이지는 현재 공개판을 OWASP Top Ten 2025로 안내한다. API Security Top 10은 별도 프로젝트이며 현재 실무에서 널리 참조되는 판은 2023이다. 따라서 최신판을 읽는 첫 단계는 "웹 애플리케이션 Top 10 2025"와 "API Security Top 10 2023"을 섞지 않는 것이다.
+
+Top 10을 순위표로만 읽으면 설계 판단이 얕아진다. `A01 Broken Access Control`이 1번이라는 사실보다 더 중요한 것은, 여러 CWE와 실패 조건이 하나의 위험 범주로 묶였다는 점이다. category는 "이런 종류의 경계가 자주 깨진다"는 언어다. 각 조직의 실제 risk register, asset value, exploitability, compensating control은 따로 평가해야 한다.
+
+## Why It Matters
+
+zkTLS 관점에서 OWASP Top 10은 출처 증명과 애플리케이션 의미 사이의 빈틈을 보여준다. zkTLS proof가 "이 HTTPS origin이 이 응답을 보냈다"는 사실을 설득력 있게 증명해도, 그 origin의 애플리케이션이 access control, injection, authentication, logging failure를 갖고 있다면 응답의 business meaning은 흔들릴 수 있다. provenance와 application correctness는 같은 말이 아니다.
+
+예를 들어 은행 API가 사용자의 잔액을 반환했고 그 응답이 zkTLS로 증명되었다고 하자. TLS transcript는 origin과 bytes의 무결성을 말한다. 하지만 API가 다른 계좌 ID를 잘못 허용하는 BOLA를 갖고 있었다면, 증명된 응답은 "정상 잔액"이 아니라 "취약한 권한 결정의 결과"일 수 있다. Top 10을 읽는 능력은 이런 차이를 threat model에 넣는 능력이다.
+
+OWASP Top 10 2025는 awareness document다. 개발자와 보안 담당자가 같은 위험 언어를 쓰게 하는 첫 단계이지, 그대로 compliance checklist나 조직별 우선순위표가 되지는 않는다. 실제 구현 검증은 ASVS, WSTG, cheat sheet, 테스트 trace, architecture review로 내려가야 한다.
+
+## Core Model
+
+Top 10을 읽는 mental model은 다음 순서다.
+
+```txt
+released version
+  -> risk category
+  -> CWE cluster
+  -> affected system boundary
+  -> concrete failure trace
+  -> verification requirement
+```
+
+`released version`은 문서의 시간축이다. "최신"이라고 쓰려면 공식 프로젝트가 무엇을 current released version이라고 부르는지 확인해야 한다. 2026년 7월 현재 OWASP Top Ten 프로젝트 페이지는 2025판을 현재 공개판으로 안내한다. 이전 교육 자료가 2021판을 기준으로 해도, 새 원고는 이 차이를 명시해야 한다.
+
+`risk category`는 취약점 이름이 아니라 실패 가족이다. `A05 Injection`은 SQL injection만 뜻하지 않는다. untrusted data가 SQL, NoSQL, OS command, LDAP, ORM, browser DOM 같은 interpreter 경계에서 code나 command로 해석되는 계열을 다룬다. `A09 Security Logging and Alerting Failures`도 단순히 로그가 없다는 뜻이 아니라 detection, response, audit을 위한 evidence chain이 끊기는 문제다.
+
+`verification requirement`는 Top 10 밖에서 완성된다. ASVS는 요구사항 baseline을 제공하고, WSTG는 테스트 관점을 제공하며, OWASP cheat sheet는 특정 방어 패턴을 더 깊게 다룬다. Top 10 문장을 그대로 "통제 완료"로 바꾸면 위험하다. category는 출발점이고, system artifact가 있어야 검증된다.
+
+## Protocol or System Artifact
+
+Top 10을 시스템 artifact로 바꾸면 다음 표처럼 읽을 수 있다.
+
+| OWASP 범주 | 시스템 artifact | 읽어야 할 질문 |
+|---|---|---|
+| Broken Access Control | subject-object-action policy | 이 사용자가 이 객체에 이 행위를 해도 되는가? |
+| Injection | interpreter boundary | 데이터와 명령이 끝까지 분리되는가? |
+| Authentication Failures | session/token lifecycle | token 발급, 저장, 만료, 회수가 추적되는가? |
+| Software Supply Chain Failures | dependency/provenance record | 코드와 artifact 출처를 검증할 수 있는가? |
+| Logging and Alerting Failures | structured event schema | 실패와 예외가 감지 가능한 evidence로 남는가? |
+| Mishandling of Exceptional Conditions | error path contract | 정상 경로 밖에서도 안전한 기본값이 유지되는가? |
+
+API Security Top 10 2023은 별도 축을 제공한다. API1 BOLA, API2 Broken Authentication, API4 Unrestricted Resource Consumption, API9 Improper Inventory Management처럼 API의 객체 ID, stateless request, endpoint sprawl, 자동화 남용을 전면에 둔다. 따라서 API 중심 글에서는 웹 앱 Top 10의 category와 API Top 10의 category를 나란히 놓고, 어떤 system boundary를 설명하는지 구분해야 한다.
+
+zkTLS reference manual에서는 각 category를 proof pipeline의 어느 지점과 연결되는지 표시하는 것이 좋다.
+
+```txt
+Fetch
+  origin, endpoint, session, rate policy
+Prove
+  transcript
+  selected fields
+  redaction policy
+Verify
+  origin policy
+  claim semantics
+  audit record
+```
+
+Fetch 단계에서는 API inventory, authentication, rate limit이 중요하다. Prove 단계에서는 injection으로 오염된 응답을 proof viewer가 안전하게 다루는지 봐야 한다. Verify 단계에서는 access control failure의 결과를 정상 claim으로 받아들이지 않도록 policy context가 필요하다.
+
+## Failure Mode
+
+첫 번째 실패는 오래된 판을 최신판으로 부르는 것이다. OWASP Top 10 2021과 2025는 같은 프로젝트의 다른 시간대다. 원고가 "최신 Top 10"이라고 말하면서 2021 category만 전제하면 독자는 supply chain, logging, exceptional conditions 같은 2025판의 표현 변화를 놓칠 수 있다.
+
+두 번째 실패는 순위를 그대로 로컬 우선순위로 쓰는 것이다. OWASP의 ranking은 넓은 데이터와 커뮤니티 신호를 반영한 awareness ordering이다. 어떤 조직에서 가장 큰 위험이 무엇인지는 asset, exposure, threat actor, exploit path, control maturity에 따라 달라진다. 의료 서비스의 logging failure와 게임 API의 resource consumption은 같은 숫자로 비교할 수 없다.
+
+세 번째 실패는 API Top 10을 웹 Top 10의 축약판으로 다루는 것이다. API는 object identifier, token, rate, version, business flow, third-party consumption이 공격 표면의 핵심이 된다. 그래서 API1 BOLA는 로그인 여부보다 object-level authorization을 묻고, API9는 endpoint inventory와 deprecated version을 묻는다.
+
+네 번째 실패는 Top 10을 정의 나열로 끝내는 것이다. "Injection은 악성 입력입니다"라고 쓰면 독자는 어떤 boundary를 고쳐야 하는지 모른다. 좋은 설명은 `source -> transform -> sink` trace, vulnerable request, policy decision, 실패 로그까지 보여준다.
+
+## Minimal Lab or Trace
+
+작은 lab은 하나의 API를 여러 OWASP 언어로 다시 쓰는 방식이면 충분하다.
+
+```txt
+request:
+  GET /api/orders/ord_9281
+  Authorization: Bearer token(user=alice)
+
+observed:
+  response includes bob's order
+
+Top 10 2025:
+  A01 Broken Access Control
+
+API Security 2023:
+  API1 Broken Object Level Authorization
+
+system artifact:
+  subject=alice
+  object=ord_9281
+  action=read
+  expected policy=deny
+  observed policy=allow
+
+verification:
+  test foreign object IDs
+  inspect policy decision logs
+  add regression test
+```
+
+같은 방식으로 search endpoint의 SQL 문자열 연결은 `A05 Injection`으로, login endpoint의 token reuse는 `A07 Authentication Failures`와 API2로, 없는 endpoint 목록과 오래된 version은 API9로 분류한다. 핵심은 category를 한 줄 이름으로 붙이는 것이 아니라, trace의 어느 artifact가 깨졌는지 적는 것이다.
+
+## zkTLS Bridge
+
+zkTLS proof를 설계할 때 Top 10은 "proof가 증명하지 않는 것"을 표시해 준다. proof는 origin과 transcript 무결성을 다룰 수 있지만, application authorization이 올바른지, response field가 injection으로 오염되지 않았는지, session token이 탈취되지 않았는지, verifier가 실패를 audit log로 남겼는지를 자동으로 해결하지 않는다.
+
+따라서 verifier policy는 Top 10 category를 claim acceptance의 보조 조건으로 사용할 수 있다. 예를 들어 "잔액 proof는 account owner와 account id가 같은 transcript 또는 서버-side policy evidence를 포함해야 한다", "proof viewer는 검증된 HTML fragment를 그대로 렌더링하지 않는다", "proof fetch endpoint는 rate policy와 consent policy를 기록한다" 같은 규칙이다. 이 규칙은 zkTLS를 약하게 만드는 것이 아니라, 증명의 의미 범위를 정확하게 만든다.
+
+## Verification Checklist
+
+- OWASP 웹 애플리케이션 Top 10의 현재 공개판을 2025로 확인했는가?
+- API Security Top 10 2023을 별도 문서와 별도 risk language로 다뤘는가?
+- category를 CWE, system artifact, failure trace, verification requirement로 내려썼는가?
+- Top 10 ranking을 조직별 risk priority나 compliance baseline으로 과장하지 않았는가?
+- zkTLS proof가 application bug를 제거하지 않는다는 점을 명시했는가?
+- 각 category가 Fetch, Prove, Verify 중 어느 단계와 연결되는지 예시를 들었는가?
+
+## Visual Artifact Brief
+
+- Artifact key: owasp-top10-reading-stack
+- Purpose: OWASP Top 10을 암기 목록이 아니라 risk-to-verification stack으로 설명한다.
+- Layout: 좌측에는 OWASP Top 10 2025 category, 우측에는 API Security 2023 category를 두고 가운데에는 system artifact, failure trace, verification requirement를 세로 pipeline으로 배치한다.
+- Labels: current released version, awareness document, category, CWE cluster, endpoint, policy decision, evidence, zkTLS proof boundary.
+- Motion idea: `A01` category가 endpoint, object id, policy engine, test evidence로 펼쳐지고 마지막에 zkTLS verifier policy로 연결된다.
+- Reduced-motion state: 정적 2열 category map과 5단계 verification stack.
+
+## References
+
+- [OWASP Top Ten project](https://owasp.org/www-project-top-ten/)
+- [OWASP Top 10:2025](https://owasp.org/Top10/2025/)
+- [OWASP Top 10:2025 Introduction](https://owasp.org/Top10/2025/0x00_2025-Introduction/)
+- [OWASP API Security Top 10 2023](https://owasp.org/API-Security/editions/2023/en/0x11-t10/)
+- [OWASP Application Security Verification Standard](https://owasp.org/www-project-application-security-verification-standard/)
+- [OWASP Web Security Testing Guide](https://owasp.org/www-project-web-security-testing-guide/)
