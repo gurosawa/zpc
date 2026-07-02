@@ -1,12 +1,31 @@
 import { MDXRemote } from "next-mdx-remote/rsc";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { GuideShell } from "@/components/guide-shell";
+import { MiniToc } from "@/components/mini-toc";
 import { mdxComponents } from "@/components/mdx-components";
 import { getChapterBySlug, getChapters } from "@/lib/content";
+import { slugify } from "@/lib/slug";
 
 type PageProps = {
   params: Promise<{ chapter: string }>;
 };
+
+function formatWords(words: number) {
+  return `${(words / 1000).toFixed(1)}K`;
+}
+
+function headingsFor(body: string) {
+  return Array.from(body.matchAll(/^##\s+(.+)$/gm)).map((match, index) => {
+    const title = match[1].trim();
+
+    return {
+      id: slugify(title),
+      order: index + 1,
+      title,
+    };
+  });
+}
 
 export function generateStaticParams() {
   return getChapters().map((chapter) => ({ chapter: chapter.slug }));
@@ -35,14 +54,54 @@ export default async function ChapterPage({ params }: PageProps) {
     notFound();
   }
 
+  const chapterIndex = chapters.findIndex((item) => item.slug === chapter.slug);
+  const previousChapter = chapterIndex > 0 ? chapters[chapterIndex - 1] : null;
+  const nextChapter = chapterIndex >= 0 ? chapters[chapterIndex + 1] ?? null : null;
+  const headings = headingsFor(chapter.body);
+
   return (
     <GuideShell chapters={chapters} activeSlug={chapter.slug}>
-      <article className="doc-content">
-        <p className="eyebrow">Chapter {chapter.order}</p>
-        <h1>{chapter.title}</h1>
-        <p className="lead">{chapter.summary}</p>
-        <MDXRemote source={chapter.body} components={mdxComponents} />
-      </article>
+      <div className="chapter-layout">
+        <article className="doc-content">
+          <p className="eyebrow">Chapter {chapter.order}</p>
+          <h1>{chapter.title}</h1>
+          <p className="lead">{chapter.readerPromise}</p>
+          <dl className="chapter-meta">
+            <div>
+              <dt>Status</dt>
+              <dd>{chapter.status.toUpperCase()}</dd>
+            </div>
+            <div>
+              <dt>Words</dt>
+              <dd>{formatWords(chapter.expectedWords)}</dd>
+            </div>
+            <div>
+              <dt>Question</dt>
+              <dd>{chapter.guidingQuestion}</dd>
+            </div>
+          </dl>
+          <MDXRemote source={chapter.body} components={mdxComponents} />
+          <nav className="chapter-footer" aria-label="Chapter navigation">
+            {previousChapter ? (
+              <Link href={`/guide/${previousChapter.slug}`}>
+                <span>Prev</span>
+                {previousChapter.title}
+              </Link>
+            ) : (
+              <span />
+            )}
+            {nextChapter ? (
+              <Link href={`/guide/${nextChapter.slug}`}>
+                <span>Next</span>
+                {nextChapter.title}
+              </Link>
+            ) : (
+              <span />
+            )}
+          </nav>
+        </article>
+        <MiniToc items={headings} status={chapter.status} wordCount={chapter.expectedWords} />
+      </div>
     </GuideShell>
   );
 }
