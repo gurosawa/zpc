@@ -1,0 +1,125 @@
+---
+title: 인증·인가·감사의 차이
+chapter: Security Thinking
+chapterSlug: security-thinking
+articleSlug: authentication-authorization-audit
+status: draft
+difficulty: foundation
+wordCountTarget: 4400
+visualKey: api-authz-object-graph
+branch: content/c01-a04-authentication-authorization-audit
+readerQuestion: 인증, 인가, 감사는 왜 같은 로그인 흐름 안에서도 서로 다른 통제인가?
+zktlsBridge: zkTLS proof는 사용자의 인증 상태를 대신하지 않고 특정 응답과 조건의 검증 기록을 만든다.
+references:
+  - https://csrc.nist.gov/glossary/term/authentication
+  - https://csrc.nist.gov/glossary/term/authorization
+  - https://csrc.nist.gov/pubs/sp/800/63/4/final
+  - https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final
+  - https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/
+---
+
+# 인증·인가·감사의 차이
+
+## Reader Question
+
+인증, 인가, 감사는 모두 로그인 화면 근처에서 등장하지만 서로 다른 질문에 답한다. 인증은 "너는 누구인가?"를 확인한다. 인가는 "그 주체가 이 객체에 이 행동을 해도 되는가?"를 결정한다. 감사는 "나중에 누가 무엇을 근거로 어떤 결정을 했는지 확인할 수 있는가?"를 남긴다. 세 통제를 한 문장으로 뭉치면 API 보안과 zkTLS 검증 모두에서 오류가 생긴다.
+
+로그인에 성공한 사용자가 `/profile/123`을 요청할 수 있다고 해서 `/profile/124`도 볼 수 있는 것은 아니다. proof를 제출한 사용자가 어떤 계정의 소유자였다고 해서 verifier가 그 사용자를 계속 신뢰해야 하는 것도 아니다. audit log가 남아 있다고 해서 접근 결정이 올바른 것도 아니다. 각 통제는 서로 보완하지만 대체하지 않는다.
+
+## Why It Matters
+
+NIST glossary는 authentication을 user, process, device의 identity를 확인하는 것으로 설명한다. authorization은 system entity가 resource에 접근할 권리나 permission을 갖는 문제다. NIST SP 800-63-4는 identity proofing, authentication, federation을 분리된 assurance 영역으로 다룬다. NIST SP 800-53은 access control, identification and authentication, audit and accountability 같은 control family를 별도로 둔다.
+
+OWASP API Security의 BOLA 설명은 이 분리가 왜 실무적으로 중요한지 보여준다. 공격자는 object id를 바꿔 다른 사용자의 object에 접근하려 한다. 취약한 API는 사용자가 로그인했는지만 보고, 요청된 object/action에 대한 권한을 검사하지 않는다. zkTLS에서도 같은 사고가 필요하다. origin에서 온 응답을 증명할 수 있다는 사실은 그 응답이 application policy상 적절히 인가된 결과였는지와 별개다.
+
+## Core Model
+
+세 통제는 다음 그래프로 기억한다.
+
+```txt
+subject --authenticates--> identity/session
+subject --requests action on--> object
+policy --authorizes/denies--> action
+system --records--> audit event
+```
+
+인증 결과는 subject에 confidence를 준다. 인가는 subject, object, action, context의 조합으로 결정된다. 감사는 decision과 evidence를 나중에 재구성할 수 있게 만든다. 이 셋을 분리하면 API trace도 명확해진다.
+
+| Control | Question | Typical artifact | Failure if confused |
+|---|---|---|---|
+| Authentication | 누구인가? | session, authenticator, token binding | 로그인만 보고 모든 객체 접근 허용 |
+| Authorization | 무엇을 해도 되는가? | policy decision, ACL, ABAC rule | BOLA, privilege escalation |
+| Audit | 무엇이 일어났는가? | event log, proof id, policy id | 사후 검증 불가, 부인 가능성 |
+
+## Protocol or System Artifact
+
+예시 API 요청을 보자.
+
+```http
+GET /profile/124 HTTP/1.1
+Host: api.example.invalid
+Authorization: Bearer <token-for-user-123>
+```
+
+서버가 해야 할 판단은 최소 네 단계다.
+
+| Step | Artifact | Question |
+|---|---|---|
+| Authenticate | bearer token | 이 token은 어떤 subject에 묶였는가? |
+| Resolve object | `/profile/124` | 이 object는 누구의 것인가? |
+| Authorize | policy rule | subject `123`이 object `124`를 read할 수 있는가? |
+| Audit | event | 누가, 무엇을, 언제, 어떤 decision으로 요청했는가? |
+
+zkTLS proof flow도 유사하다. Prover가 어떤 account session으로 origin에 접근했는지, 응답 중 어떤 field를 claim으로 공개했는지, verifier가 어떤 policy로 그 proof를 accept했는지를 분리해야 한다. audit event에는 원문 secret이 아니라 proof id, origin, predicate, policy version, timestamp, decision reason이 들어가야 한다.
+
+## Failure Mode
+
+첫 번째 실패는 인증을 인가로 착각하는 것이다. "로그인된 사용자의 요청"이라는 사실은 object-level authorization을 대체하지 않는다. OWASP BOLA의 전형적 형태가 이것이다. 사용자는 endpoint에 접근할 권한이 있지만, 특정 object id를 바꿨을 때 다른 사람의 record까지 볼 수 있으면 실패다.
+
+두 번째 실패는 감사 로그를 통제로 착각하는 것이다. 로그는 잘못된 접근을 자동으로 막지 않는다. 막는 것은 인가 decision이고, 로그는 사후 검증과 탐지의 자료다. 로그가 있어도 decision reason, subject, object, policy id가 없으면 감사 가능성이 낮다.
+
+세 번째 실패는 zkTLS proof를 사용자 권한으로 오해하는 것이다. proof는 특정 시점의 특정 응답과 predicate에 대한 evidence다. proof를 제출한 사람이 현재 그 계정의 유효한 사용자라는 지속 권한을 부여하지 않는다. verifier는 proof acceptance와 application authorization을 따로 해야 한다.
+
+## Minimal Lab or Trace
+
+다음 trace에서 세 통제를 표시한다.
+
+| Event | Authentication | Authorization | Audit |
+|---|---|---|---|
+| 사용자가 bank API에 로그인한다. | token 발급 | 아직 object decision 없음 | login event |
+| `/accounts/abc`를 조회한다. | token 검증 | subject가 account `abc` read 가능해야 함 | read decision event |
+| balance predicate proof를 만든다. | 원 origin session context | proof 생성 허용 scope 확인 | proof id 생성 |
+| verifier가 proof를 받는다. | prover identity와 별개 | relying app policy로 accept/deny | policy id와 reason 기록 |
+
+이 lab의 결론은 "proof verification succeeded"가 최종 business decision이 아니라는 점이다. verifier는 proof가 유효하다는 사실을 입력으로 받아, 자신의 policy에서 어떤 action을 허용할지 별도로 판단해야 한다.
+
+## zkTLS Bridge
+
+zkTLS는 authentication, authorization, audit 사이에 새로운 evidence artifact를 넣는다. 사용자는 origin에 이미 인증된 상태로 접근할 수 있다. 그 결과로 받은 응답 중 일부를 proof로 만든다. verifier는 사용자의 origin password나 session cookie를 받지 않고도 특정 claim을 검증할 수 있다. 이때 proof는 인증 secret을 대체하지 않고, origin response에 대한 감사 가능한 evidence에 가깝다.
+
+따라서 zkTLS integration은 다음 경계를 지켜야 한다. origin credential은 fetch 단계 안에 남긴다. proof는 predicate와 provenance만 담는다. relying application은 proof result를 자기 authorization policy에 넣는다. audit log는 proof id, policy id, decision reason을 남기되 hidden witness를 저장하지 않는다.
+
+## Verification Checklist
+
+- 인증 결과와 객체별 인가 decision을 분리했는가?
+- subject, object, action, context가 모두 policy input에 들어가는가?
+- audit event가 decision reason과 policy id를 포함하는가?
+- BOLA처럼 "로그인했지만 object 권한이 없는" 실패를 설명했는가?
+- zkTLS proof를 session 권한이나 account 소유권의 영구 증명으로 쓰지 않았는가?
+
+## Visual Artifact Brief
+
+- Artifact key: api-authz-object-graph
+- Purpose: subject, object, action, policy, audit event의 관계를 보여준다.
+- Layout: 중앙에 `policy decision` node, 왼쪽에 subject/session, 오른쪽에 object/action, 아래에 audit log node.
+- Labels: "authenticated subject", "requested object", "allow/deny", "proof id", "policy version".
+- Motion idea: object id를 바꾸면 authentication node는 유지되지만 authorization edge가 deny로 바뀐다.
+- Reduced-motion state: 허용 예시와 거부 예시를 두 개의 정적 graph로 나란히 표시한다.
+
+## References
+
+- NIST CSRC Glossary, Authentication: https://csrc.nist.gov/glossary/term/authentication
+- NIST CSRC Glossary, Authorization: https://csrc.nist.gov/glossary/term/authorization
+- NIST SP 800-63-4: https://csrc.nist.gov/pubs/sp/800/63/4/final
+- NIST SP 800-53 Rev. 5: https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final
+- OWASP API1:2023 Broken Object Level Authorization: https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/

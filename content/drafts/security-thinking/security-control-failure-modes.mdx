@@ -1,0 +1,163 @@
+---
+title: 보안 통제는 어떻게 실패하는가
+chapter: Security Thinking
+chapterSlug: security-thinking
+articleSlug: security-control-failure-modes
+status: draft
+difficulty: deep
+wordCountTarget: 7800
+visualKey: risk-matrix
+branch: content/c01-a06-security-control-failure-modes
+readerQuestion: 통제는 존재하는데도 시스템이 깨지는 이유는 무엇인가?
+zktlsBridge: zkTLS 운영은 proof verification과 함께 source, circuit, policy provenance까지 확인해야 한다.
+references:
+  - https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final
+  - https://csrc.nist.gov/pubs/sp/800/30/r1/final
+  - https://www.cisa.gov/securebydesign
+  - https://tlsnotary.org/docs/intro/
+  - https://tlsnotary.org/docs/protocol/mpc-tls/
+  - https://arxiv.org/abs/1909.00938
+---
+
+# 보안 통제는 어떻게 실패하는가
+
+## Reader Question
+
+보안 사고는 통제가 전혀 없어서만 발생하지 않는다. 통제가 있는데도 위치가 틀리거나, 우회 가능하거나, 설정이 빗나갔거나, 관측되지 않거나, 운영 중 낡아서 실패한다. "우리는 인증이 있다", "TLS를 쓴다", "proof를 검증한다", "로그를 남긴다"는 말은 시작점일 뿐이다. 어떤 threat event를 어떤 boundary에서 줄이는지, 실패했을 때 누가 알 수 있는지, 버전이 바뀌었을 때 어떻게 갱신되는지를 봐야 한다.
+
+zkTLS 시스템은 이 문제가 압축되어 나타난다. 암호 proof가 맞아도 verifier policy가 틀리면 잘못된 claim을 받아들인다. origin binding이 맞아도 응답이 너무 오래되면 business decision이 틀릴 수 있다. redaction이 맞아도 audit log에 hidden witness를 저장하면 privacy가 깨진다. 보안 통제를 평가하려면 통제의 존재가 아니라 통제의 작동 조건과 실패 모드를 봐야 한다.
+
+## Why It Matters
+
+NIST SP 800-53은 security and privacy controls를 조직과 시스템에서 선택, 구현, 평가할 수 있는 catalog로 제공한다. NIST SP 800-30은 risk assessment가 risk management process의 일부이며 식별된 위험에 대한 course of action을 정하는 데 쓰인다고 설명한다. 이 두 자료의 조합은 통제를 checklist가 아니라 위험 대응 수단으로 보게 한다. CISA Secure by Design의 방향도 제품 제조자가 security outcome을 설계 기본값과 운영 책임으로 가져가야 한다는 쪽이다.
+
+zkTLS에서 이 관점은 필수다. proof verification은 하나의 통제다. 하지만 fetch 단계의 credential handling, transcript parsing, commitment scheme, circuit build, verifier policy, key rotation, audit log, user consent가 함께 맞아야 end-to-end security argument가 성립한다. 한 통제가 실패하면 다른 통제가 그 실패를 탐지하거나 제한해야 한다.
+
+## Core Model
+
+보안 통제 실패는 다섯 가지로 나눠 기억한다.
+
+| Failure class | Meaning | zkTLS example |
+|---|---|---|
+| Absence | 필요한 위치에 통제가 없다. | proof에 expiry나 verifier challenge가 없다. |
+| Bypass | 통제 밖의 경로가 남아 있다. | UI는 allowlist지만 API가 임의 field selector를 받는다. |
+| Misconfiguration | 통제가 있지만 설정이 틀렸다. | verifier가 test policy id를 production에서 허용한다. |
+| Unobservability | 실패를 감지할 evidence가 없다. | reject reason과 policy version이 log에 없다. |
+| Operational drift | 시간이 지나며 통제가 낡는다. | circuit version, CA validation assumption, notary key가 갱신되지 않는다. |
+
+이 모델은 통제를 비난하기 위한 것이 아니라 설계를 점검하기 위한 것이다. 모든 통제는 범위가 있다. 범위 밖에서 실패가 생기면 통제가 없는 것처럼 보인다. 따라서 통제 옆에는 "coverage", "input", "output", "owner", "evidence", "version"이 붙어야 한다.
+
+## Protocol or System Artifact
+
+control failure mode matrix는 다음 형태가 좋다.
+
+| Control | Protects | Required input | Evidence output | Failure mode |
+|---|---|---|---|---|
+| Origin/TLS verification | response provenance | server identity, transcript | origin-bound commitment | wrong origin accepted |
+| Redaction allowlist | confidentiality | field policy | disclosed field list | hidden field leaked |
+| Proof verification | predicate integrity | proof, public input, verifying key | pass/fail, proof id | wrong circuit/key accepted |
+| Freshness policy | decision relevance | fetchedAt, nonce, challenge | max age decision | stale proof replay |
+| Audit logging | accountability | subject, policy, decision | immutable event | no investigation path |
+
+이 표는 "통제가 있다"와 "통제가 작동한다"를 분리한다. 예를 들어 proof verification은 verifying key와 public input canonicalization에 의존한다. verifying key가 어떤 circuit build에서 왔는지 모르면 pass/fail 결과가 약해진다. freshness policy는 `fetchedAt`만 있으면 부족할 수 있다. verifier challenge가 없으면 오래된 proof를 새 request에 재사용할 수 있다.
+
+## Failure Mode
+
+대표 실패 시나리오는 policy version mismatch다.
+
+```txt
+Claim: membershipTier == gold
+Proof: valid under policy v1
+Verifier expectation: policy v2 requires origin allowlist + maxAge <= 10 minutes
+Bug: verifier checks proof validity but does not check policy id
+Result: old proof passes a new business decision
+```
+
+여기서 proof system은 실패하지 않았다. 실패한 것은 policy binding control이다. 이 구분이 중요하다. 원인을 "ZK가 위험하다"로 적으면 해결책은 막연해진다. 정확한 해결책은 proof public input에 policy id와 max age를 포함하고, verifier decision log에 expected policy id와 observed policy id를 남기며, mismatch를 reject하는 것이다.
+
+두 번째 시나리오는 redaction bypass다. UI는 `membershipTier`만 선택하게 하지만 backend proof builder가 `fieldPath`를 임의 문자열로 받는다. 공격자나 실수한 client가 `balance`를 공개하면 confidentiality control은 UI에만 있었고 실제 API boundary에는 없었던 것이다. 이 경우 통제는 frontend hint가 아니라 backend-enforced allowlist여야 한다.
+
+세 번째 시나리오는 audit overcollection이다. 운영팀이 디버깅을 위해 원문 transcript를 log에 남긴다. 나중에 사고를 조사하기 쉬워졌지만 privacy 목표가 깨졌다. audit control은 evidence를 남기는 통제이면서 동시에 data minimization 요구를 가진다. log에는 hidden witness가 아니라 digest, proof id, policy id, redaction manifest, decision reason이 남아야 한다.
+
+네 번째 시나리오는 control coupling failure다. verifier가 proof를 검증할 때 세 개의 값이 동시에 맞아야 한다고 하자. `originAllowlist`, `circuitVersion`, `policyVersion`이다. 운영 중 origin domain이 바뀌었고, 새 circuit은 그 origin canonicalization을 반영했지만, verifier policy registry는 아직 옛 allowlist를 배포하고 있다. 이때 개발팀이 "새 circuit proof는 통과한다"는 사실만 보고 release하면, 일부 verifier는 거부하고 일부 verifier는 우회 설정으로 통과시킨다. 통제들이 서로 맞물려 있는데 release 순서와 rollback 규칙이 없으면 보안 실패가 availability failure와 configuration drift로 나타난다.
+
+다섯 번째 시나리오는 emergency bypass다. 장애 대응 중 운영자가 "일시적으로 proof age check를 끈다"고 결정한다. 이 결정이 change log와 expiry를 갖지 않으면 임시 우회가 영구 설정이 된다. 실제 사고에서는 공격자가 새로운 암호 취약점을 발견하지 않아도 이런 운영 우회를 이용한다. 따라서 통제에는 정상 경로뿐 아니라 break-glass 경로도 포함되어야 한다. 누가 켤 수 있고, 얼마 동안 유효하며, 어떤 audit event가 남고, 어떤 dashboard에서 보이는지가 통제의 일부다.
+
+## Minimal Lab or Trace
+
+다음 table을 이용해 같은 claim을 세 번 검증한다.
+
+| Input | Expected policy | Observed policy | Decision |
+|---|---|---|---|
+| proof A | v2, maxAge 10m | v2, age 3m | accept |
+| proof B | v2, maxAge 10m | v1, age 3m | reject: policy mismatch |
+| proof C | v2, maxAge 10m | v2, age 2d | reject: stale proof |
+
+minimal pseudo-code는 다음과 같다.
+
+```ts
+function verifyDecision(input) {
+  if (!verifyProof(input.proof, input.publicInput)) return "reject: invalid proof";
+  if (input.publicInput.policyId !== input.expectedPolicyId) return "reject: policy mismatch";
+  if (input.publicInput.fetchedAt < input.now - input.maxAgeMs) return "reject: stale proof";
+  return "accept";
+}
+```
+
+이 lab에서 검증할 것은 proof validity만이 아니다. public input canonicalization, policy binding, freshness, reject reason이 모두 decision의 일부다. 실제 implementation에서는 이 결과가 audit event로 남아야 하고, event에는 secret witness가 없어야 한다.
+
+## zkTLS Bridge
+
+zkTLS 운영은 proof 하나로 끝나지 않는다. TLSNotary와 DECO 계열이 다루는 핵심은 web data provenance와 selective disclosure지만, product 환경에서는 provenance의 provenance도 필요해진다. 이 proof는 어떤 origin, 어떤 transcript, 어떤 redaction rule, 어떤 circuit/verifying key, 어떤 verifier policy, 어떤 notary key에 묶였는가? 이 질문에 답하지 못하면 검증자는 pass/fail bit만 보고 과도한 결정을 내리게 된다.
+
+따라서 zkTLS의 end-to-end control set은 최소 여섯 층이다. origin/TLS control, witness handling control, disclosure control, proof/circuit control, verifier policy control, audit/operations control. 각 층은 서로 다른 failure class를 가진다. 예를 들어 MPC-TLS는 Prover가 response를 forge하지 못하게 하는 쪽에 기여하지만, relying app의 business policy mismatch를 자동으로 해결하지 않는다. CISA식 secure-by-design 관점으로 말하면, 이런 책임을 사용자나 integrator에게만 떠넘기지 말고 제품의 기본 workflow와 artifact schema에 넣어야 한다.
+
+실무적으로는 proof result를 다음과 같은 envelope로 감싸는 편이 안전하다.
+
+```json
+{
+  "proofId": "proof_01J...",
+  "origin": "https://bank.example.invalid",
+  "predicateId": "balance-at-least",
+  "policyId": "loan-precheck-v2",
+  "circuitId": "zktls-balance-v4",
+  "fetchedAt": "2026-07-03T09:00:00+09:00",
+  "expiresAt": "2026-07-03T09:10:00+09:00",
+  "decision": "accept"
+}
+```
+
+이 envelope는 proof를 더 강하게 만드는 마법이 아니다. 대신 운영자가 확인해야 할 control surface를 명시한다. `policyId`가 없으면 policy confusion을 조사하기 어렵다. `circuitId`가 없으면 verifying key rotation과 audit이 끊긴다. `expiresAt`이 없으면 replay rejection이 verifier의 암묵 규칙으로 숨어 버린다. `origin`이 없으면 proof가 어떤 web source에서 왔는지 application decision이 알 수 없다. 좋은 zkTLS product는 이런 metadata를 후처리 문서가 아니라 검증 경로의 필수 public input으로 다룬다.
+
+운영 관점에서는 control review cadence도 필요하다. proof system을 배포한 뒤 끝나는 것이 아니라, 정해진 주기로 다음 항목을 다시 본다. origin allowlist는 아직 맞는가? certificate validation assumption이 바뀌었는가? verifier policy가 business decision과 여전히 맞는가? notary key와 circuit verifying key가 예상한 lifecycle 안에 있는가? audit event schema가 incident response에 충분한가? 이 질문은 compliance checklist가 아니라 drift를 줄이는 control이다.
+
+특히 circuit과 policy는 같이 진화한다. 새로운 predicate가 추가되면 circuit만 바꾸는 것이 아니라 verifier가 받아들일 public input schema, policy id, redaction manifest, audit reason code도 함께 바뀐다. release note에 "새 proof 지원"만 적고 rejection path를 검증하지 않으면 실패는 늦게 발견된다. 그래서 production zkTLS에서는 accept case보다 reject case test가 더 중요할 때가 많다. 잘못된 origin, 만료된 proof, 틀린 policy id, 알 수 없는 circuit id, 과다 공개 manifest를 모두 거부해야 한다.
+
+마지막으로, 통제는 사람이 읽을 수 있는 운영 언어로도 표현되어야 한다. "verification failed" 하나의 오류만 있으면 support, incident response, integrator가 같은 실패를 서로 다르게 해석한다. `invalid-proof`, `policy-mismatch`, `stale-proof`, `unknown-circuit`, `redaction-violation`, `notary-key-expired`처럼 거부 이유를 좁혀야 한다. 오류 코드는 사용자에게 모든 내부 구조를 노출하라는 뜻이 아니다. verifier와 운영자가 같은 evidence를 기준으로 조치할 수 있게 만드는 최소한의 감사 언어다. 이 언어가 없으면 통제는 존재해도 운영 체계 안에서 관측되지 않는다.
+
+## Verification Checklist
+
+- 통제별로 protected asset, input, output, owner, evidence를 적었는가?
+- 통제 실패를 absence, bypass, misconfiguration, unobservability, operational drift 중 하나 이상으로 분류했는가?
+- proof validity와 business policy acceptance를 분리했는가?
+- policy id, circuit/verifying key version, freshness metadata를 public input이나 audit event에 묶었는가?
+- audit log가 사후 검증에 충분하면서 hidden witness를 저장하지 않는가?
+- 검증자가 확인할 수 없는 trust assumption을 Known gap으로 남겼는가?
+
+## Visual Artifact Brief
+
+- Artifact key: risk-matrix
+- Purpose: 보안 통제의 존재 여부가 아니라 실패 class와 evidence output을 보여준다.
+- Layout: 행은 control, 열은 absence/bypass/misconfiguration/unobservability/drift. 오른쪽에 "required evidence" column.
+- Labels: "valid proof, wrong policy", "UI-only allowlist", "stale key", "no reject reason", "hidden witness in logs".
+- Motion idea: failure class를 선택하면 해당 class에 속한 control row가 강조되고, 대응 evidence가 나타난다.
+- Reduced-motion state: class별 색상 chip과 정적 matrix를 사용한다.
+
+## References
+
+- NIST SP 800-53 Rev. 5: https://csrc.nist.gov/pubs/sp/800/53/r5/upd1/final
+- NIST SP 800-30 Rev. 1: https://csrc.nist.gov/pubs/sp/800/30/r1/final
+- CISA Secure by Design: https://www.cisa.gov/securebydesign
+- TLSNotary Introduction: https://tlsnotary.org/docs/intro/
+- TLSNotary MPC-TLS: https://tlsnotary.org/docs/protocol/mpc-tls/
+- DECO paper: https://arxiv.org/abs/1909.00938

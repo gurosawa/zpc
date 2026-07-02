@@ -1,0 +1,114 @@
+---
+title: CIA는 왜 아직 유효한가
+chapter: Security Thinking
+chapterSlug: security-thinking
+articleSlug: cia-triad
+status: draft
+difficulty: foundation
+wordCountTarget: 4200
+visualKey: risk-matrix
+branch: content/c01-a01-cia-triad
+readerQuestion: 기밀성, 무결성, 가용성은 현대 TLS와 zkTLS 시스템에서도 어떤 판단 축으로 남는가?
+zktlsBridge: zkTLS 증명은 원본 공개를 줄이면서도 특정 TLS 응답의 무결성과 출처 주장을 보존해야 한다.
+references:
+  - https://csrc.nist.gov/pubs/fips/199/final
+  - https://datatracker.ietf.org/doc/html/rfc8446
+  - https://csrc.nist.gov/pubs/sp/800/30/r1/final
+  - https://tlsnotary.org/docs/intro/
+  - https://arxiv.org/abs/1909.00938
+---
+
+# CIA는 왜 아직 유효한가
+
+## Reader Question
+
+CIA는 오래된 약어처럼 보이지만, 여전히 보안 판단을 시작할 때 가장 작은 좌표계다. 질문은 "이 시스템은 안전한가?"가 아니다. 어떤 값은 숨겨져야 하는가, 어떤 값은 바뀌지 않아야 하는가, 어떤 기능은 언제 접근 가능해야 하는가를 분리해서 물어야 한다. 이 세 질문을 섞으면 보안 요구사항이 흐려진다. 예를 들어 HTTPS API가 암호화되어 있다는 말은 전송 중 기밀성과 무결성의 일부를 설명하지만, 그 API가 항상 응답한다는 뜻도 아니고, 응답을 나중에 제3자가 검증할 수 있다는 뜻도 아니다.
+
+zkTLS를 이해할 때도 같은 분리가 필요하다. zkTLS는 "TLS로 받은 데이터를 증명한다"는 말로 요약되지만, 실제로는 공개할 값, 숨길 값, 검증할 출처, 허용할 만료 시간, 검증자가 받아들일 정책을 나눠 다룬다. CIA는 이 분할을 강제한다. 이 article의 목표는 CIA를 정의 목록으로 암기하는 것이 아니라, TLS channel과 zkTLS proof를 같은 표 위에 올려 놓고 어느 보장이 어디서 생기고 어디서 비는지 보는 것이다.
+
+## Why It Matters
+
+NIST FIPS 199는 정보와 정보 시스템의 보안 범주화를 기밀성, 무결성, 가용성에 대한 우려와 잠재 영향으로 다룬다. 이 관점은 특정 제품이나 프로토콜보다 위에 있다. TLS 1.3도 안전한 채널의 목표를 서버 인증, 채널 기밀성, 채널 무결성으로 설명하지만, TLS가 모든 보안 문제를 닫아 주지는 않는다. TLS는 application data가 네트워크 공격자에게 읽히거나 탐지 없이 수정되는 것을 막도록 설계되어 있다. 그러나 서버가 잘못된 값을 반환했는지, 사용자가 그 값을 제3자에게 최소 공개로 증명할 수 있는지, proof가 너무 오래된 응답을 재사용하는지는 별도 문제다.
+
+기밀성만 강조하면 "암호화됐으니 안전하다"는 결론으로 흐르기 쉽다. 하지만 zkTLS에서는 무결성과 provenance가 중심 질문이 된다. 검증자는 원본 계정 전체를 보고 싶어 하지 않는다. 대신 "이 필드는 특정 origin의 TLS 응답에서 왔고, 응답 이후 변조되지 않았으며, 공개된 predicate가 그 응답과 묶여 있다"는 제한된 주장을 원한다. 동시에 사용자는 숨겨야 할 토큰, 쿠키, 주소, 잔액, 메시지 본문을 노출하지 않아야 한다. 가용성도 남는다. proof service가 멈추거나 verifier policy endpoint가 내려가면 암호학적으로 올바른 증명도 실제 workflow에서는 사용할 수 없다.
+
+## Core Model
+
+CIA를 기능 이름이 아니라 실패 비용의 축으로 기억하면 더 오래 간다.
+
+| 축 | 핵심 질문 | TLS에서 보이는 모습 | zkTLS에서 보이는 모습 |
+|---|---|---|---|
+| Confidentiality | 누가 볼 수 없어야 하는가? | application data는 endpoint 외부에 노출되지 않아야 한다. | witness, 쿠키, 원문 응답, 숨긴 필드는 proof 밖에 남아야 한다. |
+| Integrity | 무엇이 바뀌면 안 되는가? | record와 handshake transcript는 탐지 없이 변조될 수 없어야 한다. | 공개 claim은 원본 transcript와 안정적으로 binding되어야 한다. |
+| Availability | 언제 쓸 수 있어야 하는가? | endpoint와 네트워크가 응답해야 한다. | prover, notary, verifier, policy registry가 필요한 시점에 동작해야 한다. |
+
+이 모델의 핵심은 하나의 통제가 세 축을 모두 해결하지 않는다는 점이다. 암호화는 숨김을 제공할 수 있지만, 오래된 응답을 최신 응답처럼 제출하는 replay를 자동으로 막지는 않는다. 무결성 검사는 변조를 잡을 수 있지만, 민감한 필드를 너무 많이 공개하면 기밀성을 잃는다. 가용성 완화책으로 cache를 넣으면 장애에는 강해질 수 있지만, freshness와 replay 위험을 새로 만든다.
+
+## Protocol or System Artifact
+
+다음은 같은 응답을 CIA 관점으로 쪼갠 toy artifact다.
+
+```json
+{
+  "origin": "https://bank.example.invalid",
+  "fetchedAt": "2026-07-03T09:00:00+09:00",
+  "accountId": "user-123",
+  "membershipTier": "gold",
+  "balance": "hidden",
+  "proofClaim": "membershipTier == gold"
+}
+```
+
+이 JSON에서 `balance`와 session cookie는 기밀성 자산이다. `membershipTier`, `origin`, `fetchedAt`, transcript digest는 무결성 자산이다. proof 생성 API, verifier policy, revocation/freshness check는 가용성 자산이다. 시각 artifact로는 각 field를 세 축에 매핑하는 risk matrix가 좋다. 한 칸에만 값을 넣지 말고, 같은 필드가 여러 축에 걸칠 수 있음을 보여줘야 한다. 예를 들어 `fetchedAt`은 기밀성보다 무결성/freshness에 중요하고, proof endpoint는 데이터가 아니라 workflow availability에 중요하다.
+
+## Failure Mode
+
+가장 흔한 실패는 CIA 중 하나를 "암호화"라는 말로 덮어 버리는 것이다.
+
+첫째, 기밀성 실패. selective disclosure를 한다고 말하면서 원문 transcript나 cookie-bearing request를 verifier에게 넘기면 proof는 맞아도 privacy 목표는 실패한다. 둘째, 무결성 실패. 사용자가 받은 JSON을 직접 복사해 제출하면 verifier는 그 값이 서버에서 왔는지, 로컬에서 수정됐는지 구분할 수 없다. 셋째, 가용성 실패. notary나 verifier가 단일 장애점이면 사용자는 정당한 claim을 제때 제출하지 못한다. 이 실패는 암호학적 soundness와 별개로 제품 보안을 망친다.
+
+zkTLS에서 더 미묘한 실패는 축 사이 trade-off를 숨기는 것이다. 예를 들어 proof 재사용을 쉽게 하려고 signed transcript receipt를 오래 보관하면 availability와 usability는 좋아지지만, 오래된 상태를 최신 상태처럼 제시하는 위험이 커진다. 따라서 proof에는 만료 시간, origin, policy version, 공개 predicate가 함께 있어야 한다.
+
+## Minimal Lab or Trace
+
+아래 trace를 손으로 분류해 보라.
+
+| Trace | Confidentiality | Integrity | Availability |
+|---|---|---|---|
+| 사용자가 API 응답 원문 전체를 verifier에게 업로드한다. | 실패: 과다 공개 | 부분 충족: 값은 볼 수 있음 | 충족 여부 불명 |
+| prover가 `membershipTier == gold`만 공개하고 transcript binding을 제공한다. | 충족: 원문 최소 공개 | 충족 가능: binding 필요 | verifier가 살아 있어야 함 |
+| verifier가 proof는 받지만 `fetchedAt`을 확인하지 않는다. | 충족 가능 | 실패 가능: 오래된 claim 수용 | 충족 |
+| notary service가 장애 중이다. | 영향 없음 | proof 생성 불가 | 실패 |
+
+이 lab의 목적은 답을 외우는 것이 아니라 "어떤 축의 실패인가?"를 먼저 묻는 습관을 만드는 것이다. 같은 현상도 관점이 다르면 통제가 달라진다. 오래된 proof를 막으려면 암호화 알고리즘을 바꾸는 것이 아니라 freshness policy와 verifier rejection rule을 설계해야 한다.
+
+## zkTLS Bridge
+
+zkTLS는 CIA 중 특히 기밀성과 무결성의 긴장을 다룬다. 사용자는 웹 origin에서 받은 private data를 모두 공개하고 싶지 않다. 검증자는 단순 screenshot이나 JSON 복사본을 믿고 싶지 않다. 그래서 proof statement는 두 요구를 동시에 만족해야 한다. 숨긴 witness는 verifier에게 보이지 않아야 하고, 공개 claim은 TLS origin과 transcript integrity에 묶여 있어야 한다.
+
+TLSNotary 문서는 Prover가 Server에서 받은 데이터를 Verifier에게 선택적으로 공유하고 검증받는 흐름을 설명한다. DECO 논문도 TLS로 접근한 데이터의 provenance를 제3자에게 증명하는 문제를 출발점으로 둔다. 이 둘이 CIA를 대체하는 것이 아니다. 오히려 CIA 위에 "무엇을 공개하지 않고도 어떤 무결성 주장을 증명할 것인가"라는 더 세밀한 설계를 올린다.
+
+## Verification Checklist
+
+- 보호하려는 값이 기밀성, 무결성, 가용성 중 어느 축에 속하는지 적었는가?
+- TLS가 제공하는 채널 보장과 zkTLS proof가 제공하는 제3자 검증 보장을 분리했는가?
+- 공개 claim, 숨긴 witness, transcript digest, freshness metadata를 구분했는가?
+- 암호화만으로 해결되지 않는 replay, stale data, service outage를 실패 모드에 포함했는가?
+- verifier가 실제로 확인할 수 없는 항목을 보장처럼 쓰지 않았는가?
+
+## Visual Artifact Brief
+
+- Artifact key: risk-matrix
+- Purpose: TLS channel 보장과 zkTLS proof 보장을 CIA 축 위에서 비교한다.
+- Layout: 행은 Confidentiality/Integrity/Availability, 열은 `origin response`, `hidden witness`, `public claim`, `verifier workflow`로 구성한다.
+- Labels: "hidden from verifier", "bound to transcript", "fresh enough?", "single point of failure".
+- Motion idea: field chip을 클릭하면 해당 chip이 관련 CIA 축으로 이동하고, 충족/공백 상태가 색으로 바뀐다.
+- Reduced-motion state: 모든 chip을 정적 table cell에 배치하고, 공백 보장은 점선 테두리로 표시한다.
+
+## References
+
+- NIST FIPS 199: https://csrc.nist.gov/pubs/fips/199/final
+- RFC 8446, TLS 1.3: https://datatracker.ietf.org/doc/html/rfc8446
+- NIST SP 800-30 Rev. 1: https://csrc.nist.gov/pubs/sp/800/30/r1/final
+- TLSNotary Introduction: https://tlsnotary.org/docs/intro/
+- DECO paper: https://arxiv.org/abs/1909.00938

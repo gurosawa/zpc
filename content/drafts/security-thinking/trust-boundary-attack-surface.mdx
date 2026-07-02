@@ -1,0 +1,141 @@
+---
+title: Trust boundary와 attack surface
+chapter: Security Thinking
+chapterSlug: security-thinking
+articleSlug: trust-boundary-attack-surface
+status: draft
+difficulty: intermediate
+wordCountTarget: 6200
+visualKey: trust-boundary-map
+branch: content/c01-a03-trust-boundary-attack-surface
+readerQuestion: 신뢰 경계와 공격 표면은 시스템 다이어그램에서 어떻게 드러나는가?
+zktlsBridge: zkTLS의 핵심 비교는 어느 경계에서 TLS secret과 transcript가 관찰되는지에 달려 있다.
+references:
+  - https://csrc.nist.gov/glossary/term/attack_surface
+  - https://cheatsheetseries.owasp.org/cheatsheets/Attack_Surface_Analysis_Cheat_Sheet.html
+  - https://cheatsheetseries.owasp.org/cheatsheets/Threat_Modeling_Cheat_Sheet.html
+  - https://tlsnotary.org/docs/intro/
+  - https://tlsnotary.org/docs/protocol/mpc-tls/
+---
+
+# Trust boundary와 attack surface
+
+## Reader Question
+
+신뢰 경계는 "여기부터 다른 주체의 책임과 권한이 시작된다"는 선이다. 공격 표면은 그 선을 통과해 시스템에 들어오거나 시스템에서 나가는 조작 가능한 지점이다. 둘은 다이어그램에서 같이 보이지만 같은 말은 아니다. 경계는 소유권과 신뢰의 변화이고, 표면은 공격자가 만질 수 있는 입력, 출력, API, 파일, message, extension, token, configuration이다.
+
+zkTLS architecture를 보면 이 차이가 바로 중요해진다. client, server, prover, verifier, notary, browser extension, backend verifier는 서로 다른 신뢰 경계를 만든다. proxy 방식에서는 중간 관찰자가 네트워크 경로에 들어오고, MPC-TLS 방식에서는 verifier가 secure computation에 참여하지만 plaintext를 보지 않는 구성을 목표로 한다. 어떤 방식이든 "누가 무엇을 볼 수 있는가"와 "공격자가 무엇을 조작할 수 있는가"를 같은 그림에 그려야 한다.
+
+## Why It Matters
+
+NIST glossary는 attack surface를 시스템, 컴포넌트, 환경의 boundary에서 공격자가 들어오거나 영향을 주거나 데이터를 꺼낼 수 있는 지점들의 집합으로 설명한다. OWASP Attack Surface Analysis는 application의 data/command 입출력 경로, 그 경로를 보호하는 코드, 가치 있는 데이터, 그 데이터를 보호하는 코드를 함께 보라고 한다. OWASP Threat Modeling Cheat Sheet도 DFD에서 trust boundaries, data flows, stores, processes, external entities가 subsequent step의 중요한 입력이라고 설명한다.
+
+이 말은 단순히 그림을 예쁘게 그리라는 뜻이 아니다. 경계를 그리지 않으면 위협 모델이 소유자를 잃는다. browser extension이 사용자의 cookie에 접근할 수 있는지, notary가 plaintext를 볼 수 있는지, verifier가 redacted field만 보는지, backend가 policy version을 서명하는지 모르면 공격 표면을 줄일 수 없다. 특히 zkTLS는 privacy를 약속하는 시스템이므로 "검증을 위해 새로 생긴 관찰자"가 어떤 데이터를 보는지 명시해야 한다.
+
+## Core Model
+
+신뢰 경계와 공격 표면은 다음 식으로 기억한다.
+
+```txt
+trust boundary = change of authority, owner, or assumption
+attack surface = controllable or observable points crossing that boundary
+```
+
+경계가 있다고 해서 자동으로 위험한 것은 아니다. 문제는 그 경계를 통과하는 값이 검증되지 않거나 과다 권한을 갖거나 과다 공개될 때 생긴다. 반대로 attack surface가 넓어도 잘 정의된 schema, 인증, 인가, rate limit, audit, cryptographic binding이 있으면 위험은 관리 가능해진다.
+
+zkTLS의 기본 경계는 네 개다.
+
+| Boundary | Crossing artifact | Trust question |
+|---|---|---|
+| User device -> Web origin | HTTPS request/response | origin이 누구이고 session은 누구의 것인가? |
+| User device -> Prover runtime | cookie, response, witness | runtime이 secret을 과다 수집하지 않는가? |
+| Prover -> Notary/Verifier | transcript commitment, redaction proof | 검증자가 plaintext를 보는가, commitment만 보는가? |
+| Verifier -> Relying app | accept/reject decision | app이 어떤 policy와 freshness를 신뢰하는가? |
+
+## Protocol or System Artifact
+
+텍스트로 그린 minimal boundary map은 다음과 같다.
+
+```txt
+[Browser/User]
+  | HTTPS request with session cookie
+  v
+[Origin Server]
+  | TLS protected response
+  v
+[Prover Runtime] -- commitments / redactions --> [Notary or Verifier]
+  | public claim + proof
+  v
+[Relying Application]
+```
+
+이 map에서 공격 표면은 각 화살표 위에 붙는다. `HTTPS request`에는 header, cookie, path, body가 있다. `TLS protected response`에는 status, headers, body, timestamp가 있다. `commitments/redactions`에는 field selector, transcript digest, signature, proof parameters가 있다. `public claim`에는 predicate, nonce, expiry, policy id가 있다.
+
+같은 다이어그램을 proxy mode와 MPC-TLS mode로 나누면 차이가 보인다. TLSNotary 문서는 MPC-TLS에서 Prover와 Verifier가 MPC protocol을 실행해 Prover가 TLS-enabled server와 데이터를 교환하도록 하며, Verifier는 encrypted application data만 학습하고 Prover가 단독으로 request를 구성하거나 server response를 forge할 수 없다고 설명한다. 반면 TLSNotary intro는 proxy mode가 MPC step을 network-path security assumption으로 교환해 bandwidth와 verification 속도를 낮춘다고 설명한다. 이 차이는 보안 기능 목록이 아니라 경계와 관찰 가능 데이터의 차이다.
+
+## Failure Mode
+
+첫 번째 실패는 trust boundary를 deployment box와 동일시하는 것이다. 같은 server 안에서도 admin API와 public API는 다른 경계일 수 있다. 같은 browser 안에서도 page script, extension, native helper는 다른 권한을 가진다. "클라이언트 안에서 처리한다"는 말은 충분하지 않다.
+
+두 번째 실패는 attack surface를 internet-facing endpoint만으로 좁히는 것이다. zkTLS에서는 field selector, redaction config, verifier policy id, circuit parameter도 공격 표면이다. 사용자가 조작할 수 있는 predicate string이 verifier에서 안전하게 canonicalize되지 않으면, 네트워크 endpoint가 안전해도 claim interpretation이 깨진다.
+
+세 번째 실패는 관찰자와 검증자를 혼동하는 것이다. notary가 무엇을 보는지와 verifier가 무엇을 받아들이는지는 다르다. proxy가 encrypted traffic만 본다고 해도 network path assumption과 metadata exposure가 남을 수 있다. MPC 방식도 비용과 abort, availability 문제를 가진다. 어떤 architecture든 경계별 data visibility를 표기하지 않으면 privacy guarantee가 과장된다.
+
+네 번째 실패는 transit metadata를 무시하는 것이다. plaintext를 보지 않는다는 말은 모든 정보가 숨겨진다는 뜻이 아니다. 연결 시각, origin domain, response size, proof 생성 빈도, verifier challenge reuse 여부는 별도의 metadata surface다. 어떤 product에서는 이 metadata가 충분히 민감할 수 있다. 예를 들어 사용자가 특정 금융 origin에 반복적으로 proof를 요청한다는 사실만으로도 사용자의 상태를 추론할 수 있다. 그래서 boundary map에는 "plaintext visible?"뿐 아니라 "metadata visible?"도 함께 표시해야 한다.
+
+다섯 번째 실패는 trust boundary를 한 방향으로만 보는 것이다. 대부분의 다이어그램은 user가 origin에서 데이터를 가져와 verifier에게 제출하는 흐름으로 그린다. 하지만 verifier도 prover에게 challenge를 주고, relying application도 verifier decision을 소비하며, notary service도 key rotation이나 availability 상태를 외부에 노출한다. 역방향 control plane을 그리지 않으면 policy update, key revocation, replay prevention 같은 통제가 빠진다. zkTLS에서는 data plane과 control plane을 분리해 표시하는 편이 안전하다.
+
+## Minimal Lab or Trace
+
+아래 fetch-prove-verify trace에서 경계와 표면을 표시한다.
+
+| Step | Boundary crossed | Attack surface | Required check |
+|---|---|---|---|
+| User clicks "prove" | UI -> prover runtime | selected origin, requested scope | origin allowlist, user consent |
+| Prover fetches API | prover -> origin | URL, headers, cookies | HTTPS, session isolation |
+| Response parsed | origin -> parser | status, headers, JSON body | canonical parser, schema validation |
+| Claim generated | parser -> proof builder | field path, predicate, salt | domain separation, allowlist |
+| Proof submitted | prover -> verifier | proof bytes, nonce, policy id | signature/proof verification, freshness |
+
+이 lab은 "공격자가 무엇을 바꿀 수 있는가?"를 묻는 연습이다. 예를 들어 `field path`가 공격 표면이면 path traversal 같은 파일 시스템 문제가 없어도 claim confusion이 생길 수 있다. `policy id`가 공격 표면이면 낮은 기준의 policy로 검증된 proof를 높은 기준의 app decision에 재사용할 수 있다.
+
+같은 trace에 control plane을 추가하면 빠진 경계가 더 보인다.
+
+| Control flow | Boundary crossed | Attack surface | Required check |
+|---|---|---|---|
+| Verifier sends challenge | verifier -> prover | nonce, audience, expiry | one-time use, audience binding |
+| Policy registry updates rule | policy owner -> verifier | policy id, rollout state | signed policy, rollback rule |
+| Notary rotates key | notary -> verifier | public key set, validity window | key transparency, expiry check |
+
+이 세 행은 application data가 아니지만 proof acceptance에 직접 영향을 준다. 따라서 공격 표면은 request/response body만이 아니라 decision을 바꾸는 모든 control artifact를 포함한다.
+
+## zkTLS Bridge
+
+zkTLS bridge의 핵심 질문은 "TLS secret과 plaintext가 어느 경계에서 누구에게 보이는가?"다. 기존 HTTPS에서는 client와 server가 endpoint다. zkTLS에서는 제3자 검증을 위해 새로운 역할이 들어온다. 이 역할이 plaintext를 보면 privacy promise가 약해지고, 아무것도 보지 않으면 authenticity를 어떻게 검증할지 설명해야 한다. 그래서 architecture별 trust boundary map이 필요하다.
+
+TLSNotary의 MPC-TLS와 proxy mode 비교는 이 문제를 잘 보여준다. MPC-TLS는 Prover가 response를 forge하지 못하도록 verifier와 계산을 나누지만, online interaction과 비용이 있다. proxy mode는 더 단순하고 빠를 수 있지만 network-path assumption을 요구한다. DECO 계열도 TLS 데이터를 provenance proof로 옮기려는 구조를 제안한다. 이 모든 설계는 "proof system 이름"보다 "경계별 관찰 가능 데이터"로 비교해야 한다.
+
+## Verification Checklist
+
+- 각 boundary의 owner, authority, assumption을 이름으로 표시했는가?
+- boundary를 통과하는 artifact를 request, response, transcript, proof, policy 단위로 나눴는가?
+- 공격자가 조작 가능한 입력과 단순 출력/관찰 데이터를 구분했는가?
+- proxy, notary, verifier가 볼 수 있는 plaintext/metadata 범위를 적었는가?
+- 경계가 바뀌는 architecture 선택을 zkTLS trust assumption으로 연결했는가?
+
+## Visual Artifact Brief
+
+- Artifact key: trust-boundary-map
+- Purpose: client, origin, prover, notary/verifier, relying app 사이의 경계와 공격 표면을 한 화면에서 비교한다.
+- Layout: swimlane 5개와 화살표. 화살표 위에는 crossing artifact chip, lane 사이에는 점선 trust boundary.
+- Labels: "session cookie", "TLS response", "commitment", "redacted transcript", "policy decision", "plaintext visible?".
+- Motion idea: mode toggle(MPC-TLS/proxy)를 바꾸면 notary/verifier lane에서 보이는 데이터 chip이 달라진다.
+- Reduced-motion state: 두 mode를 나란히 배치한 정적 비교표로 표시한다.
+
+## References
+
+- NIST CSRC Glossary, Attack Surface: https://csrc.nist.gov/glossary/term/attack_surface
+- OWASP Attack Surface Analysis Cheat Sheet: https://cheatsheetseries.owasp.org/cheatsheets/Attack_Surface_Analysis_Cheat_Sheet.html
+- OWASP Threat Modeling Cheat Sheet: https://cheatsheetseries.owasp.org/cheatsheets/Threat_Modeling_Cheat_Sheet.html
+- TLSNotary Introduction: https://tlsnotary.org/docs/intro/
+- TLSNotary MPC-TLS: https://tlsnotary.org/docs/protocol/mpc-tls/

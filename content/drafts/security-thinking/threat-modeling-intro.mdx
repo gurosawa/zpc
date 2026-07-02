@@ -1,0 +1,139 @@
+---
+title: Threat modeling 입문
+chapter: Security Thinking
+chapterSlug: security-thinking
+articleSlug: threat-modeling-intro
+status: draft
+difficulty: intermediate
+wordCountTarget: 6400
+visualKey: trust-boundary-map
+branch: content/c01-a05-threat-modeling-intro
+readerQuestion: 기능 구현 전에 어떤 질문을 던져야 공격 경로를 줄일 수 있는가?
+zktlsBridge: 각 zkTLS article은 trust assumption을 명시하는 위협 모델로 연결되어야 한다.
+references:
+  - https://owasp.org/www-community/Threat_Modeling
+  - https://cheatsheetseries.owasp.org/cheatsheets/Threat_Modeling_Cheat_Sheet.html
+  - https://csrc.nist.gov/pubs/sp/800/154/ipd
+  - https://csrc.nist.gov/pubs/sp/800/30/r1/final
+  - https://tlsnotary.org/docs/intro/
+---
+
+# Threat modeling 입문
+
+## Reader Question
+
+Threat modeling은 기능을 만든 뒤 보안 검토표를 채우는 일이 아니다. 설계 전에 "무엇을 만들고 있는가, 무엇이 잘못될 수 있는가, 무엇을 할 것인가, 충분히 했는가"를 묻는 반복 작업이다. 이 네 질문은 OWASP Threat Modeling 자료와 Threat Modeling Manifesto 계열에서 널리 쓰이는 틀이다. 중요한 점은 특정 방법론 이름보다 질문의 순서다. 시스템을 모르면 위협을 고를 수 없고, 위협을 모르면 통제를 배치할 수 없으며, 통제를 검증하지 않으면 위험이 줄었는지 알 수 없다.
+
+zkTLS에서는 threat modeling이 더 필요하다. 이 영역은 TLS, browser/runtime, zero-knowledge proof, notary/proxy, application policy가 만나는 지점이다. 암호 protocol만 맞아도 제품은 실패할 수 있고, UX가 좋아도 privacy boundary가 깨질 수 있다. 그래서 각 article은 결국 작은 위협 모델로 돌아와야 한다.
+
+## Why It Matters
+
+OWASP Threat Modeling은 보호할 가치가 있는 것을 기준으로 threat와 mitigation을 식별, 전달, 이해하는 활동이라고 설명한다. OWASP Cheat Sheet는 threat modeling이 design phase에서 수행되고, system modeling, threat identification, response/mitigation, review/validation의 형태를 갖는다고 설명한다. NIST SP 800-154는 draft 문서이지만, data-centric system threat modeling을 risk assessment의 한 형태로 보고 특정 데이터 보호에 초점을 둔다. 여기서 중요한 교훈은 threat modeling이 "모든 best practice를 적용하자"가 아니라 제한된 자원을 어디에 쓸지 결정하는 도구라는 점이다.
+
+zkTLS proof request 하나만 봐도 질문은 많다. 사용자의 credential은 어디에 머무르는가? origin server는 어떤 identity로 확인되는가? proof는 어떤 field를 공개하는가? verifier는 오래된 proof를 거부하는가? notary나 proxy는 어떤 metadata를 보는가? 이 질문을 구현 후에 던지면 architecture를 다시 바꿔야 할 수 있다.
+
+## Core Model
+
+입문용 threat model은 네 개의 work product로 충분하다.
+
+| Work product | Answer |
+|---|---|
+| System sketch | actor, data flow, trust boundary, asset |
+| Threat list | attacker capability와 실패 사건 |
+| Mitigation map | threat를 줄이는 control과 위치 |
+| Validation plan | control이 작동함을 확인할 test, log, review |
+
+이 모델은 STRIDE, attack tree, abuse case, PASTA 같은 방법론과 경쟁하지 않는다. 오히려 그 방법론을 놓을 수 있는 최소 바닥이다. STRIDE를 쓴다면 spoofing, tampering, repudiation, information disclosure, denial of service, elevation of privilege 질문을 threat list 생성에 사용할 수 있다. 하지만 STRIDE label만 붙이고 asset, boundary, control을 쓰지 않으면 threat model이 아니다.
+
+## Protocol or System Artifact
+
+다음은 zkTLS proof request worksheet다.
+
+| Field | Example |
+|---|---|
+| What are we building? | 사용자가 `membershipTier == gold`를 제3자에게 증명한다. |
+| Asset | session cookie, response body, hidden fields, proof artifact, verifier decision |
+| Trust boundary | browser -> origin, prover -> notary, prover -> verifier |
+| Attacker capability | 사용자가 response JSON을 수정할 수 있음, 오래된 proof를 다시 제출할 수 있음, verifier가 policy를 혼동할 수 있음 |
+| Threat event | forged claim, stale proof replay, over-disclosure, confused verifier |
+| Mitigation | transcript commitment, nonce/challenge, allowlist disclosure, signed policy id |
+| Validation | proof verification test, replay rejection test, redaction snapshot, audit event check |
+
+이 artifact의 장점은 작고 반복 가능하다는 것이다. 새 endpoint, 새 claim type, 새 verifier policy가 생기면 worksheet를 갱신한다. 모든 위험을 한 번에 끝내려 하지 말고, 변화가 생기는 boundary를 중심으로 다시 묻는다.
+
+## Failure Mode
+
+가장 흔한 실패는 공격자의 능력을 너무 약하게 잡는 것이다. "사용자는 UI가 허용한 field만 고른다"는 가정은 보안 가정이 아니다. 실제 공격자는 request body, local storage, proof payload, field selector를 직접 조작할 수 있다고 보는 편이 안전하다. verifier가 받는 입력은 모두 untrusted input이다.
+
+두 번째 실패는 범위를 너무 넓게 잡아 아무 것도 결정하지 못하는 것이다. "전체 zkTLS 시스템의 모든 위협"을 한 번에 다루면 threat list가 길어지고 통제가 흐려진다. 대신 "gold membership proof request"처럼 하나의 claim, 하나의 origin, 하나의 verifier decision으로 시작한다.
+
+세 번째 실패는 mitigation을 proof system에만 몰아넣는 것이다. replay는 verifier challenge와 expiry가 필요할 수 있다. over-disclosure는 UI allowlist와 redaction review가 필요하다. policy confusion은 signed policy id와 audit log가 필요하다. circuit soundness는 중요하지만 모든 실패를 회로 안에서 해결하지 않는다.
+
+네 번째 실패는 "out of scope"를 쓰지 않는 것이다. 좋은 위협 모델은 모든 것을 다루지 않는다. 대신 이번 release에서 다루지 않는 것과 그 이유를 공개적으로 적는다. 예를 들어 "origin server 자체가 악의적인 경우는 이 proof가 해결하지 않는다", "사용자 device가 이미 완전히 compromise된 경우는 별도 endpoint hardening 범위다", "verifier가 business policy를 잘못 설정하는 문제는 policy review control로 다룬다"처럼 경계를 둔다. 이 문장이 없으면 독자는 proof가 더 많은 것을 보장한다고 오해한다.
+
+다섯 번째 실패는 residual risk를 실패처럼 숨기는 것이다. 완화책을 적용한 뒤에도 위험은 남는다. MPC-TLS는 response forgery 위험을 줄일 수 있지만 online verifier, latency, abort라는 운영 위험을 만든다. proxy 방식은 간단할 수 있지만 proxy가 보는 데이터와 network-path assumption을 남긴다. local-only proof builder는 사용성이 좋을 수 있지만 browser/runtime 신뢰가 커진다. threat model은 이 잔여 위험을 architecture trade-off로 보여줘야 한다.
+
+## Minimal Lab or Trace
+
+다음 toy proof request를 네 질문으로 분해한다.
+
+```txt
+Claim: "user is over 18"
+Origin: https://id.example.invalid
+Hidden fields: name, address, document id
+Verifier decision: allow account opening
+```
+
+| Question | Answer |
+|---|---|
+| What are we working on? | age predicate proof, not full identity credential |
+| What can go wrong? | fake origin, stale response, hidden field leakage, policy accepts wrong predicate |
+| What are we going to do? | origin binding, max proof age, redaction allowlist, exact predicate id |
+| Did we do enough? | replay test, redaction diff, verifier rejects wrong policy id, audit review |
+
+이 trace는 "나이 증명"을 credential issuance와 혼동하지 않게 한다. zkTLS proof는 origin response에서 읽은 predicate를 증명할 수 있지만, verifier가 어떤 법적/업무적 기준으로 age proof를 받아들이는지는 별도 policy다.
+
+같은 trace를 STRIDE식 질문으로 확장하면 다음처럼 된다.
+
+| STRIDE prompt | zkTLS-specific question |
+|---|---|
+| Spoofing | proof가 실제 origin과 verifier audience에 묶여 있는가? |
+| Tampering | public predicate나 field selector가 검증 전 수정될 수 있는가? |
+| Repudiation | verifier decision에 proof id, policy id, time이 남는가? |
+| Information disclosure | hidden field가 log, preview, error message로 새는가? |
+| Denial of service | notary, prover, verifier 중 어느 하나가 장애면 대체 경로가 있는가? |
+| Elevation of privilege | 낮은 assurance proof가 높은 권한 action에 재사용되는가? |
+
+이 표를 그대로 product backlog로 옮기면 안 된다. 각 질문은 threat 후보이고, 실제 작업은 영향과 가능성을 본 뒤 정한다. 그래도 질문이 구체적이면 "보안 검토 필요" 같은 모호한 ticket보다 훨씬 좋은 시작점이 된다.
+
+## zkTLS Bridge
+
+zkTLS bridge에서 threat modeling은 trust assumption을 문서화하는 장치다. proxy 방식은 어떤 중간자를 신뢰하는지, MPC-TLS 방식은 어떤 계산 참여자가 무엇을 배우는지, local proof 방식은 browser/runtime을 얼마나 신뢰하는지 다르게 적어야 한다. TLSNotary 문서가 Prover, Verifier, Notary 역할을 나누는 이유도 여기에 있다. 역할이 나뉘면 threat model도 나뉜다.
+
+이 가이드의 뒤쪽 article들은 TLS record, certificate chain, commitment, selective disclosure, MPC, proof pipeline을 다룬다. 각 개념은 독립 정의가 아니라 threat model의 한 부분이다. TLS record는 response integrity의 근거가 되고, commitment는 hidden witness와 public claim을 묶고, verifier policy는 proof를 business decision으로 바꾸는 경계가 된다.
+
+## Verification Checklist
+
+- system sketch에 actor, data flow, trust boundary, asset이 모두 있는가?
+- attacker capability를 UI 사용자의 정상 행동보다 강하게 잡았는가?
+- threat list가 특정 claim/use case에 묶여 있는가?
+- mitigation이 실제 vulnerability가 있는 boundary에 배치됐는가?
+- review/validation 방법이 test, log, proof check, policy review 중 하나로 구체적인가?
+- 남은 residual risk를 "나중에 해결"이 아니라 명시된 gap으로 적었는가?
+
+## Visual Artifact Brief
+
+- Artifact key: trust-boundary-map
+- Purpose: proof request 하나를 threat modeling worksheet와 boundary map으로 동시에 보여준다.
+- Layout: 상단은 actor/data-flow diagram, 하단은 네 질문 worksheet. 선택한 boundary가 worksheet row를 강조한다.
+- Labels: "what are we building?", "what can go wrong?", "mitigation", "validation", "residual risk".
+- Motion idea: boundary를 클릭하면 해당 boundary의 threat와 mitigation chip이 아래 표에 필터링된다.
+- Reduced-motion state: boundary별 threat/mitigation을 정적 accordion 없이 모두 펼친 표로 제공한다.
+
+## References
+
+- OWASP Threat Modeling: https://owasp.org/www-community/Threat_Modeling
+- OWASP Threat Modeling Cheat Sheet: https://cheatsheetseries.owasp.org/cheatsheets/Threat_Modeling_Cheat_Sheet.html
+- NIST SP 800-154 Initial Public Draft: https://csrc.nist.gov/pubs/sp/800/154/ipd
+- NIST SP 800-30 Rev. 1: https://csrc.nist.gov/pubs/sp/800/30/r1/final
+- TLSNotary Introduction: https://tlsnotary.org/docs/intro/
