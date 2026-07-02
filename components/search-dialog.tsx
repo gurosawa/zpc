@@ -44,11 +44,10 @@ export function SearchDialog() {
     <>
       <button
         type="button"
-        className="toolbar-button"
+        className="word-button"
         onClick={() => setIsOpen(true)}
       >
-        <Search size={16} aria-hidden />
-        <span>Search</span>
+        WORDS
       </button>
       {isOpen ? (
         <div className="search-backdrop" role="presentation">

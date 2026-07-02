@@ -1,6 +1,5 @@
 "use client";
 
-import { Moon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 
 export function ThemeToggle() {
@@ -24,12 +23,12 @@ export function ThemeToggle() {
   return (
     <button
       type="button"
-      className="icon-button"
+      className="word-button"
       aria-label={isDark ? "라이트 모드로 전환" : "다크 모드로 전환"}
       title={isDark ? "라이트 모드" : "다크 모드"}
       onClick={toggleTheme}
     >
-      {isDark ? <Sun size={17} aria-hidden /> : <Moon size={17} aria-hidden />}
+      MODE
     </button>
   );
 }
