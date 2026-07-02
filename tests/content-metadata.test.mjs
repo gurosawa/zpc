@@ -55,6 +55,7 @@ test("article roadmap contains 8 chapters and 48 complete article briefs", () =>
   const roadmap = JSON.parse(fs.readFileSync(roadmapFile, "utf8"));
   const branches = new Set();
   const articleSlugs = new Set();
+  const articleRoutes = new Set();
 
   assert.equal(roadmap.currentPlanningBranch, "docs/p4-content-roadmap");
   assert.equal(roadmap.chapters.length, 8);
@@ -93,11 +94,15 @@ test("article roadmap contains 8 chapters and 48 complete article briefs", () =>
 
       assert.equal(branches.has(article.branch), false, `${article.id}: duplicate branch`);
       assert.equal(articleSlugs.has(article.slug), false, `${article.id}: duplicate slug`);
+      const routePath = `/guide/${chapter.slug}/${article.slug}`;
+      assert.equal(articleRoutes.has(routePath), false, `${article.id}: duplicate article route`);
       branches.add(article.branch);
       articleSlugs.add(article.slug);
+      articleRoutes.add(routePath);
     }
   }
 
   assert.equal(branches.size, 48);
   assert.equal(articleSlugs.size, 48);
+  assert.equal(articleRoutes.size, 48);
 });

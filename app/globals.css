@@ -56,12 +56,15 @@
   --border: #151515;
   --border-light: #c8c8c0;
   --rule: #151515;
-  --font-technical: "Departure Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --font-korean-pixel: "NeoDunggeunmo Code", "Neo둥근모 Code", "D2Coding", "Apple SD Gothic Neo",
-    "Malgun Gothic", monospace;
-  --font-code: "Departure Mono", "D2Coding", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --font-body: var(--font-korean-pixel);
-  --font-mono: var(--font-technical);
+  --font-meta: "Departure Mono", "NeoDunggeunmo Code", "D2Coding", monospace;
+  --font-meta-safe: "Departure Mono", "D2Coding", "Nanum Gothic Coding", monospace;
+  --font-reading-ko: "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --font-korean-pixel: "NeoDunggeunmo Code", "D2Coding", "Apple SD Gothic Neo", monospace;
+  --font-editorial-ko: var(--font-korean-pixel);
+  --font-technical: var(--font-meta);
+  --font-code: var(--font-meta-safe);
+  --font-body: var(--font-reading-ko);
+  --font-mono: var(--font-meta);
   --color-bg-primary: var(--bg-primary);
   --color-bg-secondary: var(--bg-secondary);
   --color-text-primary: var(--text-primary);
@@ -81,8 +84,8 @@
   --color-accent: #001eff;
   --color-border: #151515;
   --color-border-light: #c8c8c0;
-  --font-body: "NeoDunggeunmo Code", "D2Coding", "Apple SD Gothic Neo", "Malgun Gothic", monospace;
-  --font-mono: "Departure Mono", "SF Mono", monospace;
+  --font-body: var(--font-reading-ko);
+  --font-mono: var(--font-meta);
 }
 
 .dark {
@@ -117,6 +120,15 @@ body {
   margin: 0;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 button,
 input,
 textarea {
@@ -130,6 +142,27 @@ a {
 
 a {
   color: inherit;
+}
+
+.editorial-masthead,
+.section-number,
+.status-label,
+.word-count,
+.compact-meta,
+.visual-artifact-caption,
+.toc-meta {
+  font-family: var(--font-meta);
+}
+
+.section-title,
+.article-title {
+  font-family: var(--font-editorial-ko);
+}
+
+.guide-article,
+.article-body,
+.markdown-body {
+  font-family: var(--font-body);
 }
 
 .site-shell {
@@ -249,13 +282,35 @@ textarea:focus-visible {
 
 .editorial-toc-grid {
   display: grid;
-  gap: var(--toc-section-gap-y) var(--toc-column-gap);
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: var(--toc-column-gap);
+  align-items: start;
+}
+
+@media (max-width: 1024px) {
+  .editorial-toc-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    row-gap: var(--toc-section-gap-y);
+  }
+
+  .toc-column {
+    display: contents;
+  }
+}
+
+@media (max-width: 640px) {
+  .editorial-toc-grid {
+    grid-template-columns: 1fr;
+  }
+  .visual-artifact-slot {
+    height: calc(var(--artifact-slot-height) * 0.8);
+  }
 }
 
 .toc-column {
   display: grid;
   gap: var(--toc-section-gap-y);
+  align-content: start;
 }
 
 .toc-section {
@@ -497,6 +552,14 @@ textarea:focus-visible {
 .compact-meta {
   text-align: right;
   white-space: nowrap;
+  display: flex;
+  gap: 0;
+  align-items: baseline;
+}
+
+.article-status {
+  color: var(--accent);
+  font-size: calc(var(--toc-meta-size) - 1px);
 }
 
 .chapter-index {
@@ -593,7 +656,7 @@ textarea:focus-visible {
 
 .doc-content p,
 .doc-content li {
-  font-family: var(--font-korean-pixel);
+  font-family: var(--font-body);
   font-size: 1.45rem;
   line-height: 1.85;
 }
@@ -1096,6 +1159,11 @@ textarea:focus-visible {
 @media (max-width: 959px) {
   .editorial-toc-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    row-gap: var(--toc-section-gap-y);
+  }
+
+  .toc-column {
+    display: contents;
   }
 
   .chapter-layout {
@@ -1131,6 +1199,10 @@ textarea:focus-visible {
 
   .editorial-toc-grid {
     grid-template-columns: 1fr;
+  }
+
+  .toc-column {
+    display: contents;
   }
 
   .content-frame {
@@ -1198,8 +1270,9 @@ textarea:focus-visible {
     animation: none;
   }
 
-  .visual-artifact-slot::after {
-    opacity: 0;
-    transition: none;
+  .toc-section.is-visible .visual-artifact-slot::after {
+    opacity: 0 !important;
+    animation: none !important;
+    transition: none !important;
   }
 }

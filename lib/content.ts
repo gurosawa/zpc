@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
 import { contentRoadmap } from "@/lib/content-roadmap";
-import type { ArticleDifficulty, VisualArtifactKey } from "@/lib/content-roadmap";
+import type { ArticleDifficulty, ArticleMeta, ChapterMeta, VisualArtifactKey } from "@/lib/content-roadmap";
 
 export type TocSectionStatus = "draft" | "review" | "stable" | "planned";
 
@@ -28,7 +28,9 @@ export type TocVisualKey =
 export type TocArticle = {
   id: string;
   slug: string;
+  chapterSlug: string;
   articleSlug: string;
+  path: string;
   order: number;
   title: string;
   status: TocSectionStatus;
@@ -42,6 +44,7 @@ export type TocArticle = {
 
 export type TocSection = {
   id: string;
+  slug: string;
   order: number;
   title: string;
   subtitle?: string;
@@ -50,6 +53,16 @@ export type TocSection = {
   articleCount: number;
   visualKey: TocVisualKey;
   articles: TocArticle[];
+};
+
+export type RoadmapArticle = ArticleMeta & {
+  chapter: ChapterMeta;
+  chapterSlug: string;
+  chapterTitle: string;
+  chapterOrder: number;
+  articleSlug: string;
+  path: string;
+  wordCount: number;
 };
 
 export type Chapter = {
@@ -69,16 +82,9 @@ export type Chapter = {
 };
 
 const contentDir = path.join(process.cwd(), "content");
-const roadmapChapterRoutes: Record<string, string> = {
-  c01: "foundations-of-cryptography",
-  c02: "foundations-of-cryptography",
-  c03: "tls-protocol",
-  c04: "tls-protocol",
-  c05: "implementation-and-runtime",
-  c06: "implementation-and-runtime",
-  c07: "advanced-cryptography",
-  c08: "zktls-architecture",
-};
+export function getRoadmapArticlePath(chapterSlug: string, articleSlug: string) {
+  return `/guide/${chapterSlug}/${articleSlug}`;
+}
 
 function normalizeStatus(value: unknown): TocSectionStatus {
   const status = String(value).toLowerCase();
@@ -132,15 +138,38 @@ export function getChapterBySlug(slug: string) {
   return getChapters().find((chapter) => chapter.slug === slug) ?? null;
 }
 
-export function getTocSections(): TocSection[] {
-  const chaptersBySlug = new Map(getChapters().map((chapter) => [chapter.slug, chapter]));
+export function getRoadmapChapters() {
+  return [...contentRoadmap.chapters].sort((a, b) => a.order - b.order);
+}
 
-  return contentRoadmap.chapters.map((chapter) => {
-    const routeSlug = chaptersBySlug.get(chapter.slug)?.slug ?? roadmapChapterRoutes[chapter.id] ?? "zktls-architecture";
+export function getRoadmapArticles(): RoadmapArticle[] {
+  return getRoadmapChapters().flatMap((chapter) =>
+    chapter.articles.map((article) => ({
+      ...article,
+      chapter,
+      chapterSlug: chapter.slug,
+      chapterTitle: chapter.title,
+      chapterOrder: chapter.order,
+      articleSlug: article.slug,
+      path: getRoadmapArticlePath(chapter.slug, article.slug),
+      wordCount: article.actualWordCount ?? article.wordCountTarget,
+    })),
+  );
+}
+
+export function getRoadmapArticleBySlugs(chapterSlug: string, articleSlug: string) {
+  return getRoadmapArticles().find(
+    (article) => article.chapterSlug === chapterSlug && article.articleSlug === articleSlug,
+  ) ?? null;
+}
+
+export function getTocSections(): TocSection[] {
+  return getRoadmapChapters().map((chapter) => {
     const wordCount = chapter.articles.reduce((total, article) => total + article.wordCountTarget, 0);
 
     return {
       id: chapter.id,
+      slug: chapter.slug,
       order: chapter.order,
       title: chapter.title,
       subtitle: chapter.guidingQuestion,
@@ -150,8 +179,10 @@ export function getTocSections(): TocSection[] {
       visualKey: chapter.visualKey,
       articles: chapter.articles.map((article) => ({
         id: article.id,
-        slug: routeSlug,
+        slug: article.slug,
+        chapterSlug: chapter.slug,
         articleSlug: article.slug,
+        path: getRoadmapArticlePath(chapter.slug, article.slug),
         order: article.order,
         title: article.title,
         status: article.status,

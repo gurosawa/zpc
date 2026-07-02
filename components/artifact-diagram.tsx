@@ -17,8 +17,8 @@ const knownKeys = new Set([
   "trust-layer-stack",
 ]);
 
-function normalizeKey(visualKey: TocVisualKey) {
-  return knownKeys.has(visualKey) ? visualKey : "proof-pipeline";
+function isKnownArtifactKey(key: string): boolean {
+  return knownKeys.has(key);
 }
 
 function TlsRecordStrip() {
@@ -194,6 +194,16 @@ function TrustLayerStack() {
   );
 }
 
+function PendingArtifact({ visualKey }: { visualKey: string }) {
+  return (
+    <>
+      <rect x="2" y="2" width="460" height="92" strokeDasharray="4 4" stroke="var(--border-light)" fill="none" />
+      <text x="232" y="44" textAnchor="middle" fill="var(--text-secondary)">{visualKey.toUpperCase()}</text>
+      <text x="232" y="60" textAnchor="middle" fill="var(--text-secondary)">[ DIAGRAM PENDING ]</text>
+    </>
+  );
+}
+
 function diagramFor(key: string) {
   if (key === "tls-record-strip") return <TlsRecordStrip />;
   if (key === "transcript-receipt") return <TranscriptReceipt />;
@@ -205,16 +215,17 @@ function diagramFor(key: string) {
 }
 
 export function ArtifactDiagram({ visualKey, label, variant = "figure" }: ArtifactDiagramProps) {
-  const key = normalizeKey(visualKey);
+  const isKnownKey = isKnownArtifactKey(visualKey);
+
   const svg = (
     <svg
-      className={`artifact-diagram artifact-diagram-${key}`}
+      className={`artifact-diagram artifact-diagram-${isKnownKey ? visualKey : "pending"}`}
       viewBox="0 0 464 96"
       role="img"
       aria-label={`${label} diagram`}
     >
       <title>{label}</title>
-      {diagramFor(key)}
+      {isKnownKey ? diagramFor(visualKey) : <PendingArtifact visualKey={visualKey} />}
     </svg>
   );
 

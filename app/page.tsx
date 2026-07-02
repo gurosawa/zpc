@@ -5,8 +5,6 @@ import { TocMotion } from "@/components/toc-motion";
 import type { TocSection } from "@/lib/content";
 import { getChapters, getTocSections } from "@/lib/content";
 
-const columnOrders = [[1, 2], [3, 4, 5], [6, 7, 8]];
-
 function formatWords(words: number) {
   return `${(words / 1000).toFixed(1)}K`;
 }
@@ -16,20 +14,45 @@ function statusLabel(status: TocSection["status"]) {
 }
 
 function sectionHref(section: TocSection) {
-  return `/guide/${section.articles[0]?.slug ?? section.id}`;
+  return section.articles[0]?.path ?? `/guide/${section.slug}`;
 }
 
-function columnsFor(sections: TocSection[]) {
-  const sectionsByOrder = new Map(sections.map((section) => [section.order, section]));
-  return columnOrders.map((orders) =>
-    orders.map((order) => sectionsByOrder.get(order)).filter((section): section is TocSection => Boolean(section)),
-  );
+function getEditorialColumnCounts(total: number): number[] {
+  if (total <= 0) return [];
+  if (total === 1) return [1];
+  if (total === 2) return [1, 1];
+
+  const base = Math.floor(total / 3);
+  const remainder = total % 3;
+  const counts = [base, base, base];
+
+  if (remainder === 1) {
+    counts[2] += 1;
+  }
+
+  if (remainder === 2) {
+    counts[1] += 1;
+    counts[2] += 1;
+  }
+
+  return counts.filter(Boolean);
+}
+
+function groupIntoEditorialColumns<T>(items: T[]): T[][] {
+  const counts = getEditorialColumnCounts(items.length);
+  let cursor = 0;
+
+  return counts.map((count) => {
+    const column = items.slice(cursor, cursor + count);
+    cursor += count;
+    return column;
+  });
 }
 
 export default function Home() {
   const chapters = getChapters();
   const tocSections = getTocSections();
-  const tocColumns = columnsFor(tocSections);
+  const tocColumns = groupIntoEditorialColumns(tocSections);
   const implementedSections = tocSections.filter((section) => section.status !== "planned").length;
   const totalWords = tocSections.reduce((total, section) => total + section.wordCount, 0);
 
@@ -44,7 +67,7 @@ export default function Home() {
         <nav className="editorial-toc" aria-label="Guide table of contents">
           <div className="editorial-toc-grid">
             {tocColumns.map((column, columnIndex) => (
-              <div className="toc-column" key={columnIndex}>
+              <div className="toc-column" key={`toc-column-${columnIndex}`}>
                 {column.map((section) => {
                   const headingId = `toc-section-${section.order}`;
 
@@ -80,12 +103,23 @@ export default function Home() {
                       <ol className="article-list">
                         {section.articles.map((article) => (
                           <li key={article.id}>
-                            <Link className="article-row" href={`/guide/${article.slug}`}>
+                            <Link className="article-row" href={article.path}>
                               <span className="article-marker">{String(article.order).padStart(2, "0")}</span>
                               <span className="article-title">{article.title}</span>
                               <span className="article-leader" aria-hidden />
-                              <span className="compact-meta">
-                                {formatWords(article.wordCount ?? 0)} W
+                              <span
+                                className="compact-meta"
+                                aria-label={`${formatWords(article.wordCount ?? 0)} words, ${article.status}`}
+                              >
+                                <span className="article-words" aria-hidden="true">
+                                  {formatWords(article.wordCount ?? 0)} W
+                                </span>
+                                <span className="meta-separator" aria-hidden="true">
+                                  {" · "}
+                                </span>
+                                <span className="article-status" aria-hidden="true">
+                                  {statusLabel(article.status)}
+                                </span>
                               </span>
                             </Link>
                           </li>
