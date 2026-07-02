@@ -3,6 +3,18 @@ title: "기초 암호학"
 slug: "foundations-of-cryptography"
 order: 1
 summary: "해시, 대칭키, 공개키, 서명, MAC, AEAD를 zkTLS 관점에서 다시 정리합니다."
+status: "draft"
+guiding_question: "zkTLS가 필요로 하는 암호학 재료는 무엇이고, 왜 그런 조합이 필요한가?"
+reader_promise: "TLS transcript와 영지식 증명이 왜 해시, 대칭키, 공개키를 모두 필요로 하는지 직관을 세울 수 있습니다."
+expected_words: 2800
+draft_outline:
+  - "암호학은 비밀보다 검증의 기술입니다"
+  - "대칭키 암호화와 공개키 암호화"
+  - "해시 함수와 디지털 서명"
+  - "MAC, AEAD, 커밋먼트"
+illustration_idea: "AES-GCM 레코드 구조를 얇은 선으로 분해한 SVG 다이어그램."
+interactive_idea: "crypto.subtle 해시 계산으로 입력 변화가 출력 전체를 바꾸는 avalanche 효과를 시각화합니다."
+visual_key: "merkle-branch"
 ---
 
 ## 암호학은 비밀보다 검증의 기술입니다

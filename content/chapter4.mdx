@@ -3,6 +3,19 @@ title: "zkTLS 구조와 동작 원리"
 slug: "zktls-architecture"
 order: 4
 summary: "Proxy 방식, MPC 방식, DECO, TLSNotary 계열 아키텍처를 비교하고 Fetch, Proof, Verify 흐름을 정리합니다."
+status: "draft"
+guiding_question: "TLS 응답에서 필요한 사실만 꺼내 증명하는 zkTLS 아키텍처는 어떻게 나뉘는가?"
+reader_promise: "proxy, MPC, DECO, TLSNotary 계열의 신뢰 가정과 fetch-prove-verify 흐름을 비교할 수 있습니다."
+expected_words: 3600
+draft_outline:
+  - "zkTLS는 TLS 데이터에서 필요한 사실만 증명합니다"
+  - "등장 배경과 사용 사례"
+  - "Proxy 방식과 MPC 방식"
+  - "Fetch, Proof, Verify 파이프라인"
+  - "보안 모델과 신뢰 가정"
+illustration_idea: "request, transcript, proof, verifier가 이어지는 proof pipeline."
+interactive_idea: "proxy 방식과 MPC 방식의 관찰자, 입력, 출력 차이를 토글로 비교합니다."
+visual_key: "proof-pipeline"
 ---
 
 ## zkTLS는 TLS 데이터에서 필요한 사실만 증명합니다
