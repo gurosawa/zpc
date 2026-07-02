@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ArtifactDiagram } from "@/components/artifact-diagram";
 import { GuideShell } from "@/components/guide-shell";
 import { TocMotion } from "@/components/toc-motion";
 import type { TocSection } from "@/lib/content";
@@ -224,13 +225,12 @@ export default function Home() {
                         </span>
                       </div>
 
-                      <div className="visual-artifact-slot" aria-label={`${section.visualKey} placeholder`}>
-                        <div className="artifact-schematic" aria-hidden>
-                          <span />
-                          <span />
-                          <span />
-                          <span />
-                        </div>
+                      <div className="visual-artifact-slot" aria-label={`${section.visualKey} artifact`}>
+                        <ArtifactDiagram
+                          visualKey={section.visualKey}
+                          label={`${section.title} visual artifact`}
+                          variant="slot"
+                        />
                         <span className="artifact-label">{section.visualKey.replace(/-/g, " ")}</span>
                       </div>
 

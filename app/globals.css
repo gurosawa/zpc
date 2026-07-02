@@ -352,29 +352,60 @@ textarea:focus-visible {
   opacity: 0.9;
 }
 
-.artifact-schematic {
-  align-items: center;
-  display: grid;
-  gap: 8px;
-  grid-template-columns: 1fr 0.7fr 1.2fr 0.6fr;
-  height: 100%;
-  padding-right: 14px;
-}
-
-.artifact-schematic span {
-  border: 1px solid var(--border);
+.artifact-diagram {
+  color: var(--text-primary);
   display: block;
-  height: 16px;
-  transition: border-color 0.35s ease, transform 0.35s ease;
+  height: 100%;
+  max-width: 100%;
+  overflow: visible;
+  width: 100%;
 }
 
-.artifact-schematic span:nth-child(2),
-.artifact-schematic span:nth-child(4) {
-  border-style: dotted;
+.artifact-diagram :is(line, path, rect, circle, polyline) {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: square;
+  stroke-linejoin: miter;
+  stroke-width: 1.25;
+  vector-effect: non-scaling-stroke;
 }
 
-.toc-section.is-visible .artifact-schematic span:nth-child(odd) {
-  border-color: var(--accent);
+.artifact-diagram text {
+  fill: var(--text-secondary);
+  font-family: var(--font-technical);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+}
+
+.artifact-diagram .diagram-accent :is(line, path, rect, circle, polyline),
+.artifact-diagram .diagram-accent:is(line, path, rect, circle, polyline) {
+  stroke: var(--accent);
+}
+
+.artifact-diagram .diagram-accent text {
+  fill: var(--accent);
+}
+
+.artifact-diagram [data-draw],
+.pipeline-draw [data-draw] {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+
+.toc-section.is-visible .artifact-diagram [data-draw],
+.svg-draw.is-visible [data-draw] {
+  animation: svg-line-draw 0.92s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.toc-section.is-visible .artifact-diagram [data-draw]:nth-child(2n),
+.svg-draw.is-visible [data-draw]:nth-child(2n) {
+  animation-delay: 0.08s;
+}
+
+@keyframes svg-line-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
 }
 
 .artifact-label {
@@ -384,6 +415,26 @@ textarea:focus-visible {
   line-height: 1.2;
   text-transform: uppercase;
   white-space: nowrap;
+}
+
+.artifact-figure {
+  border-bottom: 1px dotted var(--border-light);
+  border-top: 1px solid var(--border);
+  margin: 3rem 0;
+  padding: 1.2rem 0 0.9rem;
+}
+
+.artifact-figure .svg-draw {
+  height: 12rem;
+}
+
+.artifact-figure figcaption {
+  color: var(--text-secondary);
+  font-family: var(--font-technical);
+  font-size: 1rem;
+  letter-spacing: 0.02em;
+  margin-top: 0.8rem;
+  text-transform: uppercase;
 }
 
 .article-list {
@@ -781,16 +832,79 @@ textarea:focus-visible {
 
 .tls-canvas {
   border: 1px solid var(--color-border);
-  color: var(--color-accent);
   height: 34rem;
   overflow: hidden;
 }
 
-.tls-canvas canvas,
-.tls-canvas svg {
+.tls-canvas .pipeline-diagram-host,
+.tls-canvas .pipeline-draw,
+.tls-canvas svg,
+.pipeline-draw svg {
   display: block;
   height: 100%;
   width: 100%;
+}
+
+.pipeline-diagram-host {
+  --progress: 0;
+  margin: 3rem 0;
+}
+
+.tls-canvas .pipeline-diagram-host {
+  margin: 0;
+}
+
+.pipeline-draw {
+  border-bottom: 1px dotted var(--border-light);
+  border-top: 1px solid var(--border);
+  color: var(--text-primary);
+  min-height: 24rem;
+}
+
+.tls-canvas .pipeline-draw {
+  border: 0;
+  min-height: 0;
+}
+
+.pipeline-draw :is(path, rect) {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: square;
+  stroke-linejoin: miter;
+  stroke-width: 1.2;
+  vector-effect: non-scaling-stroke;
+}
+
+.pipeline-draw text {
+  fill: var(--text-secondary);
+  font-family: var(--font-technical);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+.pipeline-baseline {
+  opacity: 0.35;
+}
+
+.pipeline-edge {
+  stroke: var(--border-light);
+  transition: stroke 0.24s ease;
+}
+
+.pipeline-edge.active,
+.pipeline-node.active rect,
+.pipeline-proof-note {
+  stroke: var(--accent);
+}
+
+.pipeline-node text,
+.pipeline-node rect {
+  transition: fill 0.24s ease, stroke 0.24s ease;
+}
+
+.pipeline-node.active text,
+.pipeline-proof-note text {
+  fill: var(--accent);
 }
 
 .flow-steps span {

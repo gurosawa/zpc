@@ -1,8 +1,10 @@
 import type { ComponentPropsWithoutRef } from "react";
 import { slugify } from "@/lib/slug";
+import { ArtifactDiagram } from "@/components/artifact-diagram";
 import { CircuitPlayground } from "@/components/circuit-playground";
 import { HashLab } from "@/components/hash-lab";
 import { InteractiveTLS } from "@/components/interactive-tls";
+import { PipelineDiagram } from "@/components/pipeline-diagram";
 import { WasmDemo } from "@/components/wasm-demo";
 
 function textFromChildren(children: React.ReactNode): string {
@@ -39,7 +41,9 @@ function createHeading(level: 2 | 3) {
 export const mdxComponents = {
   h2: createHeading(2),
   h3: createHeading(3),
+  ArtifactDiagram,
   InteractiveTLS,
+  PipelineDiagram,
   HashLab,
   WasmDemo,
   CircuitPlayground,

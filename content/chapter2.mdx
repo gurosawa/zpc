@@ -22,18 +22,6 @@ visual_key: "tls-record-strip"
 
 TLS는 브라우저와 서버 사이의 통신을 암호화하고, 사용자가 의도한 서버와 대화하고 있는지 확인합니다. HTTPS 주소를 열 때 브라우저는 서버 인증서를 검증하고, 세션 키를 합의한 다음, 이후 요청과 응답을 암호화된 레코드로 주고받습니다. zkTLS는 이 흐름을 깨는 기술이 아니라, 사용자가 받은 TLS 기반 데이터를 최소 공개 방식으로 증명하려는 계층입니다.
 
-```mermaid
-sequenceDiagram
-  participant C as Client
-  participant S as Server
-  C->>S: ClientHello
-  S->>C: ServerHello + Certificate
-  C->>S: Key Share
-  S->>C: Finished
-  C->>S: Encrypted Request
-  S->>C: Encrypted Response
-```
-
 <InteractiveTLS />
 
 ## HTTPS와 TLS의 역할

@@ -72,12 +72,7 @@ verifyLocally(privateInput, publicClaim);
 
 브라우저에서 증명 생성이나 검증 보조 로직을 실행하려면 같은 입력이 언제나 같은 출력으로 이어져야 합니다. 원래 요구사항은 Rust로 작성한 작은 함수를 `wasm-pack`으로 빌드하는 것입니다. 이 로컬 환경에는 `wasm-pack`은 있지만 Rust 컴파일러가 없어, 동일한 `@/wasm` API를 가진 TypeScript 결정론적 래퍼를 제공합니다. UI에는 이 사실을 명확히 표시하고, test vector로 일관성을 검증합니다.
 
-```mermaid
-flowchart LR
-  TS["TypeScript UI"] --> W["@/wasm compatible wrapper"]
-  W --> H["deterministic output"]
-  H --> V["test vectors"]
-```
+<ArtifactDiagram visualKey="browser-session-trace" label="TypeScript UI에서 deterministic output과 test vector로 이어지는 로컬 실행 경로" />
 
 <CircuitPlayground />
 
