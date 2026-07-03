@@ -133,12 +133,12 @@ export default function Home() {
           </div>
         </nav>
 
-        <section className="chapter-index" aria-label="현재 구현된 챕터">
-          {chapters.map((chapter) => (
-            <Link key={chapter.slug} href={`/guide/${chapter.slug}`}>
-              <span>{String(chapter.order).padStart(2, "0")}</span>
-              <strong>{chapter.title}</strong>
-              <small>{chapter.readerPromise}</small>
+        <section className="chapter-index" aria-label="전체 챕터 인덱스">
+          {tocSections.map((section) => (
+            <Link key={section.id} href={sectionHref(section)}>
+              <span>{String(section.order).padStart(2, "0")}</span>
+              <strong>{section.title}</strong>
+              <small>{section.subtitle}</small>
             </Link>
           ))}
         </section>

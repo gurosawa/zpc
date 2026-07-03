@@ -1,5 +1,6 @@
 import { MDXRemote } from "next-mdx-remote/rsc";
 import Link from "next/link";
+import remarkGfm from "remark-gfm";
 import { ArtifactDiagram } from "@/components/artifact-diagram";
 import { GuideShell } from "@/components/guide-shell";
 import { mdxComponents } from "@/components/mdx-components";
@@ -156,7 +157,11 @@ export function ArticlePageShell({
           <div className="article-prose-column">
             {hasFullDraft ? (
               <section className="article-draft-mdx" aria-label="Full article draft">
-                <MDXRemote source={fullDraftBody} components={mdxComponents} />
+                <MDXRemote
+                  source={fullDraftBody}
+                  components={mdxComponents}
+                  options={{ mdxOptions: { remarkPlugins: [remarkGfm] } }}
+                />
               </section>
             ) : (
               <RoadmapDraft article={article} />

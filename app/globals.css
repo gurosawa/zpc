@@ -574,7 +574,7 @@ textarea:focus-visible {
   border-bottom: 1px dotted var(--border-light);
   display: grid;
   gap: 1.2rem;
-  grid-template-columns: 3.5rem 18rem minmax(0, 1fr);
+  grid-template-columns: 3.5rem minmax(18rem, 28rem) minmax(0, 1fr);
   padding: 1.15rem 0;
   text-decoration: none;
 }
@@ -582,6 +582,7 @@ textarea:focus-visible {
 .chapter-index strong {
   font-size: 1.2rem;
   font-weight: 400;
+  overflow-wrap: anywhere;
 }
 
 .chapter-index small {
@@ -796,6 +797,51 @@ textarea:focus-visible {
 .doc-content ul,
 .doc-content ol {
   padding-left: 2.2rem;
+}
+
+.mdx-table-scroll {
+  border-bottom: 1px solid var(--border);
+  border-top: 1px solid var(--border);
+  margin: 2.2rem 0;
+  overflow-x: auto;
+  width: 100%;
+}
+
+.doc-content table {
+  border-collapse: collapse;
+  font-size: 1.05rem;
+  line-height: 1.55;
+  min-width: 42rem;
+  width: 100%;
+}
+
+.doc-content th,
+.doc-content td {
+  border-bottom: 1px dotted var(--border-light);
+  padding: 0.85rem 1rem 0.85rem 0;
+  text-align: left;
+  vertical-align: top;
+}
+
+.doc-content tr:last-child td {
+  border-bottom: 0;
+}
+
+.doc-content th {
+  color: var(--text-secondary);
+  font-family: var(--font-technical);
+  font-size: 0.95rem;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.doc-content td:first-child {
+  color: var(--text-primary);
+  font-family: var(--font-technical);
+  font-size: 0.98rem;
+  white-space: nowrap;
 }
 
 .doc-content pre {

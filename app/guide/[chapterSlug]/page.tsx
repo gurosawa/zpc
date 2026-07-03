@@ -1,6 +1,7 @@
 import { MDXRemote } from "next-mdx-remote/rsc";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import remarkGfm from "remark-gfm";
 import { GuideShell } from "@/components/guide-shell";
 import { MiniToc } from "@/components/mini-toc";
 import { mdxComponents } from "@/components/mdx-components";
@@ -80,7 +81,11 @@ export default async function ChapterPage({ params }: PageProps) {
               <dd>{chapter.guidingQuestion}</dd>
             </div>
           </dl>
-          <MDXRemote source={chapter.body} components={mdxComponents} />
+          <MDXRemote
+            source={chapter.body}
+            components={mdxComponents}
+            options={{ mdxOptions: { remarkPlugins: [remarkGfm] } }}
+          />
           <nav className="chapter-footer" aria-label="Chapter navigation">
             {previousChapter ? (
               <Link href={`/guide/${previousChapter.slug}`}>
