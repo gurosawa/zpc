@@ -134,10 +134,17 @@ export function HomeAtlasExperience({ tocSections }: HomeAtlasExperienceProps) {
                 <div className="toc-column" key={`toc-column-${columnIndex}`}>
                   {column.map((section) => {
                     const headingId = `toc-section-${section.order}`;
+                    const isActiveChapter = section.slug === activeChapterSlug;
 
                     return (
                       <section
-                        className="toc-section"
+                        className={[
+                          "toc-section",
+                          isActiveChapter ? "is-active" : "",
+                          activeChapterSlug && !isActiveChapter ? "is-dimmed" : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
                         aria-labelledby={headingId}
                         data-atlas-chapter={section.slug}
                         data-visual-key={section.visualKey}

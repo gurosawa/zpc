@@ -585,6 +585,37 @@ textarea:focus-visible {
 
 .toc-section {
   --artifact-scan-x: -110%;
+  position: relative;
+  transition: opacity 0.2s ease;
+}
+
+.toc-section::before {
+  background: var(--accent);
+  content: "";
+  height: 100%;
+  left: -14px;
+  opacity: 0;
+  position: absolute;
+  top: 0;
+  transition: opacity 0.2s ease;
+  width: 2px;
+}
+
+.toc-section.is-active::before {
+  opacity: 1;
+}
+
+.toc-section.is-active .section-number,
+.toc-section.is-active .section-title {
+  color: var(--accent);
+}
+
+.toc-section.is-active .section-meta {
+  color: var(--text-primary);
+}
+
+.toc-section.is-dimmed {
+  opacity: 0.64;
 }
 
 .toc-section.is-visible {

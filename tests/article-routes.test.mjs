@@ -9,6 +9,7 @@ const contentFilesSource = fs.readFileSync("lib/content-files.ts", "utf8");
 const homeSource = fs.readFileSync("app/page.tsx", "utf8");
 const notFoundSource = fs.readFileSync("app/not-found.tsx", "utf8");
 const homeAtlasSource = fs.readFileSync("components/atlas/home-atlas-experience.tsx", "utf8");
+const globalsSource = fs.readFileSync("app/globals.css", "utf8");
 const searchDialogSource = fs.readFileSync("components/search-dialog.tsx", "utf8");
 
 function articlePaths() {
@@ -78,6 +79,14 @@ test("home Atlas active chapter combines hover and scroll-spy state", () => {
     homeAtlasSource,
     /activeChapterSlug\s*=\s*activeByHover\s*\?\?\s*activeByScroll\s*\?\?\s*firstChapterSlug/,
   );
+});
+
+test("home TOC exposes active and dimmed reading states", () => {
+  assert.match(homeAtlasSource, /section\.slug === activeChapterSlug/);
+  assert.match(homeAtlasSource, /is-active/);
+  assert.match(homeAtlasSource, /is-dimmed/);
+  assert.match(globalsSource, /\.toc-section\.is-active/);
+  assert.match(globalsSource, /\.toc-section\.is-dimmed/);
 });
 
 test("search results use indexed article paths instead of chapter hash routes", () => {
