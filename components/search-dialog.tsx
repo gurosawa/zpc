@@ -30,11 +30,29 @@ export function SearchDialog() {
   const [query, setQuery] = useState("");
 
   useEffect(() => {
+    if (!isOpen || items.length > 0) {
+      return;
+    }
+
+    let cancelled = false;
+
     fetch("/search-index.json")
       .then((response) => (response.ok ? response.json() : []))
-      .then((payload: SearchItem[]) => setItems(payload))
-      .catch(() => setItems([]));
-  }, []);
+      .then((payload: SearchItem[]) => {
+        if (!cancelled) {
+          setItems(payload);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setItems([]);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, items.length]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {

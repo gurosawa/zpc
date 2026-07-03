@@ -93,6 +93,29 @@ export function getRoadmapArticlePath(chapterSlug: string, articleSlug: string) 
   return `/guide/${chapterSlug}/${articleSlug}`;
 }
 
+const roadmapChapters = [...contentRoadmap.chapters].sort((a, b) => a.order - b.order);
+
+const roadmapArticles: RoadmapArticle[] = roadmapChapters.flatMap((chapter) =>
+  chapter.articles.map((article) => ({
+    ...article,
+    chapter,
+    chapterSlug: chapter.slug,
+    chapterTitle: chapter.title,
+    chapterOrder: chapter.order,
+    articleSlug: article.slug,
+    path: getRoadmapArticlePath(chapter.slug, article.slug),
+    wordCount: article.actualWordCount ?? article.wordCountTarget,
+  })),
+);
+
+const roadmapArticleByRoute = new Map(
+  roadmapArticles.map((article) => [`${article.chapterSlug}/${article.articleSlug}`, article]),
+);
+
+const roadmapArticleIndexByRoute = new Map(
+  roadmapArticles.map((article, index) => [`${article.chapterSlug}/${article.articleSlug}`, index]),
+);
+
 function normalizeStatus(value: unknown): TocSectionStatus {
   const status = String(value).toLowerCase();
 
@@ -146,35 +169,19 @@ export function getChapterBySlug(slug: string) {
 }
 
 export function getRoadmapChapters() {
-  return [...contentRoadmap.chapters].sort((a, b) => a.order - b.order);
+  return roadmapChapters;
 }
 
 export function getRoadmapArticles(): RoadmapArticle[] {
-  return getRoadmapChapters().flatMap((chapter) =>
-    chapter.articles.map((article) => ({
-      ...article,
-      chapter,
-      chapterSlug: chapter.slug,
-      chapterTitle: chapter.title,
-      chapterOrder: chapter.order,
-      articleSlug: article.slug,
-      path: getRoadmapArticlePath(chapter.slug, article.slug),
-      wordCount: article.actualWordCount ?? article.wordCountTarget,
-    })),
-  );
+  return roadmapArticles;
 }
 
 export function getRoadmapArticleBySlugs(chapterSlug: string, articleSlug: string) {
-  return getRoadmapArticles().find(
-    (article) => article.chapterSlug === chapterSlug && article.articleSlug === articleSlug,
-  ) ?? null;
+  return roadmapArticleByRoute.get(`${chapterSlug}/${articleSlug}`) ?? null;
 }
 
 export function getAdjacentRoadmapArticles(chapterSlug: string, articleSlug: string) {
-  const articles = getRoadmapArticles();
-  const currentIndex = articles.findIndex(
-    (article) => article.chapterSlug === chapterSlug && article.articleSlug === articleSlug,
-  );
+  const currentIndex = roadmapArticleIndexByRoute.get(`${chapterSlug}/${articleSlug}`) ?? -1;
 
   if (currentIndex === -1) {
     return {
@@ -184,8 +191,8 @@ export function getAdjacentRoadmapArticles(chapterSlug: string, articleSlug: str
   }
 
   return {
-    previousArticle: articles[currentIndex - 1] ?? null,
-    nextArticle: articles[currentIndex + 1] ?? null,
+    previousArticle: roadmapArticles[currentIndex - 1] ?? null,
+    nextArticle: roadmapArticles[currentIndex + 1] ?? null,
   };
 }
 
