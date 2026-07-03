@@ -58,7 +58,7 @@ test("search results use indexed article paths instead of chapter hash routes", 
   assert.doesNotMatch(searchDialogSource, /href=\{`\/guide\/\$\{item\.chapterSlug\}#/);
 });
 
-test("article route page and shell expose required metadata fields", () => {
+test("article route page and shell expose article content without internal metadata", () => {
   const routeFile = path.join("app", "guide", "[chapterSlug]", "[articleSlug]", "page.tsx");
   const shellFile = path.join("components", "article-page-shell.tsx");
 
@@ -89,9 +89,14 @@ test("article route page and shell expose required metadata fields", () => {
     assert.match(shellSource, new RegExp(label), `${label} shell label`);
   }
 
-  for (const fieldName of ["branch", "difficulty", "visualKey", "readerQuestion"]) {
+  for (const fieldName of ["visualKey", "readerQuestion"]) {
     assert.match(shellSource, new RegExp(fieldName), `${fieldName} rendered by shell`);
   }
+
+  assert.doesNotMatch(shellSource, /article-meta-line/, "top metadata block should not render");
+  assert.doesNotMatch(shellSource, /article\.branch/, "branch should stay internal");
+  assert.doesNotMatch(shellSource, /article\.difficulty/, "difficulty should stay internal");
+  assert.doesNotMatch(shellSource, /article\.status\.toUpperCase/, "status should stay internal");
 });
 
 test("adjacent article expectations are defined over roadmap order", () => {

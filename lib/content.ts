@@ -104,7 +104,7 @@ const roadmapArticles: RoadmapArticle[] = roadmapChapters.flatMap((chapter) =>
     chapterOrder: chapter.order,
     articleSlug: article.slug,
     path: getRoadmapArticlePath(chapter.slug, article.slug),
-    wordCount: article.actualWordCount ?? article.wordCountTarget,
+    wordCount: getArticleWordCount(chapter.slug, article),
   })),
 );
 
@@ -132,6 +132,38 @@ function normalizeStatus(value: unknown): TocSectionStatus {
 
 function readStringList(value: unknown): string[] {
   return Array.isArray(value) ? value.map(String).filter(Boolean) : [];
+}
+
+function countWords(value: string) {
+  return value
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/~~~[\s\S]*?~~~/g, " ")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/https?:\/\/\S+/g, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/[`*_>#|[\]{}()]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean).length;
+}
+
+function getArticleDraftPath(chapterSlug: string, articleSlug: string) {
+  return articleDraftDirs
+    .map((draftDir) => path.join(draftDir, chapterSlug, `${articleSlug}.mdx`))
+    .find((candidate) => fs.existsSync(candidate)) ?? null;
+}
+
+function getArticleWordCount(chapterSlug: string, article: ArticleMeta) {
+  const draftPath = getArticleDraftPath(chapterSlug, article.slug);
+
+  if (!draftPath) {
+    return article.actualWordCount ?? article.wordCountTarget;
+  }
+
+  const raw = fs.readFileSync(draftPath, "utf8");
+  const { content } = matter(raw);
+  const words = countWords(content);
+
+  return words > 0 ? words : article.actualWordCount ?? article.wordCountTarget;
 }
 
 function readChapter(fileName: string): Chapter {
@@ -200,9 +232,7 @@ export function getRoadmapArticleDraftBySlugs(
   chapterSlug: string,
   articleSlug: string,
 ): RoadmapArticleDraft | null {
-  const draftPath = articleDraftDirs
-    .map((draftDir) => path.join(draftDir, chapterSlug, `${articleSlug}.mdx`))
-    .find((candidate) => fs.existsSync(candidate));
+  const draftPath = getArticleDraftPath(chapterSlug, articleSlug);
 
   if (!draftPath) {
     return null;
@@ -219,7 +249,23 @@ export function getRoadmapArticleDraftBySlugs(
 
 export function getTocSections(): TocSection[] {
   return getRoadmapChapters().map((chapter) => {
-    const wordCount = chapter.articles.reduce((total, article) => total + article.wordCountTarget, 0);
+    const articles = chapter.articles.map((article) => ({
+      id: article.id,
+      slug: article.slug,
+      chapterSlug: chapter.slug,
+      articleSlug: article.slug,
+      path: getRoadmapArticlePath(chapter.slug, article.slug),
+      order: article.order,
+      title: article.title,
+      status: article.status,
+      branch: article.branch,
+      difficulty: article.difficulty,
+      visualKey: article.visualKey,
+      readerQuestion: article.readerQuestion,
+      zktlsBridge: article.zktlsBridge,
+      wordCount: getArticleWordCount(chapter.slug, article),
+    }));
+    const wordCount = articles.reduce((total, article) => total + (article.wordCount ?? 0), 0);
 
     return {
       id: chapter.id,
@@ -231,22 +277,7 @@ export function getTocSections(): TocSection[] {
       wordCount,
       articleCount: chapter.articles.length,
       visualKey: chapter.visualKey,
-      articles: chapter.articles.map((article) => ({
-        id: article.id,
-        slug: article.slug,
-        chapterSlug: chapter.slug,
-        articleSlug: article.slug,
-        path: getRoadmapArticlePath(chapter.slug, article.slug),
-        order: article.order,
-        title: article.title,
-        status: article.status,
-        branch: article.branch,
-        difficulty: article.difficulty,
-        visualKey: article.visualKey,
-        readerQuestion: article.readerQuestion,
-        zktlsBridge: article.zktlsBridge,
-        wordCount: article.actualWordCount ?? article.wordCountTarget,
-      })),
+      articles,
     };
   });
 }

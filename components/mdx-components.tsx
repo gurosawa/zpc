@@ -38,9 +38,18 @@ function createHeading(level: 2 | 3) {
   };
 }
 
+function Table({ children, ...props }: ComponentPropsWithoutRef<"table">) {
+  return (
+    <div className="mdx-table-scroll">
+      <table {...props}>{children}</table>
+    </div>
+  );
+}
+
 export const mdxComponents = {
   h2: createHeading(2),
   h3: createHeading(3),
+  table: Table,
   ArtifactDiagram,
   InteractiveTLS,
   PipelineDiagram,

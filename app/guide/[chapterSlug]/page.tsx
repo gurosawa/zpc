@@ -1,6 +1,7 @@
 import { MDXRemote } from "next-mdx-remote/rsc";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import remarkGfm from "remark-gfm";
 import { GuideShell } from "@/components/guide-shell";
 import { MiniToc } from "@/components/mini-toc";
 import { mdxComponents } from "@/components/mdx-components";
@@ -10,10 +11,6 @@ import { slugify } from "@/lib/slug";
 type PageProps = {
   params: Promise<{ chapterSlug: string }>;
 };
-
-function formatWords(words: number) {
-  return `${(words / 1000).toFixed(1)}K`;
-}
 
 function headingsFor(body: string) {
   return Array.from(body.matchAll(/^##\s+(.+)$/gm)).map((match, index) => {
@@ -66,21 +63,11 @@ export default async function ChapterPage({ params }: PageProps) {
           <p className="eyebrow">Chapter {chapter.order}</p>
           <h1>{chapter.title}</h1>
           <p className="lead">{chapter.readerPromise}</p>
-          <dl className="chapter-meta">
-            <div>
-              <dt>Status</dt>
-              <dd>{chapter.status.toUpperCase()}</dd>
-            </div>
-            <div>
-              <dt>Words</dt>
-              <dd>{formatWords(chapter.expectedWords)}</dd>
-            </div>
-            <div>
-              <dt>Question</dt>
-              <dd>{chapter.guidingQuestion}</dd>
-            </div>
-          </dl>
-          <MDXRemote source={chapter.body} components={mdxComponents} />
+          <MDXRemote
+            source={chapter.body}
+            components={mdxComponents}
+            options={{ mdxOptions: { remarkPlugins: [remarkGfm] } }}
+          />
           <nav className="chapter-footer" aria-label="Chapter navigation">
             {previousChapter ? (
               <Link href={`/guide/${previousChapter.slug}`}>
@@ -100,7 +87,7 @@ export default async function ChapterPage({ params }: PageProps) {
             )}
           </nav>
         </article>
-        <MiniToc items={headings} status={chapter.status} wordCount={chapter.expectedWords} />
+        <MiniToc items={headings} />
       </div>
     </GuideShell>
   );

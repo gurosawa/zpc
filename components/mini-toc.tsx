@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import type { TocSectionStatus } from "@/lib/content";
 
 type MiniTocItem = {
   id: string;
@@ -13,15 +12,9 @@ type MiniTocItem = {
 type MiniTocProps = {
   items: MiniTocItem[];
   label?: string;
-  status: TocSectionStatus;
-  wordCount: number;
 };
 
-function formatWords(words: number) {
-  return `${(words / 1000).toFixed(1)}K`;
-}
-
-export function MiniToc({ items, label = "Chapter sections", status, wordCount }: MiniTocProps) {
+export function MiniToc({ items, label = "Chapter sections" }: MiniTocProps) {
   const [activeId, setActiveId] = useState(items[0]?.id);
 
   useEffect(() => {
@@ -67,16 +60,6 @@ export function MiniToc({ items, label = "Chapter sections", status, wordCount }
           </li>
         ))}
       </ol>
-      <dl>
-        <div>
-          <dt>WORDS</dt>
-          <dd>{formatWords(wordCount)}</dd>
-        </div>
-        <div>
-          <dt>STATUS</dt>
-          <dd>{status.toUpperCase()}</dd>
-        </div>
-      </dl>
     </aside>
   );
 }
