@@ -3,9 +3,9 @@
 ## Status
 
 - Date: 2026-07-03
-- Scope: main page visual redesign design document only
+- Scope: main page visual redesign design record and first implementation reference
 - Decision: adopt a real Three.js/WebGL hero, not a temporary 2D mock
-- Non-goal: do not implement the UI in this branch
+- Implementation branch: `codex/forensic-atlas-phase-1`
 
 ## Context
 
@@ -163,7 +163,8 @@ Reduced motion:
 
 Use Three.js through React bindings:
 
-- Add `three`, `@react-three/fiber`, and `@react-three/drei` only when implementation starts.
+- Add `three` and `@react-three/fiber` only when implementation starts.
+- Add `@react-three/drei` later only if DOM overlay labels or simple geometry stop being enough.
 - Do not add `zustand` in the first pass.
 - Keep shared state local with `useState` in one client wrapper.
 
@@ -305,3 +306,15 @@ Required before merging implementation:
 ## Final Design Decision
 
 Build the main page hero as a real WebGL **Forensic Isometric Atlas**. Keep the first implementation deliberately small: seven layers, labels, path lines, fallback, and TOC hover/focus mapping. The visual goal is not spectacle; it is to make the zkTLS trust path spatially understandable before the reader opens an article.
+
+## Implementation Notes
+
+The first implementation follows the small baseline above:
+
+- `app/page.tsx` still loads chapters and TOC data on the server.
+- `HomeAtlasExperience` owns only local hover/focus state.
+- The atlas uses `three` and `@react-three/fiber`; `@react-three/drei`, custom shaders, post-processing, and a global store were skipped.
+- Layer labels are DOM overlay text, so the WebGL scene stays simple geometry.
+- WebGL failure shows `AtlasFallback` before the canvas mounts.
+- `three` is pinned to `0.182.0` because newer tested versions emitted a runtime `THREE.Clock` deprecation warning through the current R3F stack.
+- The first pass uses static rendering and normal scroll. Mobile hides layer fragments inside the canvas overlay to keep the stack readable.
