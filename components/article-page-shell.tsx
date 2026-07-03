@@ -25,10 +25,6 @@ const roadmapSections = [
   { id: "references", order: 7, title: "References" },
 ];
 
-function formatWords(words: number) {
-  return `${(words / 1000).toFixed(1)}K`;
-}
-
 function formatLabel(value: string) {
   return value.replace(/-/g, " ").toUpperCase();
 }
@@ -119,31 +115,6 @@ export function ArticlePageShell({
           <h1>{article.title}</h1>
           <p className="lead article-reader-question">{article.readerQuestion}</p>
 
-          <dl className="article-meta-line" aria-label="Article metadata">
-            <div>
-              <dt>Chapter</dt>
-              <dd>{formatLabel(article.chapterSlug)}</dd>
-            </div>
-            <div>
-              <dt>Status</dt>
-              <dd>{article.status.toUpperCase()}</dd>
-            </div>
-            <div>
-              <dt>Words</dt>
-              <dd>{formatWords(article.wordCount)} W</dd>
-            </div>
-            <div>
-              <dt>Difficulty</dt>
-              <dd>{article.difficulty.toUpperCase()}</dd>
-            </div>
-            <div>
-              <dt>Branch</dt>
-              <dd>
-                <code>{article.branch}</code>
-              </dd>
-            </div>
-          </dl>
-
           <div className="article-visual-panel">
             <ArtifactDiagram
               visualKey={article.visualKey}
@@ -180,8 +151,6 @@ export function ArticlePageShell({
         <MiniToc
           items={roadmapSections}
           label="Article sections"
-          status={article.status}
-          wordCount={article.wordCount}
         />
       </div>
     </GuideShell>

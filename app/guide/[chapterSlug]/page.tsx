@@ -12,10 +12,6 @@ type PageProps = {
   params: Promise<{ chapterSlug: string }>;
 };
 
-function formatWords(words: number) {
-  return `${(words / 1000).toFixed(1)}K`;
-}
-
 function headingsFor(body: string) {
   return Array.from(body.matchAll(/^##\s+(.+)$/gm)).map((match, index) => {
     const title = match[1].trim();
@@ -67,20 +63,6 @@ export default async function ChapterPage({ params }: PageProps) {
           <p className="eyebrow">Chapter {chapter.order}</p>
           <h1>{chapter.title}</h1>
           <p className="lead">{chapter.readerPromise}</p>
-          <dl className="chapter-meta">
-            <div>
-              <dt>Status</dt>
-              <dd>{chapter.status.toUpperCase()}</dd>
-            </div>
-            <div>
-              <dt>Words</dt>
-              <dd>{formatWords(chapter.expectedWords)}</dd>
-            </div>
-            <div>
-              <dt>Question</dt>
-              <dd>{chapter.guidingQuestion}</dd>
-            </div>
-          </dl>
           <MDXRemote
             source={chapter.body}
             components={mdxComponents}
@@ -105,7 +87,7 @@ export default async function ChapterPage({ params }: PageProps) {
             )}
           </nav>
         </article>
-        <MiniToc items={headings} status={chapter.status} wordCount={chapter.expectedWords} />
+        <MiniToc items={headings} />
       </div>
     </GuideShell>
   );

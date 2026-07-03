@@ -6,11 +6,7 @@ import type { TocSection } from "@/lib/content";
 import { getChapters, getTocSections } from "@/lib/content";
 
 function formatWords(words: number) {
-  return `${(words / 1000).toFixed(1)}K`;
-}
-
-function statusLabel(status: TocSection["status"]) {
-  return status.toUpperCase();
+  return `${Math.max(0, words).toLocaleString("en-US")} WORDS`;
 }
 
 function sectionHref(section: TocSection) {
@@ -53,15 +49,9 @@ export default function Home() {
   const chapters = getChapters();
   const tocSections = getTocSections();
   const tocColumns = groupIntoEditorialColumns(tocSections);
-  const implementedSections = tocSections.filter((section) => section.status !== "planned").length;
-  const totalWords = tocSections.reduce((total, section) => total + section.wordCount, 0);
 
   return (
-    <GuideShell
-      chapters={chapters}
-      progressLabel={`${implementedSections}/${tocSections.length}`}
-      wordsLabel={formatWords(totalWords)}
-    >
+    <GuideShell chapters={chapters}>
       <div className="toc-page">
         <TocMotion />
         <nav className="editorial-toc" aria-label="Guide table of contents">
@@ -86,8 +76,7 @@ export default function Home() {
                           </Link>
                         </h2>
                         <span className="section-meta">
-                          {statusLabel(section.status)} · {section.articleCount} ART ·{" "}
-                          {formatWords(section.wordCount)} W
+                          {section.articleCount} ARTICLES · {formatWords(section.wordCount)}
                         </span>
                       </div>
 
@@ -109,16 +98,10 @@ export default function Home() {
                               <span className="article-leader" aria-hidden />
                               <span
                                 className="compact-meta"
-                                aria-label={`${formatWords(article.wordCount ?? 0)} words, ${article.status}`}
+                                aria-label={formatWords(article.wordCount ?? 0)}
                               >
                                 <span className="article-words" aria-hidden="true">
-                                  {formatWords(article.wordCount ?? 0)} W
-                                </span>
-                                <span className="meta-separator" aria-hidden="true">
-                                  {" · "}
-                                </span>
-                                <span className="article-status" aria-hidden="true">
-                                  {statusLabel(article.status)}
+                                  {formatWords(article.wordCount ?? 0)}
                                 </span>
                               </span>
                             </Link>
