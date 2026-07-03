@@ -64,6 +64,12 @@ test("home TOC uses article route paths instead of legacy hash anchors", () => {
   assert.doesNotMatch(homeTocSource, /\/guide\/\$\{article\.slug\}#/);
 });
 
+test("home TOC does not render per-chapter artifact preview slots", () => {
+  assert.doesNotMatch(homeAtlasSource, /ArtifactDiagram/);
+  assert.doesNotMatch(homeAtlasSource, /visual-artifact-slot/);
+  assert.doesNotMatch(homeAtlasSource, /artifact-label/);
+});
+
 test("search results use indexed article paths instead of chapter hash routes", () => {
   assert.match(searchDialogSource, /function hrefForItem/);
   assert.match(searchDialogSource, /href=\{hrefForItem\(item\)\}/);

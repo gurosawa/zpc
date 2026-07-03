@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useMemo, useState, type FocusEvent } from "react";
-import { ArtifactDiagram } from "@/components/artifact-diagram";
 import { AtlasHero } from "@/components/atlas/atlas-hero";
 import { TocMotion } from "@/components/toc-motion";
 import type { TocSection } from "@/lib/content";
@@ -97,15 +96,6 @@ export function HomeAtlasExperience({ tocSections }: HomeAtlasExperienceProps) {
                       <span className="section-meta">
                         {section.articleCount} ARTICLES · {formatWords(section.wordCount)}
                       </span>
-                    </div>
-
-                    <div className="visual-artifact-slot" aria-label={`${section.visualKey} artifact`}>
-                      <ArtifactDiagram
-                        visualKey={section.visualKey}
-                        label={`${section.title} visual artifact`}
-                        variant="slot"
-                      />
-                      <span className="artifact-label">{section.visualKey.replace(/-/g, " ")}</span>
                     </div>
 
                     <ol className="article-list">
