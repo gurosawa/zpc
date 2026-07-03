@@ -8,6 +8,7 @@ const contentSource = fs.readFileSync("lib/content.ts", "utf8");
 const contentFilesSource = fs.readFileSync("lib/content-files.ts", "utf8");
 const homeSource = fs.readFileSync("app/page.tsx", "utf8");
 const notFoundSource = fs.readFileSync("app/not-found.tsx", "utf8");
+const homeAtlasSource = fs.readFileSync("components/atlas/home-atlas-experience.tsx", "utf8");
 const searchDialogSource = fs.readFileSync("components/search-dialog.tsx", "utf8");
 
 function articlePaths() {
@@ -56,9 +57,11 @@ test("roadmap content helpers stay filesystem-free for static shell routes", () 
 });
 
 test("home TOC uses article route paths instead of legacy hash anchors", () => {
-  assert.match(homeSource, /href=\{article\.path\}/);
-  assert.doesNotMatch(homeSource, /#\$\{article\.articleSlug/);
-  assert.doesNotMatch(homeSource, /\/guide\/\$\{article\.slug\}#/);
+  const homeTocSource = `${homeSource}\n${homeAtlasSource}`;
+
+  assert.match(homeTocSource, /href=\{article\.path\}/);
+  assert.doesNotMatch(homeTocSource, /#\$\{article\.articleSlug/);
+  assert.doesNotMatch(homeTocSource, /\/guide\/\$\{article\.slug\}#/);
 });
 
 test("search results use indexed article paths instead of chapter hash routes", () => {
