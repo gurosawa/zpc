@@ -119,6 +119,14 @@ test("atlas canvas adds ambient breathing and pointer parallax without controls"
   assert.doesNotMatch(atlasCanvasSource, /OrbitControls|PresentationControls/);
 });
 
+test("atlas canvas uses maath spring easing for accordion layer motion", () => {
+  assert.equal(typeof packageJson.dependencies.maath, "string");
+  assert.match(atlasCanvasSource, /from\s+"maath\/easing"/);
+  assert.match(atlasCanvasSource, /accordionOffset/);
+  assert.match(atlasCanvasSource, /targetScale/);
+  assert.match(atlasCanvasSource, /easing\.damp3/);
+});
+
 test("search results use indexed article paths instead of chapter hash routes", () => {
   assert.match(searchDialogSource, /function hrefForItem/);
   assert.match(searchDialogSource, /href=\{hrefForItem\(item\)\}/);

@@ -2,6 +2,7 @@
 
 import { Canvas, useFrame } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
+import * as easing from "maath/easing";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import type { Group } from "three";
 import {
@@ -78,23 +79,54 @@ function FlowEdges({ hasActiveLayer }: { hasActiveLayer: boolean }) {
 }
 
 function GlassLayer({
+  activeIndexes,
   layer,
+  reducedMotion,
+  index,
   y,
   activeLayerIds,
 }: {
+  activeIndexes: number[];
   layer: AtlasLayer;
+  reducedMotion: boolean;
+  index: number;
   y: number;
   activeLayerIds: Set<AtlasLayerId>;
 }) {
+  const layerRef = useRef<Group>(null);
   const { id } = layer;
   const hasActiveLayer = activeLayerIds.size > 0;
   const isActive = activeLayerIds.has(id);
   const isDimmed = hasActiveLayer && !isActive;
   const layerOpacity = isActive ? 0.42 : isDimmed ? 0.09 : 0.2;
   const lineOpacity = isActive ? 0.95 : isDimmed ? 0.22 : 0.52;
+  const closestActiveIndex = activeIndexes.reduce<number | null>((closest, activeIndex) => {
+    if (closest === null) return activeIndex;
+    return Math.abs(activeIndex - index) < Math.abs(closest - index) ? activeIndex : closest;
+  }, null);
+  const distance = closestActiveIndex === null ? 0 : Math.abs(closestActiveIndex - index);
+  const direction = closestActiveIndex === null || isActive ? 0 : Math.sign(index - closestActiveIndex);
+  const accordionOffset = direction * Math.max(0, 0.1 - Math.max(0, distance - 1) * 0.025);
+  const targetY = y + (isActive ? 0.08 : accordionOffset);
+  const targetPosition: [number, number, number] = [0, targetY, 0];
+  const targetScale: [number, number, number] = isActive ? [1.045, 1.22, 1.045] : [1, 1, 1];
+
+  useFrame((_state, delta) => {
+    const layerGroup = layerRef.current;
+    if (!layerGroup) return;
+
+    if (reducedMotion) {
+      layerGroup.position.set(0, targetY, 0);
+      layerGroup.scale.set(...targetScale);
+      return;
+    }
+
+    easing.damp3(layerGroup.position, targetPosition, 0.24, delta);
+    easing.damp3(layerGroup.scale, targetScale, 0.2, delta);
+  });
 
   return (
-    <group position={[0, y + (isActive ? 0.06 : 0), 0]}>
+    <group ref={layerRef} position={targetPosition} scale={targetScale}>
       <mesh>
         <boxGeometry args={[layerWidth, layerThickness, layerDepth]} />
         <meshStandardMaterial
@@ -139,6 +171,11 @@ function AtlasScene({
   reducedMotion,
 }: AtlasCanvasProps & { reducedMotion: boolean }) {
   const activeLayerIds = useMemo(() => getActiveLayerIds(activeChapterSlug), [activeChapterSlug]);
+  const activeIndexes = useMemo(
+    () =>
+      atlasLayers.flatMap((layer, index) => (activeLayerIds.has(layer.id) ? [index] : [])),
+    [activeLayerIds],
+  );
   const sceneRef = useRef<Group>(null);
 
   useFrame((state, delta) => {
@@ -170,9 +207,12 @@ function AtlasScene({
       <FlowEdges hasActiveLayer={activeLayerIds.size > 0} />
       {atlasLayers.map((layer, index) => (
         <GlassLayer
+          activeIndexes={activeIndexes}
           activeLayerIds={activeLayerIds}
+          index={index}
           key={layer.id}
           layer={layer}
+          reducedMotion={reducedMotion}
           y={index * layerGap}
         />
       ))}
