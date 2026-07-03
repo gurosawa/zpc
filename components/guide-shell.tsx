@@ -1,10 +1,10 @@
 import Link from "next/link";
-import type { Chapter } from "@/lib/content";
+import type { ChapterNavItem } from "@/lib/content";
 import { SearchDialog } from "@/components/search-dialog";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 type GuideShellProps = {
-  chapters: Chapter[];
+  chapters: ChapterNavItem[];
   activeSlug?: string;
   children: React.ReactNode;
 };

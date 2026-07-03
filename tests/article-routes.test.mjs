@@ -5,7 +5,9 @@ import test from "node:test";
 
 const roadmap = JSON.parse(fs.readFileSync("content/article-roadmap.json", "utf8"));
 const contentSource = fs.readFileSync("lib/content.ts", "utf8");
+const contentFilesSource = fs.readFileSync("lib/content-files.ts", "utf8");
 const homeSource = fs.readFileSync("app/page.tsx", "utf8");
+const notFoundSource = fs.readFileSync("app/not-found.tsx", "utf8");
 const searchDialogSource = fs.readFileSync("components/search-dialog.tsx", "utf8");
 
 function articlePaths() {
@@ -44,6 +46,13 @@ test("content helpers expose article lookup and adjacency contracts", () => {
     /return `\/guide\/\$\{chapterSlug\}\/\$\{articleSlug\}`/,
     "getRoadmapArticlePath should use article-level route shape",
   );
+});
+
+test("roadmap content helpers stay filesystem-free for static shell routes", () => {
+  assert.doesNotMatch(contentSource, /node:fs|node:path|gray-matter|process\.cwd|readFileSync|readdirSync/);
+  assert.match(contentFilesSource, /node:fs/);
+  assert.doesNotMatch(homeSource, /@\/lib\/content-files/);
+  assert.doesNotMatch(notFoundSource, /@\/lib\/content-files/);
 });
 
 test("home TOC uses article route paths instead of legacy hash anchors", () => {

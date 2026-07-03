@@ -5,11 +5,11 @@ import { ArtifactDiagram } from "@/components/artifact-diagram";
 import { GuideShell } from "@/components/guide-shell";
 import { mdxComponents } from "@/components/mdx-components";
 import { MiniToc } from "@/components/mini-toc";
-import type { Chapter, RoadmapArticle } from "@/lib/content";
+import type { ChapterNavItem, RoadmapArticle } from "@/lib/content";
 
 type ArticlePageShellProps = {
   article: RoadmapArticle;
-  chapters: Chapter[];
+  chapters: ChapterNavItem[];
   draftBody?: string | null;
   previousArticle: RoadmapArticle | null;
   nextArticle: RoadmapArticle | null;

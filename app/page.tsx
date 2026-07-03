@@ -3,7 +3,7 @@ import { ArtifactDiagram } from "@/components/artifact-diagram";
 import { GuideShell } from "@/components/guide-shell";
 import { TocMotion } from "@/components/toc-motion";
 import type { TocSection } from "@/lib/content";
-import { getChapters, getTocSections } from "@/lib/content";
+import { getChapterNavItems, getTocSections } from "@/lib/content";
 
 function formatWords(words: number) {
   return `${Math.max(0, words).toLocaleString("en-US")} WORDS`;
@@ -46,7 +46,7 @@ function groupIntoEditorialColumns<T>(items: T[]): T[][] {
 }
 
 export default function Home() {
-  const chapters = getChapters();
+  const chapters = getChapterNavItems();
   const tocSections = getTocSections();
   const tocColumns = groupIntoEditorialColumns(tocSections);
 

@@ -3,9 +3,8 @@ import { notFound } from "next/navigation";
 import { ArticlePageShell } from "@/components/article-page-shell";
 import {
   getAdjacentRoadmapArticles,
-  getChapters,
+  getChapterNavItems,
   getRoadmapArticleBySlugs,
-  getRoadmapArticleDraftBySlugs,
   getRoadmapArticles,
 } from "@/lib/content";
 
@@ -43,12 +42,13 @@ export default async function RoadmapArticlePage({ params }: PageProps) {
   }
 
   const { previousArticle, nextArticle } = getAdjacentRoadmapArticles(chapterSlug, articleSlug);
+  const { getRoadmapArticleDraftBySlugs } = await import("@/lib/article-drafts");
   const draft = getRoadmapArticleDraftBySlugs(chapterSlug, articleSlug);
 
   return (
     <ArticlePageShell
       article={article}
-      chapters={getChapters()}
+      chapters={getChapterNavItems()}
       draftBody={draft?.body ?? null}
       nextArticle={nextArticle}
       previousArticle={previousArticle}

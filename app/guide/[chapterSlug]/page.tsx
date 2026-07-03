@@ -5,7 +5,7 @@ import remarkGfm from "remark-gfm";
 import { GuideShell } from "@/components/guide-shell";
 import { MiniToc } from "@/components/mini-toc";
 import { mdxComponents } from "@/components/mdx-components";
-import { getChapterBySlug, getChapters } from "@/lib/content";
+import { getChapterBySlug, getChapters } from "@/lib/content-files";
 import { slugify } from "@/lib/slug";
 
 type PageProps = {
