@@ -1,8 +1,9 @@
 "use client";
 
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useFrame } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
-import { Suspense, useMemo } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import type { Group } from "three";
 import {
   atlasLayers,
   getActiveLayerIds,
@@ -22,6 +23,32 @@ const stackHeight = (atlasLayers.length - 1) * layerGap;
 const neutralLine = "#657184";
 const neutralFill = "#d7def2";
 const activeColor = "#8fa2ff";
+const scenePosition = [-0.48, -1.02, 0] as const;
+const sceneRotation = [-0.42, 0.08, -0.56] as const;
+
+function getPrefersReducedMotion() {
+  return (
+    typeof window !== "undefined" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
+
+function usePrefersReducedMotion() {
+  const [reducedMotion, setReducedMotion] = useState(getPrefersReducedMotion);
+
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+    function handleChange(event: MediaQueryListEvent) {
+      setReducedMotion(event.matches);
+    }
+
+    media.addEventListener("change", handleChange);
+    return () => media.removeEventListener("change", handleChange);
+  }, []);
+
+  return reducedMotion;
+}
 
 function FlowEdges({ hasActiveLayer }: { hasActiveLayer: boolean }) {
   const opacity = hasActiveLayer ? 0.5 : 0.32;
@@ -107,11 +134,39 @@ function GlassLayer({
   );
 }
 
-function AtlasScene({ activeChapterSlug }: AtlasCanvasProps) {
+function AtlasScene({
+  activeChapterSlug,
+  reducedMotion,
+}: AtlasCanvasProps & { reducedMotion: boolean }) {
   const activeLayerIds = useMemo(() => getActiveLayerIds(activeChapterSlug), [activeChapterSlug]);
+  const sceneRef = useRef<Group>(null);
+
+  useFrame((state, delta) => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+
+    if (reducedMotion) {
+      scene.position.set(...scenePosition);
+      scene.rotation.set(...sceneRotation);
+      return;
+    }
+
+    const breath = Math.sin(state.clock.elapsedTime * 0.72) * 0.035;
+    const targetX = scenePosition[0] - state.pointer.x * 0.08;
+    const targetY = scenePosition[1] + breath + state.pointer.y * 0.045;
+    const targetRotX = sceneRotation[0] + state.pointer.y * 0.04;
+    const targetRotY = sceneRotation[1] - state.pointer.x * 0.06;
+
+    scene.position.x += (targetX - scene.position.x) * Math.min(1, delta * 4);
+    scene.position.y += (targetY - scene.position.y) * Math.min(1, delta * 4);
+    scene.position.z = scenePosition[2];
+    scene.rotation.x += (targetRotX - scene.rotation.x) * Math.min(1, delta * 3);
+    scene.rotation.y += (targetRotY - scene.rotation.y) * Math.min(1, delta * 3);
+    scene.rotation.z += (sceneRotation[2] - scene.rotation.z) * Math.min(1, delta * 3);
+  });
 
   return (
-    <group position={[-0.48, -1.02, 0]} rotation={[-0.42, 0.08, -0.56]}>
+    <group ref={sceneRef} position={scenePosition} rotation={sceneRotation}>
       <FlowEdges hasActiveLayer={activeLayerIds.size > 0} />
       {atlasLayers.map((layer, index) => (
         <GlassLayer
@@ -128,6 +183,8 @@ function AtlasScene({ activeChapterSlug }: AtlasCanvasProps) {
 export function AtlasCanvas({ activeChapterSlug }: AtlasCanvasProps) {
   const activeLayerIds = useMemo(() => getActiveLayerIds(activeChapterSlug), [activeChapterSlug]);
   const hasActiveLayer = activeLayerIds.size > 0;
+  const reducedMotion = usePrefersReducedMotion();
+  const atlasFrameLoop = reducedMotion ? "demand" : "always";
 
   return (
     <div
@@ -138,13 +195,13 @@ export function AtlasCanvas({ activeChapterSlug }: AtlasCanvasProps) {
       <Canvas
         camera={{ fov: 36, position: [5, 3.8, 6] }}
         dpr={[1, 1.5]}
-        frameloop="demand"
+        frameloop={atlasFrameLoop}
         gl={{ alpha: true, antialias: true, preserveDrawingBuffer: true }}
       >
         <ambientLight intensity={1.55} />
         <directionalLight intensity={1.1} position={[4, 5, 3]} />
         <Suspense fallback={null}>
-          <AtlasScene activeChapterSlug={activeChapterSlug} />
+          <AtlasScene activeChapterSlug={activeChapterSlug} reducedMotion={reducedMotion} />
         </Suspense>
       </Canvas>
       <ol className="atlas-layer-overlay" aria-hidden="true">

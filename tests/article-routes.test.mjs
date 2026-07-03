@@ -109,6 +109,16 @@ test("atlas canvas uses drei Html labels without forbidden controls", () => {
   }
 });
 
+test("atlas canvas adds ambient breathing and pointer parallax without controls", () => {
+  assert.match(atlasCanvasSource, /useFrame/);
+  assert.match(atlasCanvasSource, /prefers-reduced-motion:\s*reduce/);
+  assert.match(atlasCanvasSource, /Math\.sin/);
+  assert.match(atlasCanvasSource, /state\.pointer/);
+  assert.match(atlasCanvasSource, /atlasFrameLoop/);
+  assert.match(atlasCanvasSource, /"always"/);
+  assert.doesNotMatch(atlasCanvasSource, /OrbitControls|PresentationControls/);
+});
+
 test("search results use indexed article paths instead of chapter hash routes", () => {
   assert.match(searchDialogSource, /function hrefForItem/);
   assert.match(searchDialogSource, /href=\{hrefForItem\(item\)\}/);
