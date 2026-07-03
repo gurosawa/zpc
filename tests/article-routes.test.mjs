@@ -4,11 +4,13 @@ import path from "node:path";
 import test from "node:test";
 
 const roadmap = JSON.parse(fs.readFileSync("content/article-roadmap.json", "utf8"));
+const packageJson = JSON.parse(fs.readFileSync("package.json", "utf8"));
 const contentSource = fs.readFileSync("lib/content.ts", "utf8");
 const contentFilesSource = fs.readFileSync("lib/content-files.ts", "utf8");
 const homeSource = fs.readFileSync("app/page.tsx", "utf8");
 const notFoundSource = fs.readFileSync("app/not-found.tsx", "utf8");
 const homeAtlasSource = fs.readFileSync("components/atlas/home-atlas-experience.tsx", "utf8");
+const atlasCanvasSource = fs.readFileSync("components/atlas/atlas-canvas.tsx", "utf8");
 const globalsSource = fs.readFileSync("app/globals.css", "utf8");
 const searchDialogSource = fs.readFileSync("components/search-dialog.tsx", "utf8");
 
@@ -87,6 +89,24 @@ test("home TOC exposes active and dimmed reading states", () => {
   assert.match(homeAtlasSource, /is-dimmed/);
   assert.match(globalsSource, /\.toc-section\.is-active/);
   assert.match(globalsSource, /\.toc-section\.is-dimmed/);
+});
+
+test("atlas canvas uses drei Html labels without forbidden controls", () => {
+  assert.equal(typeof packageJson.dependencies["@react-three/drei"], "string");
+  assert.match(atlasCanvasSource, /import\s+\{\s*Html\s*\}\s+from\s+"@react-three\/drei"/);
+  assert.match(atlasCanvasSource, /<Html\b/);
+
+  for (const forbidden of [
+    "OrbitControls",
+    "PresentationControls",
+    "Float",
+    "Environment",
+    "Sparkles",
+    "EffectComposer",
+    "Bloom",
+  ]) {
+    assert.doesNotMatch(atlasCanvasSource, new RegExp(forbidden), `${forbidden} should stay unused`);
+  }
 });
 
 test("search results use indexed article paths instead of chapter hash routes", () => {

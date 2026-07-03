@@ -1,10 +1,12 @@
 "use client";
 
 import { Canvas } from "@react-three/fiber";
+import { Html } from "@react-three/drei";
 import { Suspense, useMemo } from "react";
 import {
   atlasLayers,
   getActiveLayerIds,
+  type AtlasLayer,
   type AtlasLayerId,
 } from "@/components/atlas/atlas-data";
 
@@ -49,14 +51,15 @@ function FlowEdges({ hasActiveLayer }: { hasActiveLayer: boolean }) {
 }
 
 function GlassLayer({
-  id,
+  layer,
   y,
   activeLayerIds,
 }: {
-  id: AtlasLayerId;
+  layer: AtlasLayer;
   y: number;
   activeLayerIds: Set<AtlasLayerId>;
 }) {
+  const { id } = layer;
   const hasActiveLayer = activeLayerIds.size > 0;
   const isActive = activeLayerIds.has(id);
   const isDimmed = hasActiveLayer && !isActive;
@@ -85,6 +88,21 @@ function GlassLayer({
           wireframe
         />
       </mesh>
+      <Html
+        className={[
+          "atlas-html-label",
+          isActive ? "is-active" : "",
+          isDimmed ? "is-dimmed" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        position={[layerWidth / 2 + 0.44, 0.08, 0]}
+        style={{ marginTop: `${(layer.order - 1) * 4}rem` }}
+        zIndexRange={[20, 0]}
+      >
+        <span>{`${String(layer.order).padStart(2, "0")} ${layer.label}`}</span>
+        <code>{layer.fragment}</code>
+      </Html>
     </group>
   );
 }
@@ -98,8 +116,8 @@ function AtlasScene({ activeChapterSlug }: AtlasCanvasProps) {
       {atlasLayers.map((layer, index) => (
         <GlassLayer
           activeLayerIds={activeLayerIds}
-          id={layer.id}
           key={layer.id}
+          layer={layer}
           y={index * layerGap}
         />
       ))}
@@ -113,7 +131,7 @@ export function AtlasCanvas({ activeChapterSlug }: AtlasCanvasProps) {
 
   return (
     <div
-      className="atlas-canvas-shell"
+      className="atlas-canvas-shell has-html-labels"
       role="img"
       aria-label="Seven transparent zkTLS evidence layers connected from source API response to verifier decision."
     >
