@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, type FocusEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FocusEvent } from "react";
 import { AtlasHero } from "@/components/atlas/atlas-hero";
 import { TocMotion } from "@/components/toc-motion";
 import type { TocSection } from "@/lib/content";
@@ -55,12 +55,68 @@ function containsFocus(currentTarget: HTMLElement, nextTarget: EventTarget | nul
 }
 
 export function HomeAtlasExperience({ tocSections }: HomeAtlasExperienceProps) {
-  const [activeChapterSlug, setActiveChapterSlug] = useState<string | null>(null);
+  const firstChapterSlug = tocSections[0]?.slug ?? null;
+  const [activeByHover, setActiveByHover] = useState<string | null>(null);
+  const [activeByScroll, setActiveByScroll] = useState<string | null>(firstChapterSlug);
+  const tocRootRef = useRef<HTMLDivElement | null>(null);
+  const chapterSlugs = useMemo(() => tocSections.map((section) => section.slug), [tocSections]);
   const tocColumns = useMemo(() => groupIntoEditorialColumns(tocSections), [tocSections]);
+  const activeChapterSlug = activeByHover ?? activeByScroll ?? firstChapterSlug;
+
+  useEffect(() => {
+    const tocRoot = tocRootRef.current;
+    if (!tocRoot || !firstChapterSlug) return;
+
+    const sections = Array.from(
+      tocRoot.querySelectorAll<HTMLElement>(".toc-section[data-atlas-chapter]"),
+    );
+
+    function updateActiveByScroll() {
+      if (window.scrollY <= 1) {
+        setActiveByScroll(firstChapterSlug);
+        return;
+      }
+
+      const readingLine = window.innerHeight * 0.35;
+      const visibleSections = sections
+        .map((section) => {
+          const rect = section.getBoundingClientRect();
+          return {
+            distance: Math.abs(rect.top - readingLine),
+            isVisible: rect.bottom >= 0 && rect.top <= window.innerHeight,
+            slug: section.dataset.atlasChapter ?? null,
+          };
+        })
+        .filter((section) => section.isVisible && section.slug);
+
+      const closestSection = visibleSections.sort((a, b) => a.distance - b.distance)[0];
+      setActiveByScroll(closestSection?.slug ?? firstChapterSlug);
+    }
+
+    if (!("IntersectionObserver" in window)) {
+      updateActiveByScroll();
+      return;
+    }
+
+    const observer = new IntersectionObserver(updateActiveByScroll, {
+      rootMargin: "-20% 0px -55% 0px",
+      threshold: [0, 0.25, 0.5, 0.75, 1],
+    });
+    const frame = window.requestAnimationFrame(updateActiveByScroll);
+
+    for (const section of sections) {
+      observer.observe(section);
+    }
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [firstChapterSlug, chapterSlugs]);
 
   function clearActiveChapter(event: FocusEvent<HTMLElement>) {
     if (containsFocus(event.currentTarget, event.relatedTarget)) return;
-    setActiveChapterSlug(null);
+    setActiveByHover(null);
   }
 
   return (
@@ -70,7 +126,7 @@ export function HomeAtlasExperience({ tocSections }: HomeAtlasExperienceProps) {
           <AtlasHero activeChapterSlug={activeChapterSlug} />
         </div>
 
-        <div className="atlas-home-toc">
+        <div className="atlas-home-toc" ref={tocRootRef}>
           <TocMotion />
           <nav className="editorial-toc" aria-label="Guide table of contents">
             <div className="editorial-toc-grid">
@@ -87,9 +143,9 @@ export function HomeAtlasExperience({ tocSections }: HomeAtlasExperienceProps) {
                         data-visual-key={section.visualKey}
                         key={section.id}
                         onBlur={clearActiveChapter}
-                        onFocus={() => setActiveChapterSlug(section.slug)}
-                        onPointerEnter={() => setActiveChapterSlug(section.slug)}
-                        onPointerLeave={() => setActiveChapterSlug(null)}
+                        onFocus={() => setActiveByHover(section.slug)}
+                        onPointerEnter={() => setActiveByHover(section.slug)}
+                        onPointerLeave={() => setActiveByHover(null)}
                       >
                         <div className="section-heading-row">
                           <h2 id={headingId}>

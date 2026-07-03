@@ -70,6 +70,16 @@ test("home TOC does not render per-chapter artifact preview slots", () => {
   assert.doesNotMatch(homeAtlasSource, /artifact-label/);
 });
 
+test("home Atlas active chapter combines hover and scroll-spy state", () => {
+  assert.match(homeAtlasSource, /activeByHover/);
+  assert.match(homeAtlasSource, /activeByScroll/);
+  assert.match(homeAtlasSource, /new IntersectionObserver/);
+  assert.match(
+    homeAtlasSource,
+    /activeChapterSlug\s*=\s*activeByHover\s*\?\?\s*activeByScroll\s*\?\?\s*firstChapterSlug/,
+  );
+});
+
 test("search results use indexed article paths instead of chapter hash routes", () => {
   assert.match(searchDialogSource, /function hrefForItem/);
   assert.match(searchDialogSource, /href=\{hrefForItem\(item\)\}/);
