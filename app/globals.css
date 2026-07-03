@@ -275,6 +275,12 @@ textarea:focus-visible {
   padding-top: var(--toc-start-offset);
 }
 
+.atlas-home-layout,
+.atlas-home-panel,
+.atlas-home-toc {
+  min-width: 0;
+}
+
 .atlas-hero {
   align-items: center;
   border-bottom: 1px dotted var(--border-light);
@@ -487,6 +493,56 @@ textarea:focus-visible {
 
 .atlas-fallback-layer.is-dimmed {
   opacity: 0.42;
+}
+
+@media (min-width: 1100px) {
+  .atlas-home-layout {
+    align-items: start;
+    display: grid;
+    gap: 56px;
+    grid-template-columns: minmax(36rem, 0.92fr) minmax(0, 1.08fr);
+  }
+
+  .atlas-home-panel {
+    position: sticky;
+    top: 7rem;
+  }
+
+  .atlas-home .atlas-hero {
+    align-content: start;
+    align-items: start;
+    gap: 18px;
+    grid-template-areas:
+      "copy"
+      "visual"
+      "telemetry";
+    grid-template-columns: 1fr;
+    margin-bottom: 0;
+    min-height: calc(100vh - 9rem);
+    padding: 20px 0 24px;
+  }
+
+  .atlas-home .atlas-title {
+    font-size: 4rem;
+    max-width: 12ch;
+  }
+
+  .atlas-home .atlas-tagline {
+    max-width: 42rem;
+  }
+
+  .atlas-home .atlas-visual {
+    height: clamp(32rem, 42vh, 44rem);
+  }
+
+  .atlas-home .atlas-telemetry-grid {
+    max-width: none;
+  }
+
+  .atlas-home .editorial-toc-grid {
+    grid-template-columns: 1fr;
+    row-gap: var(--toc-section-gap-y);
+  }
 }
 
 .article-frame {

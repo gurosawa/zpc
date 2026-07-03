@@ -65,67 +65,74 @@ export function HomeAtlasExperience({ tocSections }: HomeAtlasExperienceProps) {
 
   return (
     <div className="toc-page atlas-home">
-      <AtlasHero activeChapterSlug={activeChapterSlug} />
-      <TocMotion />
-      <nav className="editorial-toc" aria-label="Guide table of contents">
-        <div className="editorial-toc-grid">
-          {tocColumns.map((column, columnIndex) => (
-            <div className="toc-column" key={`toc-column-${columnIndex}`}>
-              {column.map((section) => {
-                const headingId = `toc-section-${section.order}`;
-
-                return (
-                  <section
-                    className="toc-section"
-                    aria-labelledby={headingId}
-                    data-atlas-chapter={section.slug}
-                    data-visual-key={section.visualKey}
-                    key={section.id}
-                    onBlur={clearActiveChapter}
-                    onFocus={() => setActiveChapterSlug(section.slug)}
-                    onPointerEnter={() => setActiveChapterSlug(section.slug)}
-                    onPointerLeave={() => setActiveChapterSlug(null)}
-                  >
-                    <div className="section-heading-row">
-                      <h2 id={headingId}>
-                        <span className="section-number">{section.order}.</span>
-                        <Link className="section-title" href={sectionHref(section)}>
-                          {section.title}
-                        </Link>
-                      </h2>
-                      <span className="section-meta">
-                        {section.articleCount} ARTICLES · {formatWords(section.wordCount)}
-                      </span>
-                    </div>
-
-                    <ol className="article-list">
-                      {section.articles.map((article) => (
-                        <li key={article.id}>
-                          <Link className="article-row" href={article.path}>
-                            <span className="article-marker">
-                              {String(article.order).padStart(2, "0")}
-                            </span>
-                            <span className="article-title">{article.title}</span>
-                            <span className="article-leader" aria-hidden />
-                            <span
-                              className="compact-meta"
-                              aria-label={formatWords(article.wordCount ?? 0)}
-                            >
-                              <span className="article-words" aria-hidden="true">
-                                {formatWords(article.wordCount ?? 0)}
-                              </span>
-                            </span>
-                          </Link>
-                        </li>
-                      ))}
-                    </ol>
-                  </section>
-                );
-              })}
-            </div>
-          ))}
+      <div className="atlas-home-layout">
+        <div className="atlas-home-panel">
+          <AtlasHero activeChapterSlug={activeChapterSlug} />
         </div>
-      </nav>
+
+        <div className="atlas-home-toc">
+          <TocMotion />
+          <nav className="editorial-toc" aria-label="Guide table of contents">
+            <div className="editorial-toc-grid">
+              {tocColumns.map((column, columnIndex) => (
+                <div className="toc-column" key={`toc-column-${columnIndex}`}>
+                  {column.map((section) => {
+                    const headingId = `toc-section-${section.order}`;
+
+                    return (
+                      <section
+                        className="toc-section"
+                        aria-labelledby={headingId}
+                        data-atlas-chapter={section.slug}
+                        data-visual-key={section.visualKey}
+                        key={section.id}
+                        onBlur={clearActiveChapter}
+                        onFocus={() => setActiveChapterSlug(section.slug)}
+                        onPointerEnter={() => setActiveChapterSlug(section.slug)}
+                        onPointerLeave={() => setActiveChapterSlug(null)}
+                      >
+                        <div className="section-heading-row">
+                          <h2 id={headingId}>
+                            <span className="section-number">{section.order}.</span>
+                            <Link className="section-title" href={sectionHref(section)}>
+                              {section.title}
+                            </Link>
+                          </h2>
+                          <span className="section-meta">
+                            {section.articleCount} ARTICLES · {formatWords(section.wordCount)}
+                          </span>
+                        </div>
+
+                        <ol className="article-list">
+                          {section.articles.map((article) => (
+                            <li key={article.id}>
+                              <Link className="article-row" href={article.path}>
+                                <span className="article-marker">
+                                  {String(article.order).padStart(2, "0")}
+                                </span>
+                                <span className="article-title">{article.title}</span>
+                                <span className="article-leader" aria-hidden />
+                                <span
+                                  className="compact-meta"
+                                  aria-label={formatWords(article.wordCount ?? 0)}
+                                >
+                                  <span className="article-words" aria-hidden="true">
+                                    {formatWords(article.wordCount ?? 0)}
+                                  </span>
+                                </span>
+                              </Link>
+                            </li>
+                          ))}
+                        </ol>
+                      </section>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </nav>
+        </div>
+      </div>
 
       <section className="chapter-index" aria-label="전체 챕터 인덱스">
         {tocSections.map((section) => (
