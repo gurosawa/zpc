@@ -21,11 +21,84 @@ const layerDepth = 2.25;
 const layerThickness = 0.055;
 const layerGap = 0.34;
 const stackHeight = (atlasLayers.length - 1) * layerGap;
-const neutralLine = "#657184";
-const neutralFill = "#d7def2";
-const activeColor = "#8fa2ff";
 const scenePosition = [-0.48, -1.02, 0] as const;
 const sceneRotation = [-0.42, 0.08, -0.56] as const;
+
+type AtlasThemeMode = "dark" | "light";
+
+type AtlasMaterialPalette = {
+  activeColor: string;
+  activeFill: string;
+  neutralLine: string;
+  neutralFill: string;
+  activeFillOpacity: number;
+  dimFillOpacity: number;
+  idleFillOpacity: number;
+  activeLineOpacity: number;
+  dimLineOpacity: number;
+  idleLineOpacity: number;
+  roughness: number;
+  transmission: number;
+  thickness: number;
+  ior: number;
+};
+
+const atlasMaterials: Record<AtlasThemeMode, AtlasMaterialPalette> = {
+  dark: {
+    activeColor: "#aab8ff",
+    activeFill: "#aebdff",
+    neutralLine: "#9ba8ff",
+    neutralFill: "#c8d3ff",
+    activeFillOpacity: 0.46,
+    dimFillOpacity: 0.1,
+    idleFillOpacity: 0.22,
+    activeLineOpacity: 0.98,
+    dimLineOpacity: 0.26,
+    idleLineOpacity: 0.58,
+    roughness: 0.18,
+    transmission: 0.56,
+    thickness: 0.72,
+    ior: 1.32,
+  },
+  light: {
+    activeColor: "#001eff",
+    activeFill: "#5d73ff",
+    neutralLine: "#657184",
+    neutralFill: "#b8c0d8",
+    activeFillOpacity: 0.38,
+    dimFillOpacity: 0.16,
+    idleFillOpacity: 0.26,
+    activeLineOpacity: 0.88,
+    dimLineOpacity: 0.28,
+    idleLineOpacity: 0.48,
+    roughness: 0.36,
+    transmission: 0,
+    thickness: 0.12,
+    ior: 1.08,
+  },
+};
+
+function getAtlasThemeMode(): AtlasThemeMode {
+  if (typeof document === "undefined") return "dark";
+  return document.documentElement.classList.contains("dark") ? "dark" : "light";
+}
+
+function useAtlasThemeMode() {
+  const [themeMode, setThemeMode] = useState<AtlasThemeMode>(getAtlasThemeMode);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const updateThemeMode = () => setThemeMode(getAtlasThemeMode());
+    const observer = new MutationObserver(updateThemeMode);
+
+    updateThemeMode();
+    observer.observe(root, { attributeFilter: ["class"], attributes: true });
+
+    return () => observer.disconnect();
+  }, []);
+
+  return themeMode;
+}
 
 function getPrefersReducedMotion() {
   return (
@@ -51,7 +124,14 @@ function usePrefersReducedMotion() {
   return reducedMotion;
 }
 
-function FlowEdges({ hasActiveLayer }: { hasActiveLayer: boolean }) {
+function FlowEdges({
+  hasActiveLayer,
+  themeMode,
+}: {
+  hasActiveLayer: boolean;
+  themeMode: AtlasThemeMode;
+}) {
+  const { activeColor } = atlasMaterials[themeMode];
   const opacity = hasActiveLayer ? 0.5 : 0.32;
   const flowPoints = [
     [-1.85, -1.02],
@@ -82,6 +162,7 @@ function GlassLayer({
   activeIndexes,
   layer,
   reducedMotion,
+  themeMode,
   index,
   y,
   activeLayerIds,
@@ -89,17 +170,28 @@ function GlassLayer({
   activeIndexes: number[];
   layer: AtlasLayer;
   reducedMotion: boolean;
+  themeMode: AtlasThemeMode;
   index: number;
   y: number;
   activeLayerIds: Set<AtlasLayerId>;
 }) {
   const layerRef = useRef<Group>(null);
+  const palette = atlasMaterials[themeMode];
+  const filledSlab = themeMode === "light";
   const { id } = layer;
   const hasActiveLayer = activeLayerIds.size > 0;
   const isActive = activeLayerIds.has(id);
   const isDimmed = hasActiveLayer && !isActive;
-  const layerOpacity = isActive ? 0.42 : isDimmed ? 0.09 : 0.2;
-  const lineOpacity = isActive ? 0.95 : isDimmed ? 0.22 : 0.52;
+  const layerOpacity = isActive
+    ? palette.activeFillOpacity
+    : isDimmed
+      ? palette.dimFillOpacity
+      : palette.idleFillOpacity;
+  const lineOpacity = isActive
+    ? palette.activeLineOpacity
+    : isDimmed
+      ? palette.dimLineOpacity
+      : palette.idleLineOpacity;
   const closestActiveIndex = activeIndexes.reduce<number | null>((closest, activeIndex) => {
     if (closest === null) return activeIndex;
     return Math.abs(activeIndex - index) < Math.abs(closest - index) ? activeIndex : closest;
@@ -129,19 +221,22 @@ function GlassLayer({
     <group ref={layerRef} position={targetPosition} scale={targetScale}>
       <mesh>
         <boxGeometry args={[layerWidth, layerThickness, layerDepth]} />
-        <meshStandardMaterial
-          color={isActive ? activeColor : neutralFill}
+        <meshPhysicalMaterial
+          color={isActive ? palette.activeFill : palette.neutralFill}
           depthWrite={false}
+          ior={palette.ior}
           metalness={0}
           opacity={layerOpacity}
-          roughness={0.42}
+          roughness={palette.roughness}
+          thickness={palette.thickness}
+          transmission={filledSlab ? 0 : palette.transmission}
           transparent
         />
       </mesh>
       <mesh scale={[1.004, 1.08, 1.004]}>
         <boxGeometry args={[layerWidth, layerThickness, layerDepth]} />
         <meshBasicMaterial
-          color={isActive ? activeColor : neutralLine}
+          color={isActive ? palette.activeColor : palette.neutralLine}
           opacity={lineOpacity}
           transparent
           wireframe
@@ -169,7 +264,8 @@ function GlassLayer({
 function AtlasScene({
   activeChapterSlug,
   reducedMotion,
-}: AtlasCanvasProps & { reducedMotion: boolean }) {
+  themeMode,
+}: AtlasCanvasProps & { reducedMotion: boolean; themeMode: AtlasThemeMode }) {
   const activeLayerIds = useMemo(() => getActiveLayerIds(activeChapterSlug), [activeChapterSlug]);
   const activeIndexes = useMemo(
     () =>
@@ -204,7 +300,7 @@ function AtlasScene({
 
   return (
     <group ref={sceneRef} position={scenePosition} rotation={sceneRotation}>
-      <FlowEdges hasActiveLayer={activeLayerIds.size > 0} />
+      <FlowEdges hasActiveLayer={activeLayerIds.size > 0} themeMode={themeMode} />
       {atlasLayers.map((layer, index) => (
         <GlassLayer
           activeIndexes={activeIndexes}
@@ -213,6 +309,7 @@ function AtlasScene({
           key={layer.id}
           layer={layer}
           reducedMotion={reducedMotion}
+          themeMode={themeMode}
           y={index * layerGap}
         />
       ))}
@@ -224,6 +321,7 @@ export function AtlasCanvas({ activeChapterSlug }: AtlasCanvasProps) {
   const activeLayerIds = useMemo(() => getActiveLayerIds(activeChapterSlug), [activeChapterSlug]);
   const hasActiveLayer = activeLayerIds.size > 0;
   const reducedMotion = usePrefersReducedMotion();
+  const themeMode = useAtlasThemeMode();
   const atlasFrameLoop = reducedMotion ? "demand" : "always";
 
   return (
@@ -241,7 +339,11 @@ export function AtlasCanvas({ activeChapterSlug }: AtlasCanvasProps) {
         <ambientLight intensity={1.55} />
         <directionalLight intensity={1.1} position={[4, 5, 3]} />
         <Suspense fallback={null}>
-          <AtlasScene activeChapterSlug={activeChapterSlug} reducedMotion={reducedMotion} />
+          <AtlasScene
+            activeChapterSlug={activeChapterSlug}
+            reducedMotion={reducedMotion}
+            themeMode={themeMode}
+          />
         </Suspense>
       </Canvas>
       <ol className="atlas-layer-overlay" aria-hidden="true">

@@ -127,6 +127,18 @@ test("atlas canvas uses maath spring easing for accordion layer motion", () => {
   assert.match(atlasCanvasSource, /easing\.damp3/);
 });
 
+test("atlas canvas tunes glass material for dark and light themes", () => {
+  assert.match(atlasCanvasSource, /AtlasThemeMode/);
+  assert.match(atlasCanvasSource, /document\.documentElement\.classList\.contains\("dark"\)/);
+  assert.match(atlasCanvasSource, /MutationObserver/);
+  assert.match(atlasCanvasSource, /meshPhysicalMaterial/);
+  assert.match(atlasCanvasSource, /transmission=/);
+  assert.match(atlasCanvasSource, /thickness=/);
+  assert.match(atlasCanvasSource, /ior=/);
+  assert.match(atlasCanvasSource, /themeMode === "light"/);
+  assert.doesNotMatch(atlasCanvasSource, /Environment|Sparkles|EffectComposer|Bloom/);
+});
+
 test("search results use indexed article paths instead of chapter hash routes", () => {
   assert.match(searchDialogSource, /function hrefForItem/);
   assert.match(searchDialogSource, /href=\{hrefForItem\(item\)\}/);
