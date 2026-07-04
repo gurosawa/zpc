@@ -160,6 +160,15 @@ test("atlas canvas separates primary supporting and dimmed layer states", () => 
   assert.match(globalsSource, /\.atlas-html-label\.is-supporting/);
 });
 
+test("atlas canvas resets layer assembly motion on activation changes", () => {
+  assert.match(atlasCanvasSource, /function getAssemblyTransform/);
+  assert.match(atlasCanvasSource, /assemblyProgressRef/);
+  assert.match(atlasCanvasSource, /const activationKey = `\$\{activeChapterSlug \?\? "atlas-idle"\}:\$\{id\}:\$\{visualState\}`/);
+  assert.match(atlasCanvasSource, /0\.92 \+ assemblyProgress \* 0\.08 \+ assemblyOvershoot/);
+  assert.match(atlasCanvasSource, /Math\.sin\(assemblyProgress \* Math\.PI\) \* 0\.08/);
+  assert.match(atlasCanvasSource, /reducedMotion \|\| isDimmed \|\| visualState === "idle" \? 1 : 0/);
+});
+
 test("atlas data defines diorama motifs and layer article mappings", () => {
   const layerIds = ["source", "tls", "transcript", "redaction", "witness", "proof", "verifier"];
   const motifs = ["pillars", "tunnel", "record-strip", "filter-grate", "input-tray", "prism", "verifier-gate"];

@@ -114,6 +114,36 @@ function getAtlasLayerVisualState({
   return "idle";
 }
 
+function getAssemblyTransform({
+  assemblyProgress,
+  targetScale,
+  targetY,
+  visualState,
+}: {
+  assemblyProgress: number;
+  targetScale: [number, number, number];
+  targetY: number;
+  visualState: AtlasLayerVisualState;
+}) {
+  const isAssembling = visualState === "primary" || visualState === "supporting";
+  const assemblyRemainder = isAssembling ? 1 - assemblyProgress : 0;
+  const assemblyOvershoot = isAssembling ? Math.sin(assemblyProgress * Math.PI) * 0.08 : 0;
+  const assemblyScale = isAssembling ? 0.92 + assemblyProgress * 0.08 + assemblyOvershoot : 1;
+  const dimmedScale = visualState === "dimmed" ? 0.96 : 1;
+  const position: [number, number, number] = [
+    0,
+    targetY - assemblyRemainder * 0.28 - (visualState === "dimmed" ? 0.025 : 0),
+    -assemblyRemainder * 0.24 - (visualState === "dimmed" ? 0.08 : 0),
+  ];
+  const scale: [number, number, number] = [
+    targetScale[0] * assemblyScale * dimmedScale,
+    targetScale[1] * assemblyScale * dimmedScale,
+    targetScale[2] * assemblyScale * dimmedScale,
+  ];
+
+  return { position, scale };
+}
+
 function getAtlasThemeMode(): AtlasThemeMode {
   if (typeof document === "undefined") return "dark";
   return document.documentElement.classList.contains("dark") ? "dark" : "light";
@@ -490,6 +520,7 @@ function GlassLayer({
   index,
   y,
   activeLayerIds,
+  activeChapterSlug,
   primaryLayerIds,
 }: {
   activeIndexes: number[];
@@ -502,9 +533,11 @@ function GlassLayer({
   index: number;
   y: number;
   activeLayerIds: Set<AtlasLayerId>;
+  activeChapterSlug: string | null;
   primaryLayerIds: Set<AtlasLayerId>;
 }) {
   const layerRef = useRef<Group>(null);
+  const assemblyProgressRef = useRef(1);
   const palette = atlasMaterials[themeMode];
   const filledSlab = themeMode === "light";
   const { id } = layer;
@@ -557,19 +590,40 @@ function GlassLayer({
     : isSupporting
       ? [1.02, 1.12, 1.02]
       : [1, 1, 1];
+  const activationKey = `${activeChapterSlug ?? "atlas-idle"}:${id}:${visualState}`;
+
+  useEffect(() => {
+    assemblyProgressRef.current = reducedMotion || isDimmed || visualState === "idle" ? 1 : 0;
+  }, [activationKey, isDimmed, reducedMotion, visualState]);
 
   useFrame((_state, delta) => {
     const layerGroup = layerRef.current;
     if (!layerGroup) return;
 
     if (reducedMotion) {
-      layerGroup.position.set(0, targetY, 0);
-      layerGroup.scale.set(...targetScale);
+      assemblyProgressRef.current = 1;
+      const assemblyTarget = getAssemblyTransform({
+        assemblyProgress: 1,
+        targetScale,
+        targetY,
+        visualState,
+      });
+
+      layerGroup.position.set(...assemblyTarget.position);
+      layerGroup.scale.set(...assemblyTarget.scale);
       return;
     }
 
-    easing.damp3(layerGroup.position, targetPosition, 0.24, delta);
-    easing.damp3(layerGroup.scale, targetScale, 0.2, delta);
+    assemblyProgressRef.current += (1 - assemblyProgressRef.current) * Math.min(1, delta * 5.5);
+    const assemblyTarget = getAssemblyTransform({
+      assemblyProgress: assemblyProgressRef.current,
+      targetScale,
+      targetY,
+      visualState,
+    });
+
+    easing.damp3(layerGroup.position, assemblyTarget.position, 0.24, delta);
+    easing.damp3(layerGroup.scale, assemblyTarget.scale, 0.2, delta);
   });
 
   return (
@@ -700,6 +754,7 @@ function AtlasScene({
       <DioramaConnectors hasActiveLayer={activeLayerIds.size > 0} themeMode={themeMode} />
       {atlasLayers.map((layer, index) => (
         <GlassLayer
+          activeChapterSlug={activeChapterSlug}
           activeIndexes={activeIndexes}
           activeLayerIds={activeLayerIds}
           index={index}
