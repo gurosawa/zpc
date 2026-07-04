@@ -163,6 +163,33 @@ function FlowEdges({
   );
 }
 
+function DioramaConnectors({
+  hasActiveLayer,
+  themeMode,
+}: {
+  hasActiveLayer: boolean;
+  themeMode: AtlasThemeMode;
+}) {
+  const { activeColor, neutralLine } = atlasMaterials[themeMode];
+  const color = hasActiveLayer ? activeColor : neutralLine;
+  const opacity = hasActiveLayer ? 0.42 : 0.26;
+
+  return (
+    <group>
+      {atlasLayers.slice(0, -1).map((layer, index) => (
+        <group key={`diorama-connector-${layer.id}`}>
+          {[-1.64, 1.64].map((x) => (
+            <mesh key={`${layer.id}-${x}`} position={[x, index * layerGap + layerGap / 2, 1.04]}>
+              <boxGeometry args={[0.018, layerGap * 0.72, 0.018]} />
+              <meshBasicMaterial color={color} transparent opacity={opacity} />
+            </mesh>
+          ))}
+        </group>
+      ))}
+    </group>
+  );
+}
+
 type MotifProps = {
   isDimmed: boolean;
   isHighlighted: boolean;
@@ -225,6 +252,26 @@ function TlsTunnel({ isDimmed, isHighlighted, palette }: MotifProps) {
   );
 }
 
+function TranscriptStrip({ isDimmed, isHighlighted, palette }: MotifProps) {
+  const color = isHighlighted ? palette.activeColor : palette.neutralLine;
+  const opacity = isDimmed ? 0.22 : isHighlighted ? 0.76 : 0.46;
+
+  return (
+    <group position={[0, 0.14, 0]}>
+      {[-1.12, -0.56, 0, 0.56, 1.12].map((x, index) => (
+        <mesh key={`transcript-record-${x}`} position={[x, 0.08 + index * 0.018, 0]}>
+          <boxGeometry args={[0.42, 0.055, 1.28]} />
+          <meshStandardMaterial color={color} transparent opacity={opacity} />
+        </mesh>
+      ))}
+      <mesh position={[0, 0.22, -0.74]}>
+        <boxGeometry args={[2.92, 0.035, 0.035]} />
+        <meshBasicMaterial color={palette.activeColor} transparent opacity={isDimmed ? 0.18 : 0.62} />
+      </mesh>
+    </group>
+  );
+}
+
 function RedactionGrate({ isDimmed, isHighlighted, palette }: MotifProps) {
   const color = isHighlighted ? palette.activeColor : palette.neutralLine;
   const opacity = isDimmed ? 0.22 : isHighlighted ? 0.82 : 0.5;
@@ -250,6 +297,36 @@ function RedactionGrate({ isDimmed, isHighlighted, palette }: MotifProps) {
         <mesh key={`redaction-block-${x}-${z}`} position={[x, 0.22, z]}>
           <boxGeometry args={[0.28, 0.28, 0.28]} />
           <meshStandardMaterial color="#050505" transparent opacity={isDimmed ? 0.32 : 0.74} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function WitnessTray({ isDimmed, isHighlighted, palette }: MotifProps) {
+  const color = isHighlighted ? palette.activeColor : palette.neutralLine;
+  const opacity = isDimmed ? 0.22 : isHighlighted ? 0.78 : 0.48;
+
+  return (
+    <group position={[0, 0.16, 0]}>
+      {[-0.72, 0.72].map((x) => (
+        <mesh key={`witness-rail-${x}`} position={[x, 0.1, 0]}>
+          <boxGeometry args={[0.06, 0.08, 1.56]} />
+          <meshStandardMaterial color={color} transparent opacity={opacity} />
+        </mesh>
+      ))}
+      <mesh position={[0, 0.1, 0]}>
+        <boxGeometry args={[1.64, 0.05, 0.06]} />
+        <meshBasicMaterial color={palette.activeColor} transparent opacity={isDimmed ? 0.18 : 0.64} />
+      </mesh>
+      {[
+        [-0.42, -0.36],
+        [0.08, 0.02],
+        [0.46, 0.42],
+      ].map(([x, z]) => (
+        <mesh key={`witness-cube-${x}-${z}`} position={[x, 0.22, z]}>
+          <boxGeometry args={[0.22, 0.18, 0.22]} />
+          <meshStandardMaterial color={color} transparent opacity={opacity} />
         </mesh>
       ))}
     </group>
@@ -325,8 +402,12 @@ function LayerDioramaMotif({
             return <SourcePillars {...props} />;
           case "tunnel":
             return <TlsTunnel {...props} />;
+          case "record-strip":
+            return <TranscriptStrip {...props} />;
           case "filter-grate":
             return <RedactionGrate {...props} />;
+          case "input-tray":
+            return <WitnessTray {...props} />;
           case "prism":
             return <ProofPrism {...props} />;
           case "verifier-gate":
@@ -534,6 +615,7 @@ function AtlasScene({
   return (
     <group ref={sceneRef} position={scenePosition} rotation={sceneRotation}>
       <FlowEdges hasActiveLayer={activeLayerIds.size > 0} themeMode={themeMode} />
+      <DioramaConnectors hasActiveLayer={activeLayerIds.size > 0} themeMode={themeMode} />
       {atlasLayers.map((layer, index) => (
         <GlassLayer
           activeIndexes={activeIndexes}

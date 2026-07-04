@@ -227,6 +227,18 @@ test("atlas canvas renders primary diorama motifs on mapped layers", () => {
   assert.doesNotMatch(atlasCanvasSource, /Environment|Sparkles|EffectComposer|Bloom/);
 });
 
+test("atlas canvas completes transcript witness motifs and diorama connectors", () => {
+  for (const componentName of ["TranscriptStrip", "WitnessTray", "DioramaConnectors"]) {
+    assert.match(atlasCanvasSource, new RegExp(`function ${componentName}\\b`), componentName);
+  }
+
+  assert.match(atlasCanvasSource, /case "record-strip"/);
+  assert.match(atlasCanvasSource, /case "input-tray"/);
+  assert.match(atlasCanvasSource, /<DioramaConnectors\b/);
+  assert.match(atlasCanvasSource, /atlasLayers\.slice\(0, -1\)/);
+  assert.doesNotMatch(atlasCanvasSource, /Environment|Sparkles|EffectComposer|Bloom/);
+});
+
 test("search results use indexed article paths instead of chapter hash routes", () => {
   assert.match(searchDialogSource, /function hrefForItem/);
   assert.match(searchDialogSource, /href=\{hrefForItem\(item\)\}/);
