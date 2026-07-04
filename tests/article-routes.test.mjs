@@ -205,6 +205,28 @@ test("home TOC highlights article rows mapped from inspected atlas layers", () =
   assert.match(globalsSource, /\.article-row\.is-atlas-inspected/);
 });
 
+test("atlas canvas renders primary diorama motifs on mapped layers", () => {
+  for (const componentName of [
+    "LayerDioramaMotif",
+    "SourcePillars",
+    "TlsTunnel",
+    "RedactionGrate",
+    "ProofPrism",
+    "VerifierGate",
+  ]) {
+    assert.match(atlasCanvasSource, new RegExp(`function ${componentName}\\b`), componentName);
+  }
+
+  assert.match(atlasCanvasSource, /layer\.motif/);
+  assert.match(atlasCanvasSource, /layer\.inspectionLabel/);
+  assert.match(atlasCanvasSource, /case "pillars"/);
+  assert.match(atlasCanvasSource, /case "tunnel"/);
+  assert.match(atlasCanvasSource, /case "filter-grate"/);
+  assert.match(atlasCanvasSource, /case "prism"/);
+  assert.match(atlasCanvasSource, /case "verifier-gate"/);
+  assert.doesNotMatch(atlasCanvasSource, /Environment|Sparkles|EffectComposer|Bloom/);
+});
+
 test("search results use indexed article paths instead of chapter hash routes", () => {
   assert.match(searchDialogSource, /function hrefForItem/);
   assert.match(searchDialogSource, /href=\{hrefForItem\(item\)\}/);

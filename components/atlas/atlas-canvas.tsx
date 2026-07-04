@@ -4,6 +4,7 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
 import * as easing from "maath/easing";
 import { Suspense, useEffect, useMemo, useRef, useState, type WheelEvent } from "react";
+import { DoubleSide } from "three";
 import type { Group } from "three";
 import {
   atlasLayers,
@@ -162,6 +163,182 @@ function FlowEdges({
   );
 }
 
+type MotifProps = {
+  isDimmed: boolean;
+  isHighlighted: boolean;
+  palette: AtlasMaterialPalette;
+};
+
+const sourcePillars = [
+  [-1.35, -0.62, 0.22],
+  [-1.02, -0.18, 0.34],
+  [-0.72, 0.44, 0.26],
+  [-0.38, -0.54, 0.5],
+  [-0.08, 0.05, 0.32],
+  [0.24, 0.58, 0.42],
+  [0.58, -0.28, 0.28],
+  [0.86, 0.28, 0.48],
+  [1.18, -0.62, 0.36],
+] as const;
+
+function SourcePillars({ isDimmed, isHighlighted, palette }: MotifProps) {
+  const color = isHighlighted ? palette.activeColor : palette.neutralLine;
+  const opacity = isDimmed ? 0.24 : isHighlighted ? 0.78 : 0.48;
+
+  return (
+    <group position={[0, 0.08, 0]}>
+      {sourcePillars.map(([x, z, height]) => (
+        <mesh key={`${x}-${z}`} position={[x, height / 2, z]}>
+          <boxGeometry args={[0.14, height, 0.14]} />
+          <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.18} transparent opacity={opacity} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function TlsTunnel({ isDimmed, isHighlighted, palette }: MotifProps) {
+  const color = isHighlighted ? palette.activeColor : palette.neutralLine;
+  const opacity = isDimmed ? 0.12 : isHighlighted ? 0.34 : 0.22;
+
+  return (
+    <group position={[0, 0.3, 0]}>
+      <mesh rotation={[0, 0, Math.PI / 2]}>
+        <cylinderGeometry args={[0.72, 0.72, 3.7, 28, 1, true]} />
+        <meshPhysicalMaterial
+          color={color}
+          depthWrite={false}
+          ior={1.18}
+          roughness={0.24}
+          side={DoubleSide}
+          thickness={0.18}
+          transmission={0.22}
+          transparent
+          opacity={opacity}
+        />
+      </mesh>
+      <mesh position={[0, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
+        <cylinderGeometry args={[0.015, 0.015, 3.9, 8]} />
+        <meshBasicMaterial color={color} transparent opacity={isDimmed ? 0.22 : 0.64} />
+      </mesh>
+    </group>
+  );
+}
+
+function RedactionGrate({ isDimmed, isHighlighted, palette }: MotifProps) {
+  const color = isHighlighted ? palette.activeColor : palette.neutralLine;
+  const opacity = isDimmed ? 0.22 : isHighlighted ? 0.82 : 0.5;
+
+  return (
+    <group position={[0, 0.18, 0]}>
+      {[-1.2, -0.6, 0, 0.6, 1.2].map((x) => (
+        <mesh key={`redaction-x-${x}`} position={[x, 0.06, 0]}>
+          <boxGeometry args={[0.045, 0.08, 1.55]} />
+          <meshStandardMaterial color={color} transparent opacity={opacity} />
+        </mesh>
+      ))}
+      {[-0.58, 0, 0.58].map((z) => (
+        <mesh key={`redaction-z-${z}`} position={[0, 0.08, z]}>
+          <boxGeometry args={[2.55, 0.08, 0.045]} />
+          <meshStandardMaterial color={color} transparent opacity={opacity} />
+        </mesh>
+      ))}
+      {[
+        [-0.35, -0.28],
+        [0.72, 0.44],
+      ].map(([x, z]) => (
+        <mesh key={`redaction-block-${x}-${z}`} position={[x, 0.22, z]}>
+          <boxGeometry args={[0.28, 0.28, 0.28]} />
+          <meshStandardMaterial color="#050505" transparent opacity={isDimmed ? 0.32 : 0.74} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function ProofPrism({ isDimmed, isHighlighted, palette }: MotifProps) {
+  const color = isHighlighted ? palette.activeColor : palette.neutralLine;
+  const opacity = isDimmed ? 0.2 : isHighlighted ? 0.62 : 0.4;
+
+  return (
+    <group position={[0, 0.28, 0]}>
+      <mesh rotation={[0, Math.PI / 6, 0]}>
+        <coneGeometry args={[0.5, 0.72, 3]} />
+        <meshPhysicalMaterial
+          color={color}
+          depthWrite={false}
+          ior={1.34}
+          roughness={0.18}
+          thickness={0.42}
+          transmission={0.42}
+          transparent
+          opacity={opacity}
+        />
+      </mesh>
+      <mesh position={[0.76, 0.02, 0]} rotation={[0, 0, Math.PI / 2]}>
+        <cylinderGeometry args={[0.026, 0.026, 1.4, 10]} />
+        <meshBasicMaterial color={palette.activeColor} transparent opacity={isDimmed ? 0.2 : 0.7} />
+      </mesh>
+    </group>
+  );
+}
+
+function VerifierGate({ isDimmed, isHighlighted, palette }: MotifProps) {
+  const color = isHighlighted ? palette.activeColor : palette.neutralLine;
+  const opacity = isDimmed ? 0.24 : isHighlighted ? 0.86 : 0.54;
+
+  return (
+    <group position={[0, 0.22, 0]}>
+      {[-0.58, 0.58].map((x) => (
+        <mesh key={`verifier-post-${x}`} position={[x, 0.24, 0]}>
+          <boxGeometry args={[0.14, 0.48, 0.2]} />
+          <meshStandardMaterial color={color} transparent opacity={opacity} />
+        </mesh>
+      ))}
+      <mesh position={[0, 0.52, 0]}>
+        <boxGeometry args={[1.42, 0.12, 0.2]} />
+        <meshStandardMaterial color={color} transparent opacity={opacity} />
+      </mesh>
+      <mesh position={[0, 0.16, 0.38]}>
+        <boxGeometry args={[0.72, 0.08, 0.12]} />
+        <meshBasicMaterial color={palette.activeColor} transparent opacity={isDimmed ? 0.18 : 0.68} />
+      </mesh>
+    </group>
+  );
+}
+
+function LayerDioramaMotif({
+  isDimmed,
+  isHighlighted,
+  layer,
+  palette,
+}: MotifProps & {
+  layer: AtlasLayer;
+}) {
+  const props = { isDimmed, isHighlighted, palette };
+
+  return (
+    <group name={layer.inspectionLabel}>
+      {(() => {
+        switch (layer.motif) {
+          case "pillars":
+            return <SourcePillars {...props} />;
+          case "tunnel":
+            return <TlsTunnel {...props} />;
+          case "filter-grate":
+            return <RedactionGrate {...props} />;
+          case "prism":
+            return <ProofPrism {...props} />;
+          case "verifier-gate":
+            return <VerifierGate {...props} />;
+          default:
+            return null;
+        }
+      })()}
+    </group>
+  );
+}
+
 function GlassLayer({
   activeIndexes,
   layer,
@@ -275,6 +452,12 @@ function GlassLayer({
           wireframe
         />
       </mesh>
+      <LayerDioramaMotif
+        isDimmed={isDimmed}
+        isHighlighted={isHighlighted}
+        layer={layer}
+        palette={palette}
+      />
       <Html
         className={[
           "atlas-html-label",
