@@ -11,6 +11,7 @@ const homeSource = fs.readFileSync("app/page.tsx", "utf8");
 const notFoundSource = fs.readFileSync("app/not-found.tsx", "utf8");
 const homeAtlasSource = fs.readFileSync("components/atlas/home-atlas-experience.tsx", "utf8");
 const atlasCanvasSource = fs.readFileSync("components/atlas/atlas-canvas.tsx", "utf8");
+const atlasDataSource = fs.readFileSync("components/atlas/atlas-data.ts", "utf8");
 const globalsSource = fs.readFileSync("app/globals.css", "utf8");
 const searchDialogSource = fs.readFileSync("components/search-dialog.tsx", "utf8");
 
@@ -137,6 +138,38 @@ test("atlas canvas tunes glass material for dark and light themes", () => {
   assert.match(atlasCanvasSource, /ior=/);
   assert.match(atlasCanvasSource, /themeMode === "light"/);
   assert.doesNotMatch(atlasCanvasSource, /Environment|Sparkles|EffectComposer|Bloom/);
+});
+
+test("atlas data defines diorama motifs and layer article mappings", () => {
+  const layerIds = ["source", "tls", "transcript", "redaction", "witness", "proof", "verifier"];
+  const motifs = ["pillars", "tunnel", "record-strip", "filter-grate", "input-tray", "prism", "verifier-gate"];
+
+  assert.match(atlasDataSource, /type AtlasLayerMotif/);
+  assert.match(atlasDataSource, /inspectionLabel/);
+  assert.match(atlasDataSource, /export const atlasLayerArticleMappings/);
+  assert.match(atlasDataSource, /articleSlugs/);
+
+  for (const motif of motifs) {
+    assert.match(atlasDataSource, new RegExp(`"${motif}"`), `${motif} motif`);
+  }
+
+  for (const layerId of layerIds) {
+    assert.match(
+      atlasDataSource,
+      new RegExp(`id: "${layerId}"[\\s\\S]*?motif:`),
+      `${layerId} layer motif`,
+    );
+    assert.match(
+      atlasDataSource,
+      new RegExp(`id: "${layerId}"[\\s\\S]*?inspectionLabel:`),
+      `${layerId} layer inspection label`,
+    );
+    assert.match(
+      atlasDataSource,
+      new RegExp(`layerId: "${layerId}"[\\s\\S]*?articleSlugs: \\[`),
+      `${layerId} article mapping`,
+    );
+  }
 });
 
 test("search results use indexed article paths instead of chapter hash routes", () => {
