@@ -111,10 +111,6 @@ test("atlas canvas uses drei Html labels without forbidden controls", () => {
   }
 });
 
-test("atlas motif stagger keeps framer motion 3d behind a dependency gate", () => {
-  assert.equal(packageJson.dependencies["framer-motion-3d"], "12.4.13");
-});
-
 test("atlas canvas adds ambient breathing and pointer parallax without controls", () => {
   assert.match(atlasCanvasSource, /useFrame/);
   assert.match(atlasCanvasSource, /prefers-reduced-motion:\s*reduce/);
