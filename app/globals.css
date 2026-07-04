@@ -424,14 +424,20 @@ textarea:focus-visible {
   text-transform: none;
 }
 
+.atlas-layer-label.is-primary,
 .atlas-layer-label.is-active,
 .atlas-layer-label.is-hovered,
 .atlas-layer-label.is-inspected {
   color: var(--accent);
 }
 
+.atlas-layer-label.is-supporting {
+  color: color-mix(in srgb, var(--accent) 64%, var(--text-primary));
+  opacity: 0.76;
+}
+
 .atlas-layer-label.is-dimmed {
-  opacity: 0.42;
+  opacity: 0.28;
 }
 
 .atlas-html-label {
@@ -459,14 +465,20 @@ textarea:focus-visible {
   text-transform: none;
 }
 
+.atlas-html-label.is-primary,
 .atlas-html-label.is-active,
 .atlas-html-label.is-hovered,
 .atlas-html-label.is-inspected {
   color: var(--accent);
 }
 
+.atlas-html-label.is-supporting {
+  color: color-mix(in srgb, var(--accent) 66%, var(--text-primary));
+  opacity: 0.72;
+}
+
 .atlas-html-label.is-dimmed {
-  opacity: 0.34;
+  opacity: 0.24;
 }
 
 @media (min-width: 720px) {

@@ -31,6 +31,7 @@ export type AtlasLayer = {
 export type ChapterAtlasMapping = {
   chapterSlug: string;
   layerIds: AtlasLayerId[];
+  primaryLayerIds?: AtlasLayerId[];
   mode: "boundary" | "layer" | "path";
   label: string;
 };
@@ -178,6 +179,7 @@ export const chapterAtlasMappings: Record<string, ChapterAtlasMapping> = {
   "security-thinking": {
     chapterSlug: "security-thinking",
     layerIds: allLayerIds,
+    primaryLayerIds: ["source", "redaction", "verifier"],
     mode: "boundary",
     label: "Trust boundary frame",
   },
@@ -220,6 +222,7 @@ export const chapterAtlasMappings: Record<string, ChapterAtlasMapping> = {
   "zktls-architectures-and-labs": {
     chapterSlug: "zktls-architectures-and-labs",
     layerIds: allLayerIds,
+    primaryLayerIds: ["source", "tls", "redaction", "proof", "verifier"],
     mode: "path",
     label: "Full source-to-verifier path",
   },
@@ -233,4 +236,9 @@ export function getActiveMapping(chapterSlug: string | null): ChapterAtlasMappin
 export function getActiveLayerIds(chapterSlug: string | null): Set<AtlasLayerId> {
   const mapping = getActiveMapping(chapterSlug);
   return new Set(mapping?.layerIds ?? []);
+}
+
+export function getPrimaryLayerIds(chapterSlug: string | null): Set<AtlasLayerId> {
+  const mapping = getActiveMapping(chapterSlug);
+  return new Set(mapping?.primaryLayerIds ?? mapping?.layerIds ?? []);
 }

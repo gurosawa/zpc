@@ -145,6 +145,21 @@ test("atlas canvas tunes glass material for dark and light themes", () => {
   assert.doesNotMatch(atlasCanvasSource, /Environment|Sparkles|EffectComposer|Bloom/);
 });
 
+test("atlas canvas separates primary supporting and dimmed layer states", () => {
+  assert.match(atlasCanvasSource, /getPrimaryLayerIds/);
+  assert.match(atlasCanvasSource, /type AtlasLayerVisualState = "primary" \| "supporting" \| "dimmed" \| "idle"/);
+  assert.match(atlasCanvasSource, /function getAtlasLayerVisualState/);
+  assert.match(atlasCanvasSource, /const isPrimary = visualState === "primary"/);
+  assert.match(atlasCanvasSource, /const isSupporting = visualState === "supporting"/);
+  assert.match(atlasCanvasSource, /supportingFillOpacity/);
+  assert.match(atlasCanvasSource, /supportingLineOpacity/);
+  assert.match(atlasCanvasSource, /emissiveIntensity/);
+  assert.match(globalsSource, /\.atlas-layer-label\.is-primary/);
+  assert.match(globalsSource, /\.atlas-layer-label\.is-supporting/);
+  assert.match(globalsSource, /\.atlas-html-label\.is-primary/);
+  assert.match(globalsSource, /\.atlas-html-label\.is-supporting/);
+});
+
 test("atlas data defines diorama motifs and layer article mappings", () => {
   const layerIds = ["source", "tls", "transcript", "redaction", "witness", "proof", "verifier"];
   const motifs = ["pillars", "tunnel", "record-strip", "filter-grate", "input-tray", "prism", "verifier-gate"];
@@ -175,6 +190,19 @@ test("atlas data defines diorama motifs and layer article mappings", () => {
       `${layerId} article mapping`,
     );
   }
+});
+
+test("atlas data marks core primary layers within broad chapter mappings", () => {
+  assert.match(atlasDataSource, /primaryLayerIds\?: AtlasLayerId\[\]/);
+  assert.match(atlasDataSource, /export function getPrimaryLayerIds/);
+  assert.match(
+    atlasDataSource,
+    /"security-thinking": \{[\s\S]*?primaryLayerIds: \["source", "redaction", "verifier"\]/,
+  );
+  assert.match(
+    atlasDataSource,
+    /"zktls-architectures-and-labs": \{[\s\S]*?primaryLayerIds: \["source", "tls", "redaction", "proof", "verifier"\]/,
+  );
 });
 
 test("home Atlas keeps 3D layer hover picking state local", () => {

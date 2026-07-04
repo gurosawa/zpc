@@ -9,6 +9,7 @@ import type { Group } from "three";
 import {
   atlasLayers,
   getActiveLayerIds,
+  getPrimaryLayerIds,
   type AtlasLayer,
   type AtlasLayerId,
 } from "@/components/atlas/atlas-data";
@@ -37,9 +38,11 @@ type AtlasMaterialPalette = {
   neutralLine: string;
   neutralFill: string;
   activeFillOpacity: number;
+  supportingFillOpacity: number;
   dimFillOpacity: number;
   idleFillOpacity: number;
   activeLineOpacity: number;
+  supportingLineOpacity: number;
   dimLineOpacity: number;
   idleLineOpacity: number;
   roughness: number;
@@ -54,12 +57,14 @@ const atlasMaterials: Record<AtlasThemeMode, AtlasMaterialPalette> = {
     activeFill: "#aebdff",
     neutralLine: "#9ba8ff",
     neutralFill: "#c8d3ff",
-    activeFillOpacity: 0.46,
-    dimFillOpacity: 0.1,
-    idleFillOpacity: 0.22,
+    activeFillOpacity: 0.56,
+    supportingFillOpacity: 0.32,
+    dimFillOpacity: 0.06,
+    idleFillOpacity: 0.18,
     activeLineOpacity: 0.98,
-    dimLineOpacity: 0.26,
-    idleLineOpacity: 0.58,
+    supportingLineOpacity: 0.68,
+    dimLineOpacity: 0.16,
+    idleLineOpacity: 0.42,
     roughness: 0.18,
     transmission: 0.56,
     thickness: 0.72,
@@ -70,18 +75,44 @@ const atlasMaterials: Record<AtlasThemeMode, AtlasMaterialPalette> = {
     activeFill: "#5d73ff",
     neutralLine: "#657184",
     neutralFill: "#b8c0d8",
-    activeFillOpacity: 0.38,
-    dimFillOpacity: 0.16,
-    idleFillOpacity: 0.26,
-    activeLineOpacity: 0.88,
-    dimLineOpacity: 0.28,
-    idleLineOpacity: 0.48,
+    activeFillOpacity: 0.46,
+    supportingFillOpacity: 0.28,
+    dimFillOpacity: 0.1,
+    idleFillOpacity: 0.22,
+    activeLineOpacity: 0.95,
+    supportingLineOpacity: 0.58,
+    dimLineOpacity: 0.18,
+    idleLineOpacity: 0.38,
     roughness: 0.36,
     transmission: 0,
     thickness: 0.12,
     ior: 1.08,
   },
 };
+
+type AtlasLayerVisualState = "primary" | "supporting" | "dimmed" | "idle";
+
+function getAtlasLayerVisualState({
+  activeLayerIds,
+  hoveredLayerId,
+  inspectedLayerId,
+  layerId,
+  primaryLayerIds,
+}: {
+  activeLayerIds: Set<AtlasLayerId>;
+  hoveredLayerId: AtlasLayerId | null;
+  inspectedLayerId: AtlasLayerId | null;
+  layerId: AtlasLayerId;
+  primaryLayerIds: Set<AtlasLayerId>;
+}): AtlasLayerVisualState {
+  if (hoveredLayerId === layerId || inspectedLayerId === layerId || primaryLayerIds.has(layerId)) {
+    return "primary";
+  }
+
+  if (activeLayerIds.has(layerId)) return "supporting";
+  if (activeLayerIds.size > 0) return "dimmed";
+  return "idle";
+}
 
 function getAtlasThemeMode(): AtlasThemeMode {
   if (typeof document === "undefined") return "dark";
@@ -193,8 +224,25 @@ function DioramaConnectors({
 type MotifProps = {
   isDimmed: boolean;
   isHighlighted: boolean;
+  isSupporting: boolean;
   palette: AtlasMaterialPalette;
 };
+
+function getMotifColor({ isHighlighted, isSupporting, palette }: MotifProps) {
+  if (isHighlighted) return palette.activeColor;
+  if (isSupporting) return palette.activeFill;
+  return palette.neutralLine;
+}
+
+function getMotifOpacity(
+  { isDimmed, isHighlighted, isSupporting }: MotifProps,
+  levels: { primary: number; supporting: number; idle: number; dimmed: number },
+) {
+  if (isDimmed) return levels.dimmed;
+  if (isHighlighted) return levels.primary;
+  if (isSupporting) return levels.supporting;
+  return levels.idle;
+}
 
 const sourcePillars = [
   [-1.35, -0.62, 0.22],
@@ -208,9 +256,9 @@ const sourcePillars = [
   [1.18, -0.62, 0.36],
 ] as const;
 
-function SourcePillars({ isDimmed, isHighlighted, palette }: MotifProps) {
-  const color = isHighlighted ? palette.activeColor : palette.neutralLine;
-  const opacity = isDimmed ? 0.24 : isHighlighted ? 0.78 : 0.48;
+function SourcePillars(props: MotifProps) {
+  const color = getMotifColor(props);
+  const opacity = getMotifOpacity(props, { primary: 0.84, supporting: 0.58, idle: 0.42, dimmed: 0.16 });
 
   return (
     <group position={[0, 0.08, 0]}>
@@ -224,9 +272,10 @@ function SourcePillars({ isDimmed, isHighlighted, palette }: MotifProps) {
   );
 }
 
-function TlsTunnel({ isDimmed, isHighlighted, palette }: MotifProps) {
-  const color = isHighlighted ? palette.activeColor : palette.neutralLine;
-  const opacity = isDimmed ? 0.12 : isHighlighted ? 0.34 : 0.22;
+function TlsTunnel(props: MotifProps) {
+  const color = getMotifColor(props);
+  const opacity = getMotifOpacity(props, { primary: 0.38, supporting: 0.27, idle: 0.2, dimmed: 0.08 });
+  const spineOpacity = getMotifOpacity(props, { primary: 0.7, supporting: 0.5, idle: 0.36, dimmed: 0.14 });
 
   return (
     <group position={[0, 0.3, 0]}>
@@ -246,15 +295,17 @@ function TlsTunnel({ isDimmed, isHighlighted, palette }: MotifProps) {
       </mesh>
       <mesh position={[0, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
         <cylinderGeometry args={[0.015, 0.015, 3.9, 8]} />
-        <meshBasicMaterial color={color} transparent opacity={isDimmed ? 0.22 : 0.64} />
+        <meshBasicMaterial color={color} transparent opacity={spineOpacity} />
       </mesh>
     </group>
   );
 }
 
-function TranscriptStrip({ isDimmed, isHighlighted, palette }: MotifProps) {
-  const color = isHighlighted ? palette.activeColor : palette.neutralLine;
-  const opacity = isDimmed ? 0.22 : isHighlighted ? 0.76 : 0.46;
+function TranscriptStrip(props: MotifProps) {
+  const { palette } = props;
+  const color = getMotifColor(props);
+  const opacity = getMotifOpacity(props, { primary: 0.78, supporting: 0.58, idle: 0.42, dimmed: 0.16 });
+  const railOpacity = getMotifOpacity(props, { primary: 0.68, supporting: 0.46, idle: 0.3, dimmed: 0.12 });
 
   return (
     <group position={[0, 0.14, 0]}>
@@ -266,15 +317,16 @@ function TranscriptStrip({ isDimmed, isHighlighted, palette }: MotifProps) {
       ))}
       <mesh position={[0, 0.22, -0.74]}>
         <boxGeometry args={[2.92, 0.035, 0.035]} />
-        <meshBasicMaterial color={palette.activeColor} transparent opacity={isDimmed ? 0.18 : 0.62} />
+        <meshBasicMaterial color={palette.activeColor} transparent opacity={railOpacity} />
       </mesh>
     </group>
   );
 }
 
-function RedactionGrate({ isDimmed, isHighlighted, palette }: MotifProps) {
-  const color = isHighlighted ? palette.activeColor : palette.neutralLine;
-  const opacity = isDimmed ? 0.22 : isHighlighted ? 0.82 : 0.5;
+function RedactionGrate(props: MotifProps) {
+  const color = getMotifColor(props);
+  const opacity = getMotifOpacity(props, { primary: 0.84, supporting: 0.62, idle: 0.44, dimmed: 0.16 });
+  const blockOpacity = getMotifOpacity(props, { primary: 0.78, supporting: 0.6, idle: 0.42, dimmed: 0.22 });
 
   return (
     <group position={[0, 0.18, 0]}>
@@ -296,16 +348,18 @@ function RedactionGrate({ isDimmed, isHighlighted, palette }: MotifProps) {
       ].map(([x, z]) => (
         <mesh key={`redaction-block-${x}-${z}`} position={[x, 0.22, z]}>
           <boxGeometry args={[0.28, 0.28, 0.28]} />
-          <meshStandardMaterial color="#050505" transparent opacity={isDimmed ? 0.32 : 0.74} />
+          <meshStandardMaterial color="#050505" transparent opacity={blockOpacity} />
         </mesh>
       ))}
     </group>
   );
 }
 
-function WitnessTray({ isDimmed, isHighlighted, palette }: MotifProps) {
-  const color = isHighlighted ? palette.activeColor : palette.neutralLine;
-  const opacity = isDimmed ? 0.22 : isHighlighted ? 0.78 : 0.48;
+function WitnessTray(props: MotifProps) {
+  const { palette } = props;
+  const color = getMotifColor(props);
+  const opacity = getMotifOpacity(props, { primary: 0.8, supporting: 0.58, idle: 0.42, dimmed: 0.16 });
+  const railOpacity = getMotifOpacity(props, { primary: 0.68, supporting: 0.48, idle: 0.34, dimmed: 0.12 });
 
   return (
     <group position={[0, 0.16, 0]}>
@@ -317,7 +371,7 @@ function WitnessTray({ isDimmed, isHighlighted, palette }: MotifProps) {
       ))}
       <mesh position={[0, 0.1, 0]}>
         <boxGeometry args={[1.64, 0.05, 0.06]} />
-        <meshBasicMaterial color={palette.activeColor} transparent opacity={isDimmed ? 0.18 : 0.64} />
+        <meshBasicMaterial color={palette.activeColor} transparent opacity={railOpacity} />
       </mesh>
       {[
         [-0.42, -0.36],
@@ -333,9 +387,11 @@ function WitnessTray({ isDimmed, isHighlighted, palette }: MotifProps) {
   );
 }
 
-function ProofPrism({ isDimmed, isHighlighted, palette }: MotifProps) {
-  const color = isHighlighted ? palette.activeColor : palette.neutralLine;
-  const opacity = isDimmed ? 0.2 : isHighlighted ? 0.62 : 0.4;
+function ProofPrism(props: MotifProps) {
+  const { palette } = props;
+  const color = getMotifColor(props);
+  const opacity = getMotifOpacity(props, { primary: 0.66, supporting: 0.48, idle: 0.34, dimmed: 0.14 });
+  const beamOpacity = getMotifOpacity(props, { primary: 0.76, supporting: 0.54, idle: 0.34, dimmed: 0.12 });
 
   return (
     <group position={[0, 0.28, 0]}>
@@ -354,15 +410,17 @@ function ProofPrism({ isDimmed, isHighlighted, palette }: MotifProps) {
       </mesh>
       <mesh position={[0.76, 0.02, 0]} rotation={[0, 0, Math.PI / 2]}>
         <cylinderGeometry args={[0.026, 0.026, 1.4, 10]} />
-        <meshBasicMaterial color={palette.activeColor} transparent opacity={isDimmed ? 0.2 : 0.7} />
+        <meshBasicMaterial color={palette.activeColor} transparent opacity={beamOpacity} />
       </mesh>
     </group>
   );
 }
 
-function VerifierGate({ isDimmed, isHighlighted, palette }: MotifProps) {
-  const color = isHighlighted ? palette.activeColor : palette.neutralLine;
-  const opacity = isDimmed ? 0.24 : isHighlighted ? 0.86 : 0.54;
+function VerifierGate(props: MotifProps) {
+  const { palette } = props;
+  const color = getMotifColor(props);
+  const opacity = getMotifOpacity(props, { primary: 0.88, supporting: 0.64, idle: 0.46, dimmed: 0.16 });
+  const signalOpacity = getMotifOpacity(props, { primary: 0.74, supporting: 0.54, idle: 0.34, dimmed: 0.12 });
 
   return (
     <group position={[0, 0.22, 0]}>
@@ -378,7 +436,7 @@ function VerifierGate({ isDimmed, isHighlighted, palette }: MotifProps) {
       </mesh>
       <mesh position={[0, 0.16, 0.38]}>
         <boxGeometry args={[0.72, 0.08, 0.12]} />
-        <meshBasicMaterial color={palette.activeColor} transparent opacity={isDimmed ? 0.18 : 0.68} />
+        <meshBasicMaterial color={palette.activeColor} transparent opacity={signalOpacity} />
       </mesh>
     </group>
   );
@@ -387,12 +445,13 @@ function VerifierGate({ isDimmed, isHighlighted, palette }: MotifProps) {
 function LayerDioramaMotif({
   isDimmed,
   isHighlighted,
+  isSupporting,
   layer,
   palette,
 }: MotifProps & {
   layer: AtlasLayer;
 }) {
-  const props = { isDimmed, isHighlighted, palette };
+  const props = { isDimmed, isHighlighted, isSupporting, palette };
 
   return (
     <group name={layer.inspectionLabel}>
@@ -431,6 +490,7 @@ function GlassLayer({
   index,
   y,
   activeLayerIds,
+  primaryLayerIds,
 }: {
   activeIndexes: number[];
   layer: AtlasLayer;
@@ -442,29 +502,45 @@ function GlassLayer({
   index: number;
   y: number;
   activeLayerIds: Set<AtlasLayerId>;
+  primaryLayerIds: Set<AtlasLayerId>;
 }) {
   const layerRef = useRef<Group>(null);
   const palette = atlasMaterials[themeMode];
   const filledSlab = themeMode === "light";
   const { id } = layer;
-  const hasActiveLayer = activeLayerIds.size > 0;
   const isActive = activeLayerIds.has(id);
   const isHovered = hoveredLayerId === id;
   const isInspected = inspectedLayerId === id;
-  const isHighlighted = isActive || isHovered || isInspected;
-  const isDimmed = hasActiveLayer && !isActive && !isHovered && !isInspected;
-  const baseLayerOpacity = isHighlighted
+  const visualState = getAtlasLayerVisualState({
+    activeLayerIds,
+    hoveredLayerId,
+    inspectedLayerId,
+    layerId: id,
+    primaryLayerIds,
+  });
+  const isPrimary = visualState === "primary";
+  const isSupporting = visualState === "supporting";
+  const isDimmed = visualState === "dimmed";
+  const isHighlighted = isPrimary;
+  const baseLayerOpacity = isPrimary
     ? palette.activeFillOpacity
-    : isDimmed
-      ? palette.dimFillOpacity
-      : palette.idleFillOpacity;
-  const baseLineOpacity = isHighlighted
+    : isSupporting
+      ? palette.supportingFillOpacity
+      : isDimmed
+        ? palette.dimFillOpacity
+        : palette.idleFillOpacity;
+  const baseLineOpacity = isPrimary
     ? palette.activeLineOpacity
-    : isDimmed
-      ? palette.dimLineOpacity
-      : palette.idleLineOpacity;
-  const layerOpacity = isHovered ? Math.max(baseLayerOpacity, 0.34) : baseLayerOpacity;
-  const lineOpacity = isHovered ? Math.max(baseLineOpacity, 0.82) : baseLineOpacity;
+    : isSupporting
+      ? palette.supportingLineOpacity
+      : isDimmed
+        ? palette.dimLineOpacity
+        : palette.idleLineOpacity;
+  const layerOpacity = isHovered ? Math.max(baseLayerOpacity, palette.activeFillOpacity) : baseLayerOpacity;
+  const lineOpacity = isHovered ? Math.max(baseLineOpacity, 0.86) : baseLineOpacity;
+  const layerColor = isPrimary || isSupporting ? palette.activeFill : palette.neutralFill;
+  const lineColor = isPrimary ? palette.activeColor : isSupporting ? palette.activeFill : palette.neutralLine;
+  const emissiveIntensity = isPrimary ? 0.12 : isSupporting ? 0.035 : 0;
   const closestActiveIndex = activeIndexes.reduce<number | null>((closest, activeIndex) => {
     if (closest === null) return activeIndex;
     return Math.abs(activeIndex - index) < Math.abs(closest - index) ? activeIndex : closest;
@@ -472,14 +548,14 @@ function GlassLayer({
   const distance = closestActiveIndex === null ? 0 : Math.abs(closestActiveIndex - index);
   const direction = closestActiveIndex === null || isActive ? 0 : Math.sign(index - closestActiveIndex);
   const accordionOffset = direction * Math.max(0, 0.1 - Math.max(0, distance - 1) * 0.025);
-  const targetY = y + (isActive ? 0.08 : accordionOffset);
+  const targetY = y + (isPrimary ? 0.1 : isSupporting ? 0.045 : accordionOffset);
   const targetPosition: [number, number, number] = [0, targetY, 0];
-  const targetScale: [number, number, number] = isActive
+  const targetScale: [number, number, number] = isPrimary
     ? isInspected
       ? [1.075, 1.32, 1.075]
-      : [1.045, 1.22, 1.045]
-    : isHovered
-      ? [1.025, 1.12, 1.025]
+      : [1.05, 1.22, 1.05]
+    : isSupporting
+      ? [1.02, 1.12, 1.02]
       : [1, 1, 1];
 
   useFrame((_state, delta) => {
@@ -513,8 +589,10 @@ function GlassLayer({
       <mesh>
         <boxGeometry args={[layerWidth, layerThickness, layerDepth]} />
         <meshPhysicalMaterial
-          color={isHighlighted ? palette.activeFill : palette.neutralFill}
+          color={layerColor}
           depthWrite={false}
+          emissive={lineColor}
+          emissiveIntensity={emissiveIntensity}
           ior={palette.ior}
           metalness={0}
           opacity={layerOpacity}
@@ -527,7 +605,7 @@ function GlassLayer({
       <mesh scale={[1.004, 1.08, 1.004]}>
         <boxGeometry args={[layerWidth, layerThickness, layerDepth]} />
         <meshBasicMaterial
-          color={isHighlighted ? palette.activeColor : palette.neutralLine}
+          color={lineColor}
           opacity={lineOpacity}
           transparent
           wireframe
@@ -536,6 +614,7 @@ function GlassLayer({
       <LayerDioramaMotif
         isDimmed={isDimmed}
         isHighlighted={isHighlighted}
+        isSupporting={isSupporting}
         layer={layer}
         palette={palette}
       />
@@ -543,6 +622,8 @@ function GlassLayer({
         className={[
           "atlas-html-label",
           isActive ? "is-active" : "",
+          isPrimary ? "is-primary" : "",
+          isSupporting ? "is-supporting" : "",
           isHovered ? "is-hovered" : "",
           isInspected ? "is-inspected" : "",
           isDimmed ? "is-dimmed" : "",
@@ -577,6 +658,7 @@ function AtlasScene({
   onLayerHoverChange: (layerId: AtlasLayerId | null) => void;
 }) {
   const activeLayerIds = useMemo(() => getActiveLayerIds(activeChapterSlug), [activeChapterSlug]);
+  const primaryLayerIds = useMemo(() => getPrimaryLayerIds(activeChapterSlug), [activeChapterSlug]);
   const activeIndexes = useMemo(
     () =>
       atlasLayers.flatMap((layer, index) => (activeLayerIds.has(layer.id) ? [index] : [])),
@@ -623,6 +705,7 @@ function AtlasScene({
           index={index}
           key={layer.id}
           layer={layer}
+          primaryLayerIds={primaryLayerIds}
           reducedMotion={reducedMotion}
           themeMode={themeMode}
           hoveredLayerId={hoveredLayerId}
@@ -643,7 +726,7 @@ export function AtlasCanvas({
   onLayerInspectChange = () => undefined,
 }: AtlasCanvasProps) {
   const activeLayerIds = useMemo(() => getActiveLayerIds(activeChapterSlug), [activeChapterSlug]);
-  const hasActiveLayer = activeLayerIds.size > 0;
+  const primaryLayerIds = useMemo(() => getPrimaryLayerIds(activeChapterSlug), [activeChapterSlug]);
   const reducedMotion = usePrefersReducedMotion();
   const themeMode = useAtlasThemeMode();
   const shellRef = useRef<HTMLDivElement | null>(null);
@@ -708,15 +791,27 @@ export function AtlasCanvas({
           const isActive = activeLayerIds.has(layer.id);
           const isHovered = hoveredLayerId === layer.id;
           const isInspected = inspectedLayerId === layer.id;
+          const visualState = getAtlasLayerVisualState({
+            activeLayerIds,
+            hoveredLayerId,
+            inspectedLayerId,
+            layerId: layer.id,
+            primaryLayerIds,
+          });
+          const isPrimary = visualState === "primary";
+          const isSupporting = visualState === "supporting";
+          const isDimmed = visualState === "dimmed";
 
           return (
             <li
               className={[
                 "atlas-layer-label",
                 isActive ? "is-active" : "",
+                isPrimary ? "is-primary" : "",
+                isSupporting ? "is-supporting" : "",
                 isHovered ? "is-hovered" : "",
                 isInspected ? "is-inspected" : "",
-                hasActiveLayer && !isActive && !isHovered && !isInspected ? "is-dimmed" : "",
+                isDimmed ? "is-dimmed" : "",
               ]
                 .filter(Boolean)
                 .join(" ")}
