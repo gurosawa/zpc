@@ -18,7 +18,9 @@ const DynamicAtlasCanvas = dynamic<AtlasCanvasProps>(
 type AtlasHeroProps = {
   activeChapterSlug: string | null;
   hoveredLayerId: AtlasLayerId | null;
+  inspectedLayerId: AtlasLayerId | null;
   onLayerHoverChange: (layerId: AtlasLayerId | null) => void;
+  onLayerInspectChange: (layerId: AtlasLayerId | null) => void;
 };
 
 function supportsWebgl() {
@@ -33,7 +35,9 @@ function supportsWebgl() {
 export function AtlasHero({
   activeChapterSlug,
   hoveredLayerId,
+  inspectedLayerId,
   onLayerHoverChange,
+  onLayerInspectChange,
 }: AtlasHeroProps) {
   const [webglAvailable, setWebglAvailable] = useState<boolean | null>(null);
   const activeMapping = getActiveMapping(activeChapterSlug);
@@ -68,7 +72,9 @@ export function AtlasHero({
           <DynamicAtlasCanvas
             activeChapterSlug={activeChapterSlug}
             hoveredLayerId={hoveredLayerId}
+            inspectedLayerId={inspectedLayerId}
             onLayerHoverChange={onLayerHoverChange}
+            onLayerInspectChange={onLayerInspectChange}
           />
         ) : (
           <AtlasFallback activeChapterSlug={activeChapterSlug} />

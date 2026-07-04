@@ -60,6 +60,7 @@ export function HomeAtlasExperience({ tocSections }: HomeAtlasExperienceProps) {
   const [activeByHover, setActiveByHover] = useState<string | null>(null);
   const [activeByScroll, setActiveByScroll] = useState<string | null>(firstChapterSlug);
   const [hoveredAtlasLayerId, setHoveredAtlasLayerId] = useState<AtlasLayerId | null>(null);
+  const [inspectedAtlasLayerId, setInspectedAtlasLayerId] = useState<AtlasLayerId | null>(null);
   const tocRootRef = useRef<HTMLDivElement | null>(null);
   const chapterSlugs = useMemo(() => tocSections.map((section) => section.slug), [tocSections]);
   const tocColumns = useMemo(() => groupIntoEditorialColumns(tocSections), [tocSections]);
@@ -128,7 +129,9 @@ export function HomeAtlasExperience({ tocSections }: HomeAtlasExperienceProps) {
           <AtlasHero
             activeChapterSlug={activeChapterSlug}
             hoveredLayerId={hoveredAtlasLayerId}
+            inspectedLayerId={inspectedAtlasLayerId}
             onLayerHoverChange={setHoveredAtlasLayerId}
+            onLayerInspectChange={setInspectedAtlasLayerId}
           />
         </div>
 

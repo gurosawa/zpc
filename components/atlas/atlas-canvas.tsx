@@ -3,7 +3,7 @@
 import { Canvas, useFrame } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
 import * as easing from "maath/easing";
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState, type WheelEvent } from "react";
 import type { Group } from "three";
 import {
   atlasLayers,
@@ -15,7 +15,9 @@ import {
 export type AtlasCanvasProps = {
   activeChapterSlug: string | null;
   hoveredLayerId?: AtlasLayerId | null;
+  inspectedLayerId?: AtlasLayerId | null;
   onLayerHoverChange?: (layerId: AtlasLayerId | null) => void;
+  onLayerInspectChange?: (layerId: AtlasLayerId | null) => void;
 };
 
 const layerWidth = 4.8;
@@ -166,6 +168,7 @@ function GlassLayer({
   reducedMotion,
   themeMode,
   hoveredLayerId,
+  inspectedLayerId,
   onLayerHoverChange,
   index,
   y,
@@ -176,6 +179,7 @@ function GlassLayer({
   reducedMotion: boolean;
   themeMode: AtlasThemeMode;
   hoveredLayerId: AtlasLayerId | null;
+  inspectedLayerId: AtlasLayerId | null;
   onLayerHoverChange: (layerId: AtlasLayerId | null) => void;
   index: number;
   y: number;
@@ -188,8 +192,9 @@ function GlassLayer({
   const hasActiveLayer = activeLayerIds.size > 0;
   const isActive = activeLayerIds.has(id);
   const isHovered = hoveredLayerId === id;
-  const isHighlighted = isActive || isHovered;
-  const isDimmed = hasActiveLayer && !isActive && !isHovered;
+  const isInspected = inspectedLayerId === id;
+  const isHighlighted = isActive || isHovered || isInspected;
+  const isDimmed = hasActiveLayer && !isActive && !isHovered && !isInspected;
   const baseLayerOpacity = isHighlighted
     ? palette.activeFillOpacity
     : isDimmed
@@ -212,7 +217,9 @@ function GlassLayer({
   const targetY = y + (isActive ? 0.08 : accordionOffset);
   const targetPosition: [number, number, number] = [0, targetY, 0];
   const targetScale: [number, number, number] = isActive
-    ? [1.045, 1.22, 1.045]
+    ? isInspected
+      ? [1.075, 1.32, 1.075]
+      : [1.045, 1.22, 1.045]
     : isHovered
       ? [1.025, 1.12, 1.025]
       : [1, 1, 1];
@@ -273,6 +280,7 @@ function GlassLayer({
           "atlas-html-label",
           isActive ? "is-active" : "",
           isHovered ? "is-hovered" : "",
+          isInspected ? "is-inspected" : "",
           isDimmed ? "is-dimmed" : "",
         ]
           .filter(Boolean)
@@ -293,11 +301,15 @@ function AtlasScene({
   reducedMotion,
   themeMode,
   hoveredLayerId,
+  inspectedLayerId,
+  inspectionDepth,
   onLayerHoverChange,
 }: AtlasCanvasProps & {
   reducedMotion: boolean;
   themeMode: AtlasThemeMode;
   hoveredLayerId: AtlasLayerId | null;
+  inspectedLayerId: AtlasLayerId | null;
+  inspectionDepth: number;
   onLayerHoverChange: (layerId: AtlasLayerId | null) => void;
 }) {
   const activeLayerIds = useMemo(() => getActiveLayerIds(activeChapterSlug), [activeChapterSlug]);
@@ -315,6 +327,7 @@ function AtlasScene({
     if (reducedMotion) {
       scene.position.set(...scenePosition);
       scene.rotation.set(...sceneRotation);
+      scene.scale.setScalar(1 + inspectionDepth * 0.16);
       return;
     }
 
@@ -330,6 +343,9 @@ function AtlasScene({
     scene.rotation.x += (targetRotX - scene.rotation.x) * Math.min(1, delta * 3);
     scene.rotation.y += (targetRotY - scene.rotation.y) * Math.min(1, delta * 3);
     scene.rotation.z += (sceneRotation[2] - scene.rotation.z) * Math.min(1, delta * 3);
+    scene.scale.setScalar(
+      scene.scale.x + (1 + inspectionDepth * 0.16 - scene.scale.x) * Math.min(1, delta * 4),
+    );
   });
 
   return (
@@ -345,6 +361,7 @@ function AtlasScene({
           reducedMotion={reducedMotion}
           themeMode={themeMode}
           hoveredLayerId={hoveredLayerId}
+          inspectedLayerId={inspectedLayerId}
           onLayerHoverChange={onLayerHoverChange}
           y={index * layerGap}
         />
@@ -356,17 +373,39 @@ function AtlasScene({
 export function AtlasCanvas({
   activeChapterSlug,
   hoveredLayerId = null,
+  inspectedLayerId = null,
   onLayerHoverChange = () => undefined,
+  onLayerInspectChange = () => undefined,
 }: AtlasCanvasProps) {
   const activeLayerIds = useMemo(() => getActiveLayerIds(activeChapterSlug), [activeChapterSlug]);
   const hasActiveLayer = activeLayerIds.size > 0;
   const reducedMotion = usePrefersReducedMotion();
   const themeMode = useAtlasThemeMode();
+  const [inspectionDepth, setInspectionDepth] = useState(0);
+  const visibleInspectionDepth = inspectedLayerId ? inspectionDepth : 0;
   const atlasFrameLoop = reducedMotion ? "demand" : "always";
+
+  function handleWheel(event: WheelEvent<HTMLDivElement>) {
+    if (!hoveredLayerId) return;
+
+    event.preventDefault();
+
+    const baseDepth = inspectedLayerId === hoveredLayerId ? inspectionDepth : 0;
+    const nextDepth = Math.max(0, Math.min(1, baseDepth + (event.deltaY < 0 ? 0.18 : -0.18)));
+
+    setInspectionDepth(nextDepth);
+    onLayerInspectChange(nextDepth > 0.12 ? hoveredLayerId : null);
+  }
 
   return (
     <div
       className="atlas-canvas-shell has-html-labels"
+      data-atlas-inspected-layer={inspectedLayerId ?? ""}
+      onPointerLeave={() => {
+        onLayerHoverChange(null);
+        onLayerInspectChange(null);
+      }}
+      onWheel={handleWheel}
       role="img"
       aria-label="Seven transparent zkTLS evidence layers connected from source API response to verifier decision."
     >
@@ -382,6 +421,8 @@ export function AtlasCanvas({
           <AtlasScene
             activeChapterSlug={activeChapterSlug}
             hoveredLayerId={hoveredLayerId}
+            inspectedLayerId={inspectedLayerId}
+            inspectionDepth={visibleInspectionDepth}
             onLayerHoverChange={onLayerHoverChange}
             reducedMotion={reducedMotion}
             themeMode={themeMode}
@@ -392,6 +433,7 @@ export function AtlasCanvas({
         {atlasLayers.map((layer) => {
           const isActive = activeLayerIds.has(layer.id);
           const isHovered = hoveredLayerId === layer.id;
+          const isInspected = inspectedLayerId === layer.id;
 
           return (
             <li
@@ -399,7 +441,8 @@ export function AtlasCanvas({
                 "atlas-layer-label",
                 isActive ? "is-active" : "",
                 isHovered ? "is-hovered" : "",
-                hasActiveLayer && !isActive && !isHovered ? "is-dimmed" : "",
+                isInspected ? "is-inspected" : "",
+                hasActiveLayer && !isActive && !isHovered && !isInspected ? "is-dimmed" : "",
               ]
                 .filter(Boolean)
                 .join(" ")}

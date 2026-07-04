@@ -183,6 +183,19 @@ test("home Atlas keeps 3D layer hover picking state local", () => {
   assert.doesNotMatch(`${homeAtlasSource}\n${atlasCanvasSource}`, /createStore|zustand|useSyncExternalStore/);
 });
 
+test("atlas canvas uses bounded wheel inspection for hovered layers", () => {
+  assert.match(homeAtlasSource, /inspectedAtlasLayerId/);
+  assert.match(homeAtlasSource, /setInspectedAtlasLayerId/);
+  assert.match(homeAtlasSource, /onLayerInspectChange=\{setInspectedAtlasLayerId\}/);
+  assert.match(atlasCanvasSource, /inspectedLayerId/);
+  assert.match(atlasCanvasSource, /inspectionDepth/);
+  assert.match(atlasCanvasSource, /function handleWheel/);
+  assert.match(atlasCanvasSource, /if \(!hoveredLayerId\) return/);
+  assert.match(atlasCanvasSource, /event\.preventDefault\(\)/);
+  assert.match(atlasCanvasSource, /scene\.scale\.setScalar/);
+  assert.doesNotMatch(atlasCanvasSource, /OrbitControls|PresentationControls/);
+});
+
 test("search results use indexed article paths instead of chapter hash routes", () => {
   assert.match(searchDialogSource, /function hrefForItem/);
   assert.match(searchDialogSource, /href=\{hrefForItem\(item\)\}/);
