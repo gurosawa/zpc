@@ -3,7 +3,7 @@
 import { Canvas, useFrame } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
 import * as easing from "maath/easing";
-import { Suspense, useEffect, useMemo, useRef, useState, type WheelEvent } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { DoubleSide } from "three";
 import type { Group } from "three";
 import {
@@ -646,21 +646,30 @@ export function AtlasCanvas({
   const hasActiveLayer = activeLayerIds.size > 0;
   const reducedMotion = usePrefersReducedMotion();
   const themeMode = useAtlasThemeMode();
+  const shellRef = useRef<HTMLDivElement | null>(null);
   const [inspectionDepth, setInspectionDepth] = useState(0);
   const visibleInspectionDepth = inspectedLayerId ? inspectionDepth : 0;
   const atlasFrameLoop = reducedMotion ? "demand" : "always";
 
-  function handleWheel(event: WheelEvent<HTMLDivElement>) {
-    if (!hoveredLayerId) return;
+  useEffect(() => {
+    const shell = shellRef.current;
+    if (!shell) return;
 
-    event.preventDefault();
+    function handleWheel(event: WheelEvent) {
+      if (!hoveredLayerId) return;
 
-    const baseDepth = inspectedLayerId === hoveredLayerId ? inspectionDepth : 0;
-    const nextDepth = Math.max(0, Math.min(1, baseDepth + (event.deltaY < 0 ? 0.18 : -0.18)));
+      event.preventDefault();
 
-    setInspectionDepth(nextDepth);
-    onLayerInspectChange(nextDepth > 0.12 ? hoveredLayerId : null);
-  }
+      const baseDepth = inspectedLayerId === hoveredLayerId ? inspectionDepth : 0;
+      const nextDepth = Math.max(0, Math.min(1, baseDepth + (event.deltaY < 0 ? 0.18 : -0.18)));
+
+      setInspectionDepth(nextDepth);
+      onLayerInspectChange(nextDepth > 0.12 ? hoveredLayerId : null);
+    }
+
+    shell.addEventListener("wheel", handleWheel, { passive: false });
+    return () => shell.removeEventListener("wheel", handleWheel);
+  }, [hoveredLayerId, inspectedLayerId, inspectionDepth, onLayerInspectChange]);
 
   return (
     <div
@@ -670,7 +679,7 @@ export function AtlasCanvas({
         onLayerHoverChange(null);
         onLayerInspectChange(null);
       }}
-      onWheel={handleWheel}
+      ref={shellRef}
       role="img"
       aria-label="Seven transparent zkTLS evidence layers connected from source API response to verifier decision."
     >

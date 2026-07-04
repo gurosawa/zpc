@@ -193,6 +193,8 @@ test("atlas canvas uses bounded wheel inspection for hovered layers", () => {
   assert.match(atlasCanvasSource, /function handleWheel/);
   assert.match(atlasCanvasSource, /if \(!hoveredLayerId\) return/);
   assert.match(atlasCanvasSource, /event\.preventDefault\(\)/);
+  assert.match(atlasCanvasSource, /addEventListener\("wheel", handleWheel, \{ passive: false \}\)/);
+  assert.doesNotMatch(atlasCanvasSource, /onWheel=\{handleWheel\}/);
   assert.match(atlasCanvasSource, /scene\.scale\.setScalar/);
   assert.doesNotMatch(atlasCanvasSource, /OrbitControls|PresentationControls/);
 });
