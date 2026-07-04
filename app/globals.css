@@ -424,7 +424,8 @@ textarea:focus-visible {
   text-transform: none;
 }
 
-.atlas-layer-label.is-active {
+.atlas-layer-label.is-active,
+.atlas-layer-label.is-hovered {
   color: var(--accent);
 }
 
@@ -457,7 +458,8 @@ textarea:focus-visible {
   text-transform: none;
 }
 
-.atlas-html-label.is-active {
+.atlas-html-label.is-active,
+.atlas-html-label.is-hovered {
   color: var(--accent);
 }
 

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type FocusEvent } from "react";
 import { AtlasHero } from "@/components/atlas/atlas-hero";
 import { TocMotion } from "@/components/toc-motion";
+import type { AtlasLayerId } from "@/components/atlas/atlas-data";
 import type { TocSection } from "@/lib/content";
 
 type HomeAtlasExperienceProps = {
@@ -58,6 +59,7 @@ export function HomeAtlasExperience({ tocSections }: HomeAtlasExperienceProps) {
   const firstChapterSlug = tocSections[0]?.slug ?? null;
   const [activeByHover, setActiveByHover] = useState<string | null>(null);
   const [activeByScroll, setActiveByScroll] = useState<string | null>(firstChapterSlug);
+  const [hoveredAtlasLayerId, setHoveredAtlasLayerId] = useState<AtlasLayerId | null>(null);
   const tocRootRef = useRef<HTMLDivElement | null>(null);
   const chapterSlugs = useMemo(() => tocSections.map((section) => section.slug), [tocSections]);
   const tocColumns = useMemo(() => groupIntoEditorialColumns(tocSections), [tocSections]);
@@ -123,7 +125,11 @@ export function HomeAtlasExperience({ tocSections }: HomeAtlasExperienceProps) {
     <div className="toc-page atlas-home">
       <div className="atlas-home-layout">
         <div className="atlas-home-panel">
-          <AtlasHero activeChapterSlug={activeChapterSlug} />
+          <AtlasHero
+            activeChapterSlug={activeChapterSlug}
+            hoveredLayerId={hoveredAtlasLayerId}
+            onLayerHoverChange={setHoveredAtlasLayerId}
+          />
         </div>
 
         <div className="atlas-home-toc" ref={tocRootRef}>

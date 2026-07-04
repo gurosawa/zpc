@@ -14,6 +14,8 @@ import {
 
 export type AtlasCanvasProps = {
   activeChapterSlug: string | null;
+  hoveredLayerId?: AtlasLayerId | null;
+  onLayerHoverChange?: (layerId: AtlasLayerId | null) => void;
 };
 
 const layerWidth = 4.8;
@@ -163,6 +165,8 @@ function GlassLayer({
   layer,
   reducedMotion,
   themeMode,
+  hoveredLayerId,
+  onLayerHoverChange,
   index,
   y,
   activeLayerIds,
@@ -171,6 +175,8 @@ function GlassLayer({
   layer: AtlasLayer;
   reducedMotion: boolean;
   themeMode: AtlasThemeMode;
+  hoveredLayerId: AtlasLayerId | null;
+  onLayerHoverChange: (layerId: AtlasLayerId | null) => void;
   index: number;
   y: number;
   activeLayerIds: Set<AtlasLayerId>;
@@ -181,17 +187,21 @@ function GlassLayer({
   const { id } = layer;
   const hasActiveLayer = activeLayerIds.size > 0;
   const isActive = activeLayerIds.has(id);
-  const isDimmed = hasActiveLayer && !isActive;
-  const layerOpacity = isActive
+  const isHovered = hoveredLayerId === id;
+  const isHighlighted = isActive || isHovered;
+  const isDimmed = hasActiveLayer && !isActive && !isHovered;
+  const baseLayerOpacity = isHighlighted
     ? palette.activeFillOpacity
     : isDimmed
       ? palette.dimFillOpacity
       : palette.idleFillOpacity;
-  const lineOpacity = isActive
+  const baseLineOpacity = isHighlighted
     ? palette.activeLineOpacity
     : isDimmed
       ? palette.dimLineOpacity
       : palette.idleLineOpacity;
+  const layerOpacity = isHovered ? Math.max(baseLayerOpacity, 0.34) : baseLayerOpacity;
+  const lineOpacity = isHovered ? Math.max(baseLineOpacity, 0.82) : baseLineOpacity;
   const closestActiveIndex = activeIndexes.reduce<number | null>((closest, activeIndex) => {
     if (closest === null) return activeIndex;
     return Math.abs(activeIndex - index) < Math.abs(closest - index) ? activeIndex : closest;
@@ -201,7 +211,11 @@ function GlassLayer({
   const accordionOffset = direction * Math.max(0, 0.1 - Math.max(0, distance - 1) * 0.025);
   const targetY = y + (isActive ? 0.08 : accordionOffset);
   const targetPosition: [number, number, number] = [0, targetY, 0];
-  const targetScale: [number, number, number] = isActive ? [1.045, 1.22, 1.045] : [1, 1, 1];
+  const targetScale: [number, number, number] = isActive
+    ? [1.045, 1.22, 1.045]
+    : isHovered
+      ? [1.025, 1.12, 1.025]
+      : [1, 1, 1];
 
   useFrame((_state, delta) => {
     const layerGroup = layerRef.current;
@@ -218,11 +232,23 @@ function GlassLayer({
   });
 
   return (
-    <group ref={layerRef} position={targetPosition} scale={targetScale}>
+    <group
+      onPointerEnter={(event) => {
+        event.stopPropagation();
+        onLayerHoverChange(id);
+      }}
+      onPointerLeave={(event) => {
+        event.stopPropagation();
+        onLayerHoverChange(null);
+      }}
+      ref={layerRef}
+      position={targetPosition}
+      scale={targetScale}
+    >
       <mesh>
         <boxGeometry args={[layerWidth, layerThickness, layerDepth]} />
         <meshPhysicalMaterial
-          color={isActive ? palette.activeFill : palette.neutralFill}
+          color={isHighlighted ? palette.activeFill : palette.neutralFill}
           depthWrite={false}
           ior={palette.ior}
           metalness={0}
@@ -236,7 +262,7 @@ function GlassLayer({
       <mesh scale={[1.004, 1.08, 1.004]}>
         <boxGeometry args={[layerWidth, layerThickness, layerDepth]} />
         <meshBasicMaterial
-          color={isActive ? palette.activeColor : palette.neutralLine}
+          color={isHighlighted ? palette.activeColor : palette.neutralLine}
           opacity={lineOpacity}
           transparent
           wireframe
@@ -246,6 +272,7 @@ function GlassLayer({
         className={[
           "atlas-html-label",
           isActive ? "is-active" : "",
+          isHovered ? "is-hovered" : "",
           isDimmed ? "is-dimmed" : "",
         ]
           .filter(Boolean)
@@ -265,7 +292,14 @@ function AtlasScene({
   activeChapterSlug,
   reducedMotion,
   themeMode,
-}: AtlasCanvasProps & { reducedMotion: boolean; themeMode: AtlasThemeMode }) {
+  hoveredLayerId,
+  onLayerHoverChange,
+}: AtlasCanvasProps & {
+  reducedMotion: boolean;
+  themeMode: AtlasThemeMode;
+  hoveredLayerId: AtlasLayerId | null;
+  onLayerHoverChange: (layerId: AtlasLayerId | null) => void;
+}) {
   const activeLayerIds = useMemo(() => getActiveLayerIds(activeChapterSlug), [activeChapterSlug]);
   const activeIndexes = useMemo(
     () =>
@@ -310,6 +344,8 @@ function AtlasScene({
           layer={layer}
           reducedMotion={reducedMotion}
           themeMode={themeMode}
+          hoveredLayerId={hoveredLayerId}
+          onLayerHoverChange={onLayerHoverChange}
           y={index * layerGap}
         />
       ))}
@@ -317,7 +353,11 @@ function AtlasScene({
   );
 }
 
-export function AtlasCanvas({ activeChapterSlug }: AtlasCanvasProps) {
+export function AtlasCanvas({
+  activeChapterSlug,
+  hoveredLayerId = null,
+  onLayerHoverChange = () => undefined,
+}: AtlasCanvasProps) {
   const activeLayerIds = useMemo(() => getActiveLayerIds(activeChapterSlug), [activeChapterSlug]);
   const hasActiveLayer = activeLayerIds.size > 0;
   const reducedMotion = usePrefersReducedMotion();
@@ -341,6 +381,8 @@ export function AtlasCanvas({ activeChapterSlug }: AtlasCanvasProps) {
         <Suspense fallback={null}>
           <AtlasScene
             activeChapterSlug={activeChapterSlug}
+            hoveredLayerId={hoveredLayerId}
+            onLayerHoverChange={onLayerHoverChange}
             reducedMotion={reducedMotion}
             themeMode={themeMode}
           />
@@ -349,13 +391,15 @@ export function AtlasCanvas({ activeChapterSlug }: AtlasCanvasProps) {
       <ol className="atlas-layer-overlay" aria-hidden="true">
         {atlasLayers.map((layer) => {
           const isActive = activeLayerIds.has(layer.id);
+          const isHovered = hoveredLayerId === layer.id;
 
           return (
             <li
               className={[
                 "atlas-layer-label",
                 isActive ? "is-active" : "",
-                hasActiveLayer && !isActive ? "is-dimmed" : "",
+                isHovered ? "is-hovered" : "",
+                hasActiveLayer && !isActive && !isHovered ? "is-dimmed" : "",
               ]
                 .filter(Boolean)
                 .join(" ")}

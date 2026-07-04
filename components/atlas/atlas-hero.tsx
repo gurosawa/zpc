@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { AtlasFallback } from "@/components/atlas/atlas-fallback";
 import { getActiveMapping } from "@/components/atlas/atlas-data";
+import type { AtlasLayerId } from "@/components/atlas/atlas-data";
 import type { AtlasCanvasProps } from "@/components/atlas/atlas-canvas";
 
 const DynamicAtlasCanvas = dynamic<AtlasCanvasProps>(
@@ -16,6 +17,8 @@ const DynamicAtlasCanvas = dynamic<AtlasCanvasProps>(
 
 type AtlasHeroProps = {
   activeChapterSlug: string | null;
+  hoveredLayerId: AtlasLayerId | null;
+  onLayerHoverChange: (layerId: AtlasLayerId | null) => void;
 };
 
 function supportsWebgl() {
@@ -27,7 +30,11 @@ function supportsWebgl() {
   }
 }
 
-export function AtlasHero({ activeChapterSlug }: AtlasHeroProps) {
+export function AtlasHero({
+  activeChapterSlug,
+  hoveredLayerId,
+  onLayerHoverChange,
+}: AtlasHeroProps) {
   const [webglAvailable, setWebglAvailable] = useState<boolean | null>(null);
   const activeMapping = getActiveMapping(activeChapterSlug);
 
@@ -58,7 +65,11 @@ export function AtlasHero({ activeChapterSlug }: AtlasHeroProps) {
 
       <div className="atlas-visual">
         {webglAvailable === true ? (
-          <DynamicAtlasCanvas activeChapterSlug={activeChapterSlug} />
+          <DynamicAtlasCanvas
+            activeChapterSlug={activeChapterSlug}
+            hoveredLayerId={hoveredLayerId}
+            onLayerHoverChange={onLayerHoverChange}
+          />
         ) : (
           <AtlasFallback activeChapterSlug={activeChapterSlug} />
         )}

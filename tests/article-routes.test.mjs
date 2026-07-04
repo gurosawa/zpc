@@ -172,6 +172,17 @@ test("atlas data defines diorama motifs and layer article mappings", () => {
   }
 });
 
+test("home Atlas keeps 3D layer hover picking state local", () => {
+  assert.match(homeAtlasSource, /hoveredAtlasLayerId/);
+  assert.match(homeAtlasSource, /setHoveredAtlasLayerId/);
+  assert.match(homeAtlasSource, /onLayerHoverChange=\{setHoveredAtlasLayerId\}/);
+  assert.match(atlasCanvasSource, /hoveredLayerId/);
+  assert.match(atlasCanvasSource, /onLayerHoverChange/);
+  assert.match(atlasCanvasSource, /onPointerEnter/);
+  assert.match(atlasCanvasSource, /onPointerLeave/);
+  assert.doesNotMatch(`${homeAtlasSource}\n${atlasCanvasSource}`, /createStore|zustand|useSyncExternalStore/);
+});
+
 test("search results use indexed article paths instead of chapter hash routes", () => {
   assert.match(searchDialogSource, /function hrefForItem/);
   assert.match(searchDialogSource, /href=\{hrefForItem\(item\)\}/);
