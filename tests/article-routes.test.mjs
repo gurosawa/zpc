@@ -10,6 +10,7 @@ const contentFilesSource = fs.readFileSync("lib/content-files.ts", "utf8");
 const homeSource = fs.readFileSync("app/page.tsx", "utf8");
 const notFoundSource = fs.readFileSync("app/not-found.tsx", "utf8");
 const homeAtlasSource = fs.readFileSync("components/atlas/home-atlas-experience.tsx", "utf8");
+const atlasHeroSource = fs.readFileSync("components/atlas/atlas-hero.tsx", "utf8");
 const atlasCanvasSource = fs.readFileSync("components/atlas/atlas-canvas.tsx", "utf8");
 const atlasDataSource = fs.readFileSync("components/atlas/atlas-data.ts", "utf8");
 const globalsSource = fs.readFileSync("app/globals.css", "utf8");
@@ -237,6 +238,14 @@ test("atlas canvas completes transcript witness motifs and diorama connectors", 
   assert.match(atlasCanvasSource, /<DioramaConnectors\b/);
   assert.match(atlasCanvasSource, /atlasLayers\.slice\(0, -1\)/);
   assert.doesNotMatch(atlasCanvasSource, /Environment|Sparkles|EffectComposer|Bloom/);
+});
+
+test("atlas hero exposes inspected layer telemetry labels", () => {
+  assert.match(atlasHeroSource, /atlasLayers/);
+  assert.match(atlasHeroSource, /inspectedLayer/);
+  assert.match(atlasHeroSource, /inspectionLabel/);
+  assert.match(atlasHeroSource, /data-atlas-inspected/);
+  assert.match(atlasHeroSource, />INSPECT</);
 });
 
 test("search results use indexed article paths instead of chapter hash routes", () => {

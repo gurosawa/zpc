@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { AtlasFallback } from "@/components/atlas/atlas-fallback";
-import { getActiveMapping } from "@/components/atlas/atlas-data";
+import { atlasLayers, getActiveMapping } from "@/components/atlas/atlas-data";
 import type { AtlasLayerId } from "@/components/atlas/atlas-data";
 import type { AtlasCanvasProps } from "@/components/atlas/atlas-canvas";
 
@@ -41,6 +41,7 @@ export function AtlasHero({
 }: AtlasHeroProps) {
   const [webglAvailable, setWebglAvailable] = useState<boolean | null>(null);
   const activeMapping = getActiveMapping(activeChapterSlug);
+  const inspectedLayer = atlasLayers.find((layer) => layer.id === inspectedLayerId) ?? null;
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -55,6 +56,7 @@ export function AtlasHero({
       className="atlas-hero"
       aria-labelledby="atlas-title"
       data-atlas-active={activeChapterSlug ?? ""}
+      data-atlas-inspected={inspectedLayerId ?? ""}
       data-atlas-renderer={webglAvailable === true ? "webgl" : "fallback"}
     >
       <div className="atlas-hero-copy">
@@ -93,6 +95,10 @@ export function AtlasHero({
         <div className="atlas-telemetry-panel">
           <small>ACTIVE</small>
           <code>{activeMapping?.label ?? "Full evidence stack"}</code>
+        </div>
+        <div className="atlas-telemetry-panel">
+          <small>INSPECT</small>
+          <code>{inspectedLayer?.inspectionLabel ?? "Layer focus idle"}</code>
         </div>
       </div>
     </section>
