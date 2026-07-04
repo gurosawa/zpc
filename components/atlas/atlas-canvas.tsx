@@ -57,14 +57,14 @@ const atlasMaterials: Record<AtlasThemeMode, AtlasMaterialPalette> = {
     activeFill: "#aebdff",
     neutralLine: "#9ba8ff",
     neutralFill: "#c8d3ff",
-    activeFillOpacity: 0.56,
-    supportingFillOpacity: 0.32,
-    dimFillOpacity: 0.06,
-    idleFillOpacity: 0.18,
+    activeFillOpacity: 0.72,
+    supportingFillOpacity: 0.2,
+    dimFillOpacity: 0.035,
+    idleFillOpacity: 0.14,
     activeLineOpacity: 0.98,
-    supportingLineOpacity: 0.68,
-    dimLineOpacity: 0.16,
-    idleLineOpacity: 0.42,
+    supportingLineOpacity: 0.46,
+    dimLineOpacity: 0.1,
+    idleLineOpacity: 0.32,
     roughness: 0.18,
     transmission: 0.56,
     thickness: 0.72,
@@ -75,14 +75,14 @@ const atlasMaterials: Record<AtlasThemeMode, AtlasMaterialPalette> = {
     activeFill: "#5d73ff",
     neutralLine: "#657184",
     neutralFill: "#b8c0d8",
-    activeFillOpacity: 0.46,
-    supportingFillOpacity: 0.28,
-    dimFillOpacity: 0.1,
-    idleFillOpacity: 0.22,
+    activeFillOpacity: 0.58,
+    supportingFillOpacity: 0.2,
+    dimFillOpacity: 0.055,
+    idleFillOpacity: 0.18,
     activeLineOpacity: 0.95,
-    supportingLineOpacity: 0.58,
-    dimLineOpacity: 0.18,
-    idleLineOpacity: 0.38,
+    supportingLineOpacity: 0.42,
+    dimLineOpacity: 0.12,
+    idleLineOpacity: 0.3,
     roughness: 0.36,
     transmission: 0,
     thickness: 0.12,
@@ -117,23 +117,23 @@ function getAtlasLayerVisualState({
 function getAssemblyTransform({
   assemblyProgress,
   targetScale,
-  targetY,
+  targetPosition,
   visualState,
 }: {
   assemblyProgress: number;
   targetScale: [number, number, number];
-  targetY: number;
+  targetPosition: [number, number, number];
   visualState: AtlasLayerVisualState;
 }) {
   const isAssembling = visualState === "primary" || visualState === "supporting";
   const assemblyRemainder = isAssembling ? 1 - assemblyProgress : 0;
-  const assemblyOvershoot = isAssembling ? Math.sin(assemblyProgress * Math.PI) * 0.08 : 0;
-  const assemblyScale = isAssembling ? 0.92 + assemblyProgress * 0.08 + assemblyOvershoot : 1;
-  const dimmedScale = visualState === "dimmed" ? 0.96 : 1;
+  const assemblyOvershoot = isAssembling ? Math.sin(assemblyProgress * Math.PI) * 0.14 : 0;
+  const assemblyScale = isAssembling ? 0.78 + assemblyProgress * 0.22 + assemblyOvershoot : 1;
+  const dimmedScale = visualState === "dimmed" ? 0.88 : 1;
   const position: [number, number, number] = [
-    0,
-    targetY - assemblyRemainder * 0.28 - (visualState === "dimmed" ? 0.025 : 0),
-    -assemblyRemainder * 0.24 - (visualState === "dimmed" ? 0.08 : 0),
+    targetPosition[0],
+    targetPosition[1] - assemblyRemainder * 0.44 - (visualState === "dimmed" ? 0.04 : 0),
+    targetPosition[2] - assemblyRemainder * 0.38 - (visualState === "dimmed" ? 0.12 : 0),
   ];
   const scale: [number, number, number] = [
     targetScale[0] * assemblyScale * dimmedScale,
@@ -142,6 +142,14 @@ function getAssemblyTransform({
   ];
 
   return { position, scale };
+}
+
+function getSceneFocusOffset(layerIds: Set<AtlasLayerId>) {
+  const focusIndexes = atlasLayers.flatMap((layer, index) => (layerIds.has(layer.id) ? [index] : []));
+  if (focusIndexes.length === 0) return 0;
+
+  const focusCenter = focusIndexes.reduce((sum, index) => sum + index, 0) / focusIndexes.length;
+  return focusCenter - (atlasLayers.length - 1) / 2;
 }
 
 function getAtlasThemeMode(): AtlasThemeMode {
@@ -570,26 +578,27 @@ function GlassLayer({
         ? palette.dimLineOpacity
         : palette.idleLineOpacity;
   const layerOpacity = isHovered ? Math.max(baseLayerOpacity, palette.activeFillOpacity) : baseLayerOpacity;
-  const lineOpacity = isHovered ? Math.max(baseLineOpacity, 0.86) : baseLineOpacity;
+  const lineOpacity = isHovered ? Math.max(baseLineOpacity, 0.96) : baseLineOpacity;
   const layerColor = isPrimary || isSupporting ? palette.activeFill : palette.neutralFill;
   const lineColor = isPrimary ? palette.activeColor : isSupporting ? palette.activeFill : palette.neutralLine;
-  const emissiveIntensity = isPrimary ? 0.12 : isSupporting ? 0.035 : 0;
+  const emissiveIntensity = isPrimary ? 0.26 : isSupporting ? 0.025 : 0;
   const closestActiveIndex = activeIndexes.reduce<number | null>((closest, activeIndex) => {
     if (closest === null) return activeIndex;
     return Math.abs(activeIndex - index) < Math.abs(closest - index) ? activeIndex : closest;
   }, null);
   const distance = closestActiveIndex === null ? 0 : Math.abs(closestActiveIndex - index);
-  const direction = closestActiveIndex === null || isActive ? 0 : Math.sign(index - closestActiveIndex);
-  const accordionOffset = direction * Math.max(0, 0.1 - Math.max(0, distance - 1) * 0.025);
-  const targetY = y + (isPrimary ? 0.1 : isSupporting ? 0.045 : accordionOffset);
-  const targetPosition: [number, number, number] = [0, targetY, 0];
+  const direction = closestActiveIndex === null || isPrimary ? 0 : Math.sign(index - closestActiveIndex);
+  const accordionOffset = direction * Math.max(0, 0.22 - Math.max(0, distance - 1) * 0.045);
+  const targetY = y + (isPrimary ? 0.24 : isSupporting ? accordionOffset : accordionOffset - 0.08);
+  const targetZ = isPrimary ? 0.16 : isSupporting ? -0.06 : isDimmed ? -0.16 : 0;
+  const targetPosition: [number, number, number] = [0, targetY, targetZ];
   const targetScale: [number, number, number] = isPrimary
     ? isInspected
-      ? [1.075, 1.32, 1.075]
-      : [1.05, 1.22, 1.05]
+      ? [1.16, 1.7, 1.16]
+      : [1.12, 1.48, 1.12]
     : isSupporting
-      ? [1.02, 1.12, 1.02]
-      : [1, 1, 1];
+      ? [0.98, 0.96, 0.98]
+      : [0.94, 0.9, 0.94];
   const activationKey = `${activeChapterSlug ?? "atlas-idle"}:${id}:${visualState}`;
 
   useEffect(() => {
@@ -605,7 +614,7 @@ function GlassLayer({
       const assemblyTarget = getAssemblyTransform({
         assemblyProgress: 1,
         targetScale,
-        targetY,
+        targetPosition,
         visualState,
       });
 
@@ -618,7 +627,7 @@ function GlassLayer({
     const assemblyTarget = getAssemblyTransform({
       assemblyProgress: assemblyProgressRef.current,
       targetScale,
-      targetY,
+      targetPosition,
       visualState,
     });
 
@@ -713,38 +722,55 @@ function AtlasScene({
 }) {
   const activeLayerIds = useMemo(() => getActiveLayerIds(activeChapterSlug), [activeChapterSlug]);
   const primaryLayerIds = useMemo(() => getPrimaryLayerIds(activeChapterSlug), [activeChapterSlug]);
+  const focusLayerIds = useMemo(
+    () => (primaryLayerIds.size > 0 ? primaryLayerIds : activeLayerIds),
+    [activeLayerIds, primaryLayerIds],
+  );
   const activeIndexes = useMemo(
     () =>
-      atlasLayers.flatMap((layer, index) => (activeLayerIds.has(layer.id) ? [index] : [])),
-    [activeLayerIds],
+      atlasLayers.flatMap((layer, index) => (focusLayerIds.has(layer.id) ? [index] : [])),
+    [focusLayerIds],
   );
+  const sceneFocusOffset = useMemo(() => getSceneFocusOffset(focusLayerIds), [focusLayerIds]);
   const sceneRef = useRef<Group>(null);
 
   useFrame((state, delta) => {
     const scene = sceneRef.current;
     if (!scene) return;
+    const focusScale = 1.04 + Math.abs(sceneFocusOffset) * 0.04 + inspectionDepth * 0.16;
+    const focusPosition: [number, number, number] = [
+      scenePosition[0] + sceneFocusOffset * 0.06,
+      scenePosition[1] - sceneFocusOffset * 0.22,
+      scenePosition[2] + Math.abs(sceneFocusOffset) * 0.08,
+    ];
+    const focusRotation: [number, number, number] = [
+      sceneRotation[0] + sceneFocusOffset * 0.03,
+      sceneRotation[1] - sceneFocusOffset * 0.025,
+      sceneRotation[2],
+    ];
 
     if (reducedMotion) {
-      scene.position.set(...scenePosition);
-      scene.rotation.set(...sceneRotation);
-      scene.scale.setScalar(1 + inspectionDepth * 0.16);
+      scene.position.set(...focusPosition);
+      scene.rotation.set(...focusRotation);
+      scene.scale.setScalar(focusScale);
       return;
     }
 
     const breath = Math.sin(state.clock.elapsedTime * 0.72) * 0.035;
-    const targetX = scenePosition[0] - state.pointer.x * 0.08;
-    const targetY = scenePosition[1] + breath + state.pointer.y * 0.045;
-    const targetRotX = sceneRotation[0] + state.pointer.y * 0.04;
-    const targetRotY = sceneRotation[1] - state.pointer.x * 0.06;
+    const targetX = focusPosition[0] - state.pointer.x * 0.08;
+    const targetY = focusPosition[1] + breath + state.pointer.y * 0.045;
+    const targetZ = focusPosition[2];
+    const targetRotX = focusRotation[0] + state.pointer.y * 0.04;
+    const targetRotY = focusRotation[1] - state.pointer.x * 0.06;
 
     scene.position.x += (targetX - scene.position.x) * Math.min(1, delta * 4);
     scene.position.y += (targetY - scene.position.y) * Math.min(1, delta * 4);
-    scene.position.z = scenePosition[2];
+    scene.position.z += (targetZ - scene.position.z) * Math.min(1, delta * 4);
     scene.rotation.x += (targetRotX - scene.rotation.x) * Math.min(1, delta * 3);
     scene.rotation.y += (targetRotY - scene.rotation.y) * Math.min(1, delta * 3);
-    scene.rotation.z += (sceneRotation[2] - scene.rotation.z) * Math.min(1, delta * 3);
+    scene.rotation.z += (focusRotation[2] - scene.rotation.z) * Math.min(1, delta * 3);
     scene.scale.setScalar(
-      scene.scale.x + (1 + inspectionDepth * 0.16 - scene.scale.x) * Math.min(1, delta * 4),
+      scene.scale.x + (focusScale - scene.scale.x) * Math.min(1, delta * 4),
     );
   });
 

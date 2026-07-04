@@ -160,9 +160,20 @@ test("atlas canvas resets layer assembly motion on activation changes", () => {
   assert.match(atlasCanvasSource, /function getAssemblyTransform/);
   assert.match(atlasCanvasSource, /assemblyProgressRef/);
   assert.match(atlasCanvasSource, /const activationKey = `\$\{activeChapterSlug \?\? "atlas-idle"\}:\$\{id\}:\$\{visualState\}`/);
-  assert.match(atlasCanvasSource, /0\.92 \+ assemblyProgress \* 0\.08 \+ assemblyOvershoot/);
-  assert.match(atlasCanvasSource, /Math\.sin\(assemblyProgress \* Math\.PI\) \* 0\.08/);
+  assert.match(atlasCanvasSource, /0\.78 \+ assemblyProgress \* 0\.22 \+ assemblyOvershoot/);
+  assert.match(atlasCanvasSource, /Math\.sin\(assemblyProgress \* Math\.PI\) \* 0\.14/);
   assert.match(atlasCanvasSource, /reducedMotion \|\| isDimmed \|\| visualState === "idle" \? 1 : 0/);
+});
+
+test("atlas canvas uses primary layer focus for visible scene movement", () => {
+  assert.match(atlasCanvasSource, /function getSceneFocusOffset/);
+  assert.match(atlasCanvasSource, /primaryLayerIds\.size > 0 \? primaryLayerIds : activeLayerIds/);
+  assert.match(atlasCanvasSource, /focusLayerIds\.has\(layer\.id\)/);
+  assert.match(atlasCanvasSource, /const sceneFocusOffset = useMemo/);
+  assert.match(atlasCanvasSource, /scenePosition\[1\] - sceneFocusOffset \* 0\.22/);
+  assert.match(atlasCanvasSource, /scenePosition\[2\] \+ Math\.abs\(sceneFocusOffset\) \* 0\.08/);
+  assert.match(atlasCanvasSource, /const direction = closestActiveIndex === null \|\| isPrimary \? 0/);
+  assert.match(atlasCanvasSource, /const targetZ = isPrimary \? 0\.16/);
 });
 
 test("atlas data defines diorama motifs and layer article mappings", () => {
