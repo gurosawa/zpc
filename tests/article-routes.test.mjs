@@ -196,6 +196,15 @@ test("atlas canvas uses bounded wheel inspection for hovered layers", () => {
   assert.doesNotMatch(atlasCanvasSource, /OrbitControls|PresentationControls/);
 });
 
+test("home TOC highlights article rows mapped from inspected atlas layers", () => {
+  assert.match(homeAtlasSource, /atlasLayerArticleMappings/);
+  assert.match(homeAtlasSource, /inspectedArticleSlugs/);
+  assert.match(homeAtlasSource, /article\.articleSlug/);
+  assert.match(homeAtlasSource, /is-atlas-inspected/);
+  assert.match(homeAtlasSource, /data-atlas-article/);
+  assert.match(globalsSource, /\.article-row\.is-atlas-inspected/);
+});
+
 test("search results use indexed article paths instead of chapter hash routes", () => {
   assert.match(searchDialogSource, /function hrefForItem/);
   assert.match(searchDialogSource, /href=\{hrefForItem\(item\)\}/);

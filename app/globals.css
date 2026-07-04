@@ -878,6 +878,12 @@ textarea:focus-visible {
   transform: translateY(-1px);
 }
 
+.article-row.is-atlas-inspected .article-marker,
+.article-row.is-atlas-inspected .article-title,
+.article-row.is-atlas-inspected .compact-meta {
+  color: var(--accent);
+}
+
 .article-leader,
 .search-result-leader {
   background-image: repeating-linear-gradient(
@@ -895,8 +901,19 @@ textarea:focus-visible {
 }
 
 .article-row:hover .article-leader,
+.article-row.is-atlas-inspected .article-leader,
 .search-result:hover .search-result-leader {
   background-position: 12px 0;
+}
+
+.article-row.is-atlas-inspected .article-leader {
+  background-image: repeating-linear-gradient(
+    to right,
+    var(--accent) 0,
+    var(--accent) var(--leader-dot-size),
+    transparent var(--leader-dot-size),
+    transparent calc(var(--leader-dot-size) + var(--leader-dot-gap))
+  );
 }
 
 .compact-meta {

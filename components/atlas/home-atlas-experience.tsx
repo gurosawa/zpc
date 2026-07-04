@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type FocusEvent } from "react";
 import { AtlasHero } from "@/components/atlas/atlas-hero";
+import { atlasLayerArticleMappings } from "@/components/atlas/atlas-data";
 import { TocMotion } from "@/components/toc-motion";
 import type { AtlasLayerId } from "@/components/atlas/atlas-data";
 import type { TocSection } from "@/lib/content";
@@ -65,6 +66,13 @@ export function HomeAtlasExperience({ tocSections }: HomeAtlasExperienceProps) {
   const chapterSlugs = useMemo(() => tocSections.map((section) => section.slug), [tocSections]);
   const tocColumns = useMemo(() => groupIntoEditorialColumns(tocSections), [tocSections]);
   const activeChapterSlug = activeByHover ?? activeByScroll ?? firstChapterSlug;
+  const inspectedArticleSlugs = useMemo(() => {
+    const mapping = atlasLayerArticleMappings.find(
+      ({ layerId }) => layerId === inspectedAtlasLayerId,
+    );
+
+    return new Set(mapping?.articleSlugs ?? []);
+  }, [inspectedAtlasLayerId]);
 
   useEffect(() => {
     const tocRoot = tocRootRef.current;
@@ -176,25 +184,43 @@ export function HomeAtlasExperience({ tocSections }: HomeAtlasExperienceProps) {
                         </div>
 
                         <ol className="article-list">
-                          {section.articles.map((article) => (
-                            <li key={article.id}>
-                              <Link className="article-row" href={article.path}>
-                                <span className="article-marker">
-                                  {String(article.order).padStart(2, "0")}
-                                </span>
-                                <span className="article-title">{article.title}</span>
-                                <span className="article-leader" aria-hidden />
-                                <span
-                                  className="compact-meta"
-                                  aria-label={formatWords(article.wordCount ?? 0)}
+                          {section.articles.map((article) => {
+                            const isAtlasInspectedArticle = inspectedArticleSlugs.has(
+                              article.articleSlug,
+                            );
+
+                            return (
+                              <li key={article.id}>
+                                <Link
+                                  className={[
+                                    "article-row",
+                                    isAtlasInspectedArticle ? "is-atlas-inspected" : "",
+                                  ]
+                                    .filter(Boolean)
+                                    .join(" ")}
+                                  data-atlas-article={article.articleSlug}
+                                  data-atlas-inspected={
+                                    isAtlasInspectedArticle ? "true" : undefined
+                                  }
+                                  href={article.path}
                                 >
-                                  <span className="article-words" aria-hidden="true">
-                                    {formatWords(article.wordCount ?? 0)}
+                                  <span className="article-marker">
+                                    {String(article.order).padStart(2, "0")}
                                   </span>
-                                </span>
-                              </Link>
-                            </li>
-                          ))}
+                                  <span className="article-title">{article.title}</span>
+                                  <span className="article-leader" aria-hidden />
+                                  <span
+                                    className="compact-meta"
+                                    aria-label={formatWords(article.wordCount ?? 0)}
+                                  >
+                                    <span className="article-words" aria-hidden="true">
+                                      {formatWords(article.wordCount ?? 0)}
+                                    </span>
+                                  </span>
+                                </Link>
+                              </li>
+                            );
+                          })}
                         </ol>
                       </section>
                     );
