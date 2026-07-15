@@ -1,4 +1,4 @@
-import { HomeAtlasExperience } from "@/components/atlas/home-atlas-experience";
+import { HomeKineticIndexExperience } from "@/components/atlas/home-atlas-experience";
 import { GuideShell } from "@/components/guide-shell";
 import { getChapterNavItems, getTocSections } from "@/lib/content";
 
@@ -8,7 +8,7 @@ export default function Home() {
 
   return (
     <GuideShell chapters={chapters}>
-      <HomeAtlasExperience tocSections={tocSections} />
+      <HomeKineticIndexExperience tocSections={tocSections} />
     </GuideShell>
   );
 }

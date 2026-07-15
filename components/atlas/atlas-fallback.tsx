@@ -1,37 +1,71 @@
-import { atlasLayers, getActiveLayerIds } from "@/components/atlas/atlas-data";
+"use client";
 
-type AtlasFallbackProps = {
+import { useEffect, type CSSProperties } from "react";
+import type {
+  KineticChapter,
+  KineticFocusKind,
+  KineticIndexMode,
+} from "@/components/atlas/atlas-canvas";
+
+type KineticIndexFallbackProps = {
   activeChapterSlug?: string | null;
+  chapters: KineticChapter[];
   className?: string;
+  focusKind: KineticFocusKind;
+  mode: KineticIndexMode;
+  onReady?: () => void;
+  reducedMotion: boolean;
 };
 
-export function AtlasFallback({ activeChapterSlug = null, className }: AtlasFallbackProps) {
-  const activeLayerIds = getActiveLayerIds(activeChapterSlug);
-  const hasActiveLayer = activeLayerIds.size > 0;
+export function KineticIndexFallback({
+  activeChapterSlug = null,
+  chapters,
+  className,
+  focusKind,
+  mode,
+  onReady,
+  reducedMotion,
+}: KineticIndexFallbackProps) {
+  useEffect(() => {
+    if (!onReady) return;
+    const frame = window.requestAnimationFrame(onReady);
+    return () => window.cancelAnimationFrame(frame);
+  }, [onReady]);
 
   return (
     <div
-      className={["atlas-fallback", className].filter(Boolean).join(" ")}
-      role="img"
-      aria-label="Seven-layer zkTLS evidence stack from source API response through TLS, transcript, redaction, witness, proof, and verifier decision."
+      aria-hidden="true"
+      className={["kinetic-index-fallback", className].filter(Boolean).join(" ")}
+      data-focus-kind={focusKind}
+      data-mode={mode}
+      data-reduced-motion={reducedMotion ? "true" : "false"}
     >
-      <ol className="atlas-fallback-stack" aria-hidden="true">
-        {atlasLayers.map((layer) => {
-          const isActive = activeLayerIds.has(layer.id);
+      <ol className="kinetic-index-fallback-stack">
+        {chapters.map((chapter, index) => {
+          const isActive = chapter.slug === activeChapterSlug;
+          const isDefaultAccent = mode === "overview" && focusKind === "idle" && index === 0;
 
           return (
             <li
               className={[
-                "atlas-fallback-layer",
-                hasActiveLayer && !isActive ? "is-dimmed" : "",
+                "kinetic-index-fallback-row",
                 isActive ? "is-active" : "",
+                isDefaultAccent ? "is-default-accent" : "",
               ]
                 .filter(Boolean)
                 .join(" ")}
-              key={layer.id}
+              key={chapter.slug}
+              style={
+                {
+                  "--arming-x": `${(index - (chapters.length - 1) / 2) * 8}px`,
+                  "--row-index": index,
+                  "--row-z": `${index * -18}px`,
+                } as CSSProperties
+              }
             >
-              <span>{layer.label}</span>
-              <code>{layer.fragment}</code>
+              <span>{String(chapter.order).padStart(2, "0")}</span>
+              <strong>{chapter.title}</strong>
+              <i aria-hidden="true" />
             </li>
           );
         })}

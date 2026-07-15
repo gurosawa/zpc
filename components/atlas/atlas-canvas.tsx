@@ -1,909 +1,426 @@
 "use client";
 
-import { Canvas, useFrame } from "@react-three/fiber";
-import { Html } from "@react-three/drei";
+import { Text } from "@react-three/drei";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as easing from "maath/easing";
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { DoubleSide } from "three";
-import type { Group } from "three";
 import {
-  atlasLayers,
-  getActiveLayerIds,
-  getPrimaryLayerIds,
-  type AtlasLayer,
-  type AtlasLayerId,
-} from "@/components/atlas/atlas-data";
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MutableRefObject,
+} from "react";
+import type { Group } from "three";
 
-export type AtlasCanvasProps = {
+export type KineticChapter = {
+  slug: string;
+  order: number;
+  title: string;
+};
+
+export type KineticIndexMode = "arming" | "overview" | "chapter";
+export type KineticFocusKind = "idle" | "preview" | "committed";
+
+export type KineticIndexCanvasProps = {
   activeChapterSlug: string | null;
-  hoveredLayerId?: AtlasLayerId | null;
-  inspectedLayerId?: AtlasLayerId | null;
-  onLayerHoverChange?: (layerId: AtlasLayerId | null) => void;
-  onLayerInspectChange?: (layerId: AtlasLayerId | null) => void;
+  chapters: KineticChapter[];
+  focusKind: KineticFocusKind;
+  mode: KineticIndexMode;
+  onRendererReady: () => void;
+  reducedMotion: boolean;
 };
 
-const layerWidth = 4.8;
-const layerDepth = 2.25;
-const layerThickness = 0.055;
-const layerGap = 0.34;
-const stackHeight = (atlasLayers.length - 1) * layerGap;
-const scenePosition = [-0.48, -1.02, 0] as const;
-const sceneRotation = [-0.42, 0.08, -0.56] as const;
+type KineticThemeMode = "dark" | "light";
 
-type AtlasThemeMode = "dark" | "light";
-
-type AtlasMaterialPalette = {
-  activeColor: string;
-  activeFill: string;
-  neutralLine: string;
-  neutralFill: string;
-  activeFillOpacity: number;
-  supportingFillOpacity: number;
-  dimFillOpacity: number;
-  idleFillOpacity: number;
-  activeLineOpacity: number;
-  supportingLineOpacity: number;
-  dimLineOpacity: number;
-  idleLineOpacity: number;
-  roughness: number;
-  transmission: number;
-  thickness: number;
-  ior: number;
-};
-
-const atlasMaterials: Record<AtlasThemeMode, AtlasMaterialPalette> = {
+const paletteByTheme = {
   dark: {
-    activeColor: "#aab8ff",
-    activeFill: "#aebdff",
-    neutralLine: "#9ba8ff",
-    neutralFill: "#c8d3ff",
-    activeFillOpacity: 0.72,
-    supportingFillOpacity: 0.2,
-    dimFillOpacity: 0.035,
-    idleFillOpacity: 0.14,
-    activeLineOpacity: 0.98,
-    supportingLineOpacity: 0.46,
-    dimLineOpacity: 0.1,
-    idleLineOpacity: 0.32,
-    roughness: 0.18,
-    transmission: 0.56,
-    thickness: 0.72,
-    ior: 1.32,
+    accent: "#aebdff",
+    active: "#f4f6ff",
+    dimmed: "#515a76",
+    line: "#7683ca",
+    neutral: "#a2a9bc",
   },
   light: {
-    activeColor: "#001eff",
-    activeFill: "#5d73ff",
-    neutralLine: "#657184",
-    neutralFill: "#b8c0d8",
-    activeFillOpacity: 0.58,
-    supportingFillOpacity: 0.2,
-    dimFillOpacity: 0.055,
-    idleFillOpacity: 0.18,
-    activeLineOpacity: 0.95,
-    supportingLineOpacity: 0.42,
-    dimLineOpacity: 0.12,
-    idleLineOpacity: 0.3,
-    roughness: 0.36,
-    transmission: 0,
-    thickness: 0.12,
-    ior: 1.08,
+    accent: "#001eff",
+    active: "#11131a",
+    dimmed: "#9da4b1",
+    line: "#5d73ff",
+    neutral: "#596171",
   },
-};
+} satisfies Record<KineticThemeMode, Record<string, string>>;
 
-type AtlasLayerVisualState = "primary" | "supporting" | "dimmed" | "idle";
+const fontUrl = "/fonts/DepartureMono-Regular.otf";
+const transitionDuration = 0.6;
+const armingDuration = 1.8;
 
-function getAtlasLayerVisualState({
-  activeLayerIds,
-  hoveredLayerId,
-  inspectedLayerId,
-  layerId,
-  primaryLayerIds,
-}: {
-  activeLayerIds: Set<AtlasLayerId>;
-  hoveredLayerId: AtlasLayerId | null;
-  inspectedLayerId: AtlasLayerId | null;
-  layerId: AtlasLayerId;
-  primaryLayerIds: Set<AtlasLayerId>;
-}): AtlasLayerVisualState {
-  if (hoveredLayerId === layerId || inspectedLayerId === layerId || primaryLayerIds.has(layerId)) {
-    return "primary";
-  }
-
-  if (activeLayerIds.has(layerId)) return "supporting";
-  if (activeLayerIds.size > 0) return "dimmed";
-  return "idle";
-}
-
-function getAssemblyTransform({
-  assemblyProgress,
-  targetScale,
-  targetPosition,
-  visualState,
-}: {
-  assemblyProgress: number;
-  targetScale: [number, number, number];
-  targetPosition: [number, number, number];
-  visualState: AtlasLayerVisualState;
-}) {
-  const isAssembling = visualState === "primary" || visualState === "supporting";
-  const assemblyRemainder = isAssembling ? 1 - assemblyProgress : 0;
-  const assemblyOvershoot = isAssembling ? Math.sin(assemblyProgress * Math.PI) * 0.14 : 0;
-  const assemblyScale = isAssembling ? 0.78 + assemblyProgress * 0.22 + assemblyOvershoot : 1;
-  const dimmedScale = visualState === "dimmed" ? 0.88 : 1;
-  const position: [number, number, number] = [
-    targetPosition[0],
-    targetPosition[1] - assemblyRemainder * 0.44 - (visualState === "dimmed" ? 0.04 : 0),
-    targetPosition[2] - assemblyRemainder * 0.38 - (visualState === "dimmed" ? 0.12 : 0),
-  ];
-  const scale: [number, number, number] = [
-    targetScale[0] * assemblyScale * dimmedScale,
-    targetScale[1] * assemblyScale * dimmedScale,
-    targetScale[2] * assemblyScale * dimmedScale,
-  ];
-
-  return { position, scale };
-}
-
-function getSceneFocusOffset(layerIds: Set<AtlasLayerId>) {
-  const focusIndexes = atlasLayers.flatMap((layer, index) => (layerIds.has(layer.id) ? [index] : []));
-  if (focusIndexes.length === 0) return 0;
-
-  const focusCenter = focusIndexes.reduce((sum, index) => sum + index, 0) / focusIndexes.length;
-  return focusCenter - (atlasLayers.length - 1) / 2;
-}
-
-function getAtlasThemeMode(): AtlasThemeMode {
+function getThemeMode(): KineticThemeMode {
   if (typeof document === "undefined") return "dark";
   return document.documentElement.classList.contains("dark") ? "dark" : "light";
 }
 
-function useAtlasThemeMode() {
-  const [themeMode, setThemeMode] = useState<AtlasThemeMode>(getAtlasThemeMode);
+function useThemeMode() {
+  const [themeMode, setThemeMode] = useState<KineticThemeMode>(getThemeMode);
 
   useEffect(() => {
     const root = document.documentElement;
-    const updateThemeMode = () => setThemeMode(getAtlasThemeMode());
+    const updateThemeMode = () => setThemeMode(getThemeMode());
     const observer = new MutationObserver(updateThemeMode);
 
-    updateThemeMode();
     observer.observe(root, { attributeFilter: ["class"], attributes: true });
-
     return () => observer.disconnect();
   }, []);
 
   return themeMode;
 }
 
-function getPrefersReducedMotion() {
-  return (
-    typeof window !== "undefined" &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches
-  );
+function smoothstep(value: number) {
+  const bounded = Math.min(1, Math.max(0, value));
+  return bounded * bounded * (3 - 2 * bounded);
 }
 
-function usePrefersReducedMotion() {
-  const [reducedMotion, setReducedMotion] = useState(getPrefersReducedMotion);
+function splitTitle(title: string, compact: boolean) {
+  const limit = compact ? 24 : 30;
+  if (title.length <= limit) return title;
 
-  useEffect(() => {
-    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const words = title.split(" ");
+  let bestIndex = 1;
+  let smallestDifference = Number.POSITIVE_INFINITY;
 
-    function handleChange(event: MediaQueryListEvent) {
-      setReducedMotion(event.matches);
+  for (let index = 1; index < words.length; index += 1) {
+    const firstLine = words.slice(0, index).join(" ");
+    const secondLine = words.slice(index).join(" ");
+    const difference = Math.abs(firstLine.length - secondLine.length);
+
+    if (difference < smallestDifference) {
+      bestIndex = index;
+      smallestDifference = difference;
     }
+  }
 
-    media.addEventListener("change", handleChange);
-    return () => media.removeEventListener("change", handleChange);
-  }, []);
-
-  return reducedMotion;
+  return `${words.slice(0, bestIndex).join(" ")}\n${words.slice(bestIndex).join(" ")}`;
 }
 
-function FlowEdges({
-  hasActiveLayer,
-  themeMode,
-}: {
-  hasActiveLayer: boolean;
-  themeMode: AtlasThemeMode;
-}) {
-  const { activeColor } = atlasMaterials[themeMode];
-  const opacity = hasActiveLayer ? 0.5 : 0.32;
-  const flowPoints = [
-    [-1.85, -1.02],
-    [-0.62, -1.12],
-    [0.62, -1.12],
-    [1.85, -1.02],
-  ] as const;
-
-  return (
-    <>
-      {flowPoints.map(([x, z]) => (
-        <group key={`${x}-${z}`}>
-          <mesh position={[x, stackHeight / 2, z]}>
-            <boxGeometry args={[0.022, stackHeight + 0.32, 0.022]} />
-            <meshBasicMaterial color={activeColor} transparent opacity={opacity} />
-          </mesh>
-          <mesh position={[x, stackHeight + 0.24, z]} rotation={[0, 0, Math.PI / 4]}>
-            <coneGeometry args={[0.075, 0.18, 4]} />
-            <meshBasicMaterial color={activeColor} transparent opacity={opacity + 0.18} />
-          </mesh>
-        </group>
-      ))}
-    </>
-  );
-}
-
-function DioramaConnectors({
-  hasActiveLayer,
-  themeMode,
-}: {
-  hasActiveLayer: boolean;
-  themeMode: AtlasThemeMode;
-}) {
-  const { activeColor, neutralLine } = atlasMaterials[themeMode];
-  const color = hasActiveLayer ? activeColor : neutralLine;
-  const opacity = hasActiveLayer ? 0.42 : 0.26;
-
-  return (
-    <group>
-      {atlasLayers.slice(0, -1).map((layer, index) => (
-        <group key={`diorama-connector-${layer.id}`}>
-          {[-1.64, 1.64].map((x) => (
-            <mesh key={`${layer.id}-${x}`} position={[x, index * layerGap + layerGap / 2, 1.04]}>
-              <boxGeometry args={[0.018, layerGap * 0.72, 0.018]} />
-              <meshBasicMaterial color={color} transparent opacity={opacity} />
-            </mesh>
-          ))}
-        </group>
-      ))}
-    </group>
-  );
-}
-
-type MotifProps = {
-  isDimmed: boolean;
-  isHighlighted: boolean;
-  isSupporting: boolean;
-  palette: AtlasMaterialPalette;
+type KineticRowProps = {
+  activeIndex: number;
+  armingElapsedRef: MutableRefObject<number>;
+  baseY: number;
+  beatElapsedRef: MutableRefObject<number>;
+  chapter: KineticChapter;
+  compact: boolean;
+  focusKind: KineticFocusKind;
+  index: number;
+  mode: KineticIndexMode;
+  reducedMotion: boolean;
+  themeMode: KineticThemeMode;
+  title: string;
 };
 
-function getMotifColor({ isHighlighted, isSupporting, palette }: MotifProps) {
-  if (isHighlighted) return palette.activeColor;
-  if (isSupporting) return palette.activeFill;
-  return palette.neutralLine;
-}
-
-function getMotifOpacity(
-  { isDimmed, isHighlighted, isSupporting }: MotifProps,
-  levels: { primary: number; supporting: number; idle: number; dimmed: number },
-) {
-  if (isDimmed) return levels.dimmed;
-  if (isHighlighted) return levels.primary;
-  if (isSupporting) return levels.supporting;
-  return levels.idle;
-}
-
-const sourcePillars = [
-  [-1.35, -0.62, 0.22],
-  [-1.02, -0.18, 0.34],
-  [-0.72, 0.44, 0.26],
-  [-0.38, -0.54, 0.5],
-  [-0.08, 0.05, 0.32],
-  [0.24, 0.58, 0.42],
-  [0.58, -0.28, 0.28],
-  [0.86, 0.28, 0.48],
-  [1.18, -0.62, 0.36],
-] as const;
-
-function SourcePillars(props: MotifProps) {
-  const color = getMotifColor(props);
-  const opacity = getMotifOpacity(props, { primary: 0.84, supporting: 0.58, idle: 0.42, dimmed: 0.16 });
-
-  return (
-    <group position={[0, 0.08, 0]}>
-      {sourcePillars.map(([x, z, height]) => (
-        <mesh key={`${x}-${z}`} position={[x, height / 2, z]}>
-          <boxGeometry args={[0.14, height, 0.14]} />
-          <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.18} transparent opacity={opacity} />
-        </mesh>
-      ))}
-    </group>
-  );
-}
-
-function TlsTunnel(props: MotifProps) {
-  const color = getMotifColor(props);
-  const opacity = getMotifOpacity(props, { primary: 0.38, supporting: 0.27, idle: 0.2, dimmed: 0.08 });
-  const spineOpacity = getMotifOpacity(props, { primary: 0.7, supporting: 0.5, idle: 0.36, dimmed: 0.14 });
-
-  return (
-    <group position={[0, 0.3, 0]}>
-      <mesh rotation={[0, 0, Math.PI / 2]}>
-        <cylinderGeometry args={[0.72, 0.72, 3.7, 28, 1, true]} />
-        <meshPhysicalMaterial
-          color={color}
-          depthWrite={false}
-          ior={1.18}
-          roughness={0.24}
-          side={DoubleSide}
-          thickness={0.18}
-          transmission={0.22}
-          transparent
-          opacity={opacity}
-        />
-      </mesh>
-      <mesh position={[0, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
-        <cylinderGeometry args={[0.015, 0.015, 3.9, 8]} />
-        <meshBasicMaterial color={color} transparent opacity={spineOpacity} />
-      </mesh>
-    </group>
-  );
-}
-
-function TranscriptStrip(props: MotifProps) {
-  const { palette } = props;
-  const color = getMotifColor(props);
-  const opacity = getMotifOpacity(props, { primary: 0.78, supporting: 0.58, idle: 0.42, dimmed: 0.16 });
-  const railOpacity = getMotifOpacity(props, { primary: 0.68, supporting: 0.46, idle: 0.3, dimmed: 0.12 });
-
-  return (
-    <group position={[0, 0.14, 0]}>
-      {[-1.12, -0.56, 0, 0.56, 1.12].map((x, index) => (
-        <mesh key={`transcript-record-${x}`} position={[x, 0.08 + index * 0.018, 0]}>
-          <boxGeometry args={[0.42, 0.055, 1.28]} />
-          <meshStandardMaterial color={color} transparent opacity={opacity} />
-        </mesh>
-      ))}
-      <mesh position={[0, 0.22, -0.74]}>
-        <boxGeometry args={[2.92, 0.035, 0.035]} />
-        <meshBasicMaterial color={palette.activeColor} transparent opacity={railOpacity} />
-      </mesh>
-    </group>
-  );
-}
-
-function RedactionGrate(props: MotifProps) {
-  const color = getMotifColor(props);
-  const opacity = getMotifOpacity(props, { primary: 0.84, supporting: 0.62, idle: 0.44, dimmed: 0.16 });
-  const blockOpacity = getMotifOpacity(props, { primary: 0.78, supporting: 0.6, idle: 0.42, dimmed: 0.22 });
-
-  return (
-    <group position={[0, 0.18, 0]}>
-      {[-1.2, -0.6, 0, 0.6, 1.2].map((x) => (
-        <mesh key={`redaction-x-${x}`} position={[x, 0.06, 0]}>
-          <boxGeometry args={[0.045, 0.08, 1.55]} />
-          <meshStandardMaterial color={color} transparent opacity={opacity} />
-        </mesh>
-      ))}
-      {[-0.58, 0, 0.58].map((z) => (
-        <mesh key={`redaction-z-${z}`} position={[0, 0.08, z]}>
-          <boxGeometry args={[2.55, 0.08, 0.045]} />
-          <meshStandardMaterial color={color} transparent opacity={opacity} />
-        </mesh>
-      ))}
-      {[
-        [-0.35, -0.28],
-        [0.72, 0.44],
-      ].map(([x, z]) => (
-        <mesh key={`redaction-block-${x}-${z}`} position={[x, 0.22, z]}>
-          <boxGeometry args={[0.28, 0.28, 0.28]} />
-          <meshStandardMaterial color="#050505" transparent opacity={blockOpacity} />
-        </mesh>
-      ))}
-    </group>
-  );
-}
-
-function WitnessTray(props: MotifProps) {
-  const { palette } = props;
-  const color = getMotifColor(props);
-  const opacity = getMotifOpacity(props, { primary: 0.8, supporting: 0.58, idle: 0.42, dimmed: 0.16 });
-  const railOpacity = getMotifOpacity(props, { primary: 0.68, supporting: 0.48, idle: 0.34, dimmed: 0.12 });
-
-  return (
-    <group position={[0, 0.16, 0]}>
-      {[-0.72, 0.72].map((x) => (
-        <mesh key={`witness-rail-${x}`} position={[x, 0.1, 0]}>
-          <boxGeometry args={[0.06, 0.08, 1.56]} />
-          <meshStandardMaterial color={color} transparent opacity={opacity} />
-        </mesh>
-      ))}
-      <mesh position={[0, 0.1, 0]}>
-        <boxGeometry args={[1.64, 0.05, 0.06]} />
-        <meshBasicMaterial color={palette.activeColor} transparent opacity={railOpacity} />
-      </mesh>
-      {[
-        [-0.42, -0.36],
-        [0.08, 0.02],
-        [0.46, 0.42],
-      ].map(([x, z]) => (
-        <mesh key={`witness-cube-${x}-${z}`} position={[x, 0.22, z]}>
-          <boxGeometry args={[0.22, 0.18, 0.22]} />
-          <meshStandardMaterial color={color} transparent opacity={opacity} />
-        </mesh>
-      ))}
-    </group>
-  );
-}
-
-function ProofPrism(props: MotifProps) {
-  const { palette } = props;
-  const color = getMotifColor(props);
-  const opacity = getMotifOpacity(props, { primary: 0.66, supporting: 0.48, idle: 0.34, dimmed: 0.14 });
-  const beamOpacity = getMotifOpacity(props, { primary: 0.76, supporting: 0.54, idle: 0.34, dimmed: 0.12 });
-
-  return (
-    <group position={[0, 0.28, 0]}>
-      <mesh rotation={[0, Math.PI / 6, 0]}>
-        <coneGeometry args={[0.5, 0.72, 3]} />
-        <meshPhysicalMaterial
-          color={color}
-          depthWrite={false}
-          ior={1.34}
-          roughness={0.18}
-          thickness={0.42}
-          transmission={0.42}
-          transparent
-          opacity={opacity}
-        />
-      </mesh>
-      <mesh position={[0.76, 0.02, 0]} rotation={[0, 0, Math.PI / 2]}>
-        <cylinderGeometry args={[0.026, 0.026, 1.4, 10]} />
-        <meshBasicMaterial color={palette.activeColor} transparent opacity={beamOpacity} />
-      </mesh>
-    </group>
-  );
-}
-
-function VerifierGate(props: MotifProps) {
-  const { palette } = props;
-  const color = getMotifColor(props);
-  const opacity = getMotifOpacity(props, { primary: 0.88, supporting: 0.64, idle: 0.46, dimmed: 0.16 });
-  const signalOpacity = getMotifOpacity(props, { primary: 0.74, supporting: 0.54, idle: 0.34, dimmed: 0.12 });
-
-  return (
-    <group position={[0, 0.22, 0]}>
-      {[-0.58, 0.58].map((x) => (
-        <mesh key={`verifier-post-${x}`} position={[x, 0.24, 0]}>
-          <boxGeometry args={[0.14, 0.48, 0.2]} />
-          <meshStandardMaterial color={color} transparent opacity={opacity} />
-        </mesh>
-      ))}
-      <mesh position={[0, 0.52, 0]}>
-        <boxGeometry args={[1.42, 0.12, 0.2]} />
-        <meshStandardMaterial color={color} transparent opacity={opacity} />
-      </mesh>
-      <mesh position={[0, 0.16, 0.38]}>
-        <boxGeometry args={[0.72, 0.08, 0.12]} />
-        <meshBasicMaterial color={palette.activeColor} transparent opacity={signalOpacity} />
-      </mesh>
-    </group>
-  );
-}
-
-function LayerDioramaMotif({
-  isDimmed,
-  isHighlighted,
-  isSupporting,
-  layer,
-  palette,
-}: MotifProps & {
-  layer: AtlasLayer;
-}) {
-  const props = { isDimmed, isHighlighted, isSupporting, palette };
-
-  return (
-    <group name={layer.inspectionLabel}>
-      {(() => {
-        switch (layer.motif) {
-          case "pillars":
-            return <SourcePillars {...props} />;
-          case "tunnel":
-            return <TlsTunnel {...props} />;
-          case "record-strip":
-            return <TranscriptStrip {...props} />;
-          case "filter-grate":
-            return <RedactionGrate {...props} />;
-          case "input-tray":
-            return <WitnessTray {...props} />;
-          case "prism":
-            return <ProofPrism {...props} />;
-          case "verifier-gate":
-            return <VerifierGate {...props} />;
-          default:
-            return null;
-        }
-      })()}
-    </group>
-  );
-}
-
-function GlassLayer({
-  activeIndexes,
-  layer,
+function KineticRow({
+  activeIndex,
+  armingElapsedRef,
+  baseY,
+  beatElapsedRef,
+  chapter,
+  compact,
+  focusKind,
+  index,
+  mode,
   reducedMotion,
   themeMode,
-  hoveredLayerId,
-  inspectedLayerId,
-  onLayerHoverChange,
-  index,
-  y,
-  activeLayerIds,
-  activeChapterSlug,
-  primaryLayerIds,
-}: {
-  activeIndexes: number[];
-  layer: AtlasLayer;
-  reducedMotion: boolean;
-  themeMode: AtlasThemeMode;
-  hoveredLayerId: AtlasLayerId | null;
-  inspectedLayerId: AtlasLayerId | null;
-  onLayerHoverChange: (layerId: AtlasLayerId | null) => void;
-  index: number;
-  y: number;
-  activeLayerIds: Set<AtlasLayerId>;
-  activeChapterSlug: string | null;
-  primaryLayerIds: Set<AtlasLayerId>;
-}) {
-  const layerRef = useRef<Group>(null);
-  const assemblyProgressRef = useRef(1);
-  const palette = atlasMaterials[themeMode];
-  const filledSlab = themeMode === "light";
-  const { id } = layer;
-  const isActive = activeLayerIds.has(id);
-  const isHovered = hoveredLayerId === id;
-  const isInspected = inspectedLayerId === id;
-  const visualState = getAtlasLayerVisualState({
-    activeLayerIds,
-    hoveredLayerId,
-    inspectedLayerId,
-    layerId: id,
-    primaryLayerIds,
-  });
-  const isPrimary = visualState === "primary";
-  const isSupporting = visualState === "supporting";
-  const isDimmed = visualState === "dimmed";
-  const isHighlighted = isPrimary;
-  const baseLayerOpacity = isPrimary
-    ? palette.activeFillOpacity
+  title,
+}: KineticRowProps) {
+  const rowRef = useRef<Group>(null);
+  const palette = paletteByTheme[themeMode];
+  const isActive = index === activeIndex;
+  const isDefaultAccent = mode === "overview" && focusKind === "idle" && index === 0;
+  const isForeground = focusKind !== "idle" && isActive;
+  const isCommitted = focusKind === "committed" && isActive;
+  const isSupporting = focusKind !== "idle" && !isActive;
+  const depthGap = compact ? 0.1 : 0.19;
+  const baseZ = 0.58 - index * depthGap;
+  const hasTwoLines = title.includes("\n");
+  const textColor = isForeground || isDefaultAccent ? palette.accent : palette.neutral;
+  const textOpacity = isCommitted
+    ? 1
     : isSupporting
-      ? palette.supportingFillOpacity
-      : isDimmed
-        ? palette.dimFillOpacity
-        : palette.idleFillOpacity;
-  const baseLineOpacity = isPrimary
-    ? palette.activeLineOpacity
+      ? focusKind === "committed"
+        ? 0.18
+        : 0.48
+      : 0.78;
+  const lineColor = isForeground || isDefaultAccent ? palette.line : palette.dimmed;
+  const lineOpacity = isCommitted
+    ? 0.88
     : isSupporting
-      ? palette.supportingLineOpacity
-      : isDimmed
-        ? palette.dimLineOpacity
-        : palette.idleLineOpacity;
-  const layerOpacity = isHovered ? Math.max(baseLayerOpacity, palette.activeFillOpacity) : baseLayerOpacity;
-  const lineOpacity = isHovered ? Math.max(baseLineOpacity, 0.96) : baseLineOpacity;
-  const layerColor = isPrimary || isSupporting ? palette.activeFill : palette.neutralFill;
-  const lineColor = isPrimary ? palette.activeColor : isSupporting ? palette.activeFill : palette.neutralLine;
-  const emissiveIntensity = isPrimary ? 0.26 : isSupporting ? 0.025 : 0;
-  const closestActiveIndex = activeIndexes.reduce<number | null>((closest, activeIndex) => {
-    if (closest === null) return activeIndex;
-    return Math.abs(activeIndex - index) < Math.abs(closest - index) ? activeIndex : closest;
-  }, null);
-  const distance = closestActiveIndex === null ? 0 : Math.abs(closestActiveIndex - index);
-  const direction = closestActiveIndex === null || isPrimary ? 0 : Math.sign(index - closestActiveIndex);
-  const accordionOffset = direction * Math.max(0, 0.22 - Math.max(0, distance - 1) * 0.045);
-  const targetY = y + (isPrimary ? 0.24 : isSupporting ? accordionOffset : accordionOffset - 0.08);
-  const targetZ = isPrimary ? 0.16 : isSupporting ? -0.06 : isDimmed ? -0.16 : 0;
-  const targetPosition: [number, number, number] = [0, targetY, targetZ];
-  const targetScale: [number, number, number] = isPrimary
-    ? isInspected
-      ? [1.16, 1.7, 1.16]
-      : [1.12, 1.48, 1.12]
-    : isSupporting
-      ? [0.98, 0.96, 0.98]
-      : [0.94, 0.9, 0.94];
-  const activationKey = `${activeChapterSlug ?? "atlas-idle"}:${id}:${visualState}`;
-
-  useEffect(() => {
-    assemblyProgressRef.current = reducedMotion || isDimmed || visualState === "idle" ? 1 : 0;
-  }, [activationKey, isDimmed, reducedMotion, visualState]);
+      ? focusKind === "committed"
+        ? 0.08
+        : 0.22
+      : 0.34;
+  const fontSize = compact ? 0.245 : chapter.title.length > 36 ? 0.255 : 0.285;
+  const lineY = hasTwoLines ? -0.27 : -0.2;
 
   useFrame((_state, delta) => {
-    const layerGroup = layerRef.current;
-    if (!layerGroup) return;
+    const row = rowRef.current;
+    if (!row) return;
+
+    let targetX = index % 2 === 0 ? -0.03 : 0.03;
+    let targetY = baseY;
+    let targetZ = baseZ;
+    let targetScale = 1;
+
+    if (isForeground) {
+      const committedDepth = compact ? 0.82 : 1.45;
+      const previewDepth = compact ? 0.3 : 0.52;
+      const depth = focusKind === "committed" ? committedDepth : previewDepth;
+      const centering = focusKind === "committed" ? 0.34 : 0.82;
+
+      targetX = compact ? -0.08 : -0.18;
+      targetY = baseY * centering;
+      targetZ = baseZ + depth;
+      targetScale = focusKind === "committed" ? (compact ? 1.04 : 1.09) : 1.025;
+    } else if (isSupporting) {
+      const direction = index < activeIndex ? 1 : -1;
+      const separation =
+        focusKind === "committed" ? (compact ? 0.12 : 0.24) : compact ? 0.025 : 0.065;
+      targetX += direction * (compact ? 0.03 : 0.08);
+      targetY += direction * separation;
+      targetZ -= compact ? 0.08 : 0.2;
+      targetScale = compact ? 0.98 : 0.96;
+    }
+
+    if (mode === "arming" && !reducedMotion) {
+      const elapsed = armingElapsedRef.current;
+      const revealDelay = index * 0.045;
+      const reveal = smoothstep((elapsed - revealDelay) / 0.14);
+      const collision = smoothstep((elapsed - 0.45) / 0.9);
+      const settle = smoothstep((elapsed - 1.35) / 0.45);
+      const spreadDirection = index % 2 === 0 ? -1 : 1;
+      const spreadX = spreadDirection * (compact ? 0.46 : 0.86);
+      const spreadY = baseY * 1.42;
+      const compressionOvershoot = Math.sin(collision * Math.PI) * spreadDirection * 0.14;
+
+      targetX = spreadX * (1 - collision) + compressionOvershoot * (1 - settle);
+      targetY = spreadY + (baseY - spreadY) * collision;
+      targetZ = -2.2 + index * 0.08 + (baseZ + 2.2 - index * 0.08) * collision;
+      targetScale = Math.max(0.001, reveal) * (0.92 + collision * 0.12 - settle * 0.04);
+    } else if (focusKind === "committed" && beatElapsedRef.current < transitionDuration) {
+      const elapsed = beatElapsedRef.current;
+      const fold =
+        elapsed < 0.14
+          ? smoothstep(elapsed / 0.14)
+          : 1 - smoothstep((elapsed - 0.14) / 0.36);
+      const release = elapsed < 0.14 ? 0 : smoothstep((elapsed - 0.14) / 0.36);
+      const settle = smoothstep((elapsed - 0.5) / 0.1);
+      const overshoot = Math.sin(settle * Math.PI) * (isActive ? 0.08 : 0.02);
+
+      targetX *= release;
+      targetY *= 1 - fold * 0.82;
+      targetZ = baseZ * (1 - release) + targetZ * release - fold * 0.46 + overshoot;
+      targetScale *= 1 - fold * 0.11 + overshoot;
+    }
 
     if (reducedMotion) {
-      assemblyProgressRef.current = 1;
-      const assemblyTarget = getAssemblyTransform({
-        assemblyProgress: 1,
-        targetScale,
-        targetPosition,
-        visualState,
-      });
-
-      layerGroup.position.set(...assemblyTarget.position);
-      layerGroup.scale.set(...assemblyTarget.scale);
+      row.position.set(targetX, targetY, targetZ);
+      row.scale.setScalar(targetScale);
       return;
     }
 
-    assemblyProgressRef.current += (1 - assemblyProgressRef.current) * Math.min(1, delta * 5.5);
-    const assemblyTarget = getAssemblyTransform({
-      assemblyProgress: assemblyProgressRef.current,
-      targetScale,
-      targetPosition,
-      visualState,
-    });
-
-    easing.damp3(layerGroup.position, assemblyTarget.position, 0.24, delta);
-    easing.damp3(layerGroup.scale, assemblyTarget.scale, 0.2, delta);
+    easing.damp3(row.position, [targetX, targetY, targetZ], 0.12, delta);
+    easing.damp3(row.scale, [targetScale, targetScale, targetScale], 0.12, delta);
   });
 
   return (
     <group
-      onPointerEnter={(event) => {
-        event.stopPropagation();
-        onLayerHoverChange(id);
-      }}
-      onPointerLeave={(event) => {
-        event.stopPropagation();
-        onLayerHoverChange(null);
-      }}
-      ref={layerRef}
-      position={targetPosition}
-      scale={targetScale}
+      ref={rowRef}
+      scale={mode === "arming" && !reducedMotion ? 0.001 : 1}
+      userData={{ chapter: chapter.slug }}
     >
-      <mesh>
-        <boxGeometry args={[layerWidth, layerThickness, layerDepth]} />
-        <meshPhysicalMaterial
-          color={layerColor}
-          depthWrite={false}
-          emissive={lineColor}
-          emissiveIntensity={emissiveIntensity}
-          ior={palette.ior}
-          metalness={0}
-          opacity={layerOpacity}
-          roughness={palette.roughness}
-          thickness={palette.thickness}
-          transmission={filledSlab ? 0 : palette.transmission}
-          transparent
-        />
-      </mesh>
-      <mesh scale={[1.004, 1.08, 1.004]}>
-        <boxGeometry args={[layerWidth, layerThickness, layerDepth]} />
-        <meshBasicMaterial
-          color={lineColor}
-          opacity={lineOpacity}
-          transparent
-          wireframe
-        />
-      </mesh>
-      <LayerDioramaMotif
-        isDimmed={isDimmed}
-        isHighlighted={isHighlighted}
-        isSupporting={isSupporting}
-        layer={layer}
-        palette={palette}
-      />
-      <Html
-        className={[
-          "atlas-html-label",
-          isActive ? "is-active" : "",
-          isPrimary ? "is-primary" : "",
-          isSupporting ? "is-supporting" : "",
-          isHovered ? "is-hovered" : "",
-          isInspected ? "is-inspected" : "",
-          isDimmed ? "is-dimmed" : "",
-        ]
-          .filter(Boolean)
-          .join(" ")}
-        position={[layerWidth / 2 + 0.44, 0.08, 0]}
-        style={{ marginTop: `${(layer.order - 1) * 4}rem` }}
-        zIndexRange={[20, 0]}
+      <Text
+        anchorX="right"
+        anchorY="middle"
+        color={textColor}
+        fillOpacity={textOpacity}
+        font={fontUrl}
+        fontSize={compact ? 0.2 : 0.22}
+        position={[-2.76, 0, 0.02]}
       >
-        <span>{`${String(layer.order).padStart(2, "0")} ${layer.label}`}</span>
-        <code>{layer.fragment}</code>
-      </Html>
+        {String(chapter.order).padStart(2, "0")}
+      </Text>
+      <Text
+        anchorX="left"
+        anchorY="middle"
+        color={textColor}
+        fillOpacity={textOpacity}
+        font={fontUrl}
+        fontSize={fontSize}
+        lineHeight={0.92}
+        maxWidth={compact ? 4.75 : 5.5}
+        position={[-2.5, 0, 0]}
+        textAlign="left"
+      >
+        {title}
+      </Text>
+      <mesh position={[0.22, lineY, -0.025]}>
+        <boxGeometry args={[5.96, 0.009, 0.009]} />
+        <meshBasicMaterial color={lineColor} opacity={lineOpacity} transparent />
+      </mesh>
+      <mesh position={[-2.83, lineY, -0.015]}>
+        <boxGeometry args={[0.012, 0.16, 0.012]} />
+        <meshBasicMaterial color={lineColor} opacity={lineOpacity + 0.08} transparent />
+      </mesh>
     </group>
   );
 }
 
-function AtlasScene({
+type KineticIndexSceneProps = Omit<KineticIndexCanvasProps, "onRendererReady"> & {
+  themeMode: KineticThemeMode;
+};
+
+function KineticIndexScene({
   activeChapterSlug,
+  chapters,
+  focusKind,
+  mode,
   reducedMotion,
   themeMode,
-  hoveredLayerId,
-  inspectedLayerId,
-  inspectionDepth,
-  onLayerHoverChange,
-}: AtlasCanvasProps & {
-  reducedMotion: boolean;
-  themeMode: AtlasThemeMode;
-  hoveredLayerId: AtlasLayerId | null;
-  inspectedLayerId: AtlasLayerId | null;
-  inspectionDepth: number;
-  onLayerHoverChange: (layerId: AtlasLayerId | null) => void;
-}) {
-  const activeLayerIds = useMemo(() => getActiveLayerIds(activeChapterSlug), [activeChapterSlug]);
-  const primaryLayerIds = useMemo(() => getPrimaryLayerIds(activeChapterSlug), [activeChapterSlug]);
-  const focusLayerIds = useMemo(
-    () => (primaryLayerIds.size > 0 ? primaryLayerIds : activeLayerIds),
-    [activeLayerIds, primaryLayerIds],
-  );
-  const activeIndexes = useMemo(
-    () =>
-      atlasLayers.flatMap((layer, index) => (focusLayerIds.has(layer.id) ? [index] : [])),
-    [focusLayerIds],
-  );
-  const sceneFocusOffset = useMemo(() => getSceneFocusOffset(focusLayerIds), [focusLayerIds]);
+}: KineticIndexSceneProps) {
   const sceneRef = useRef<Group>(null);
+  const armingElapsedRef = useRef(mode === "arming" ? 0 : armingDuration);
+  const beatElapsedRef = useRef(transitionDuration);
+  const { size } = useThree();
+  const compact = size.width <= size.height * 1.05;
+  const activeIndex = Math.max(
+    0,
+    chapters.findIndex((chapter) => chapter.slug === activeChapterSlug),
+  );
+  const rowLayout = useMemo(() => {
+    const rows = chapters.map((chapter) => {
+      const title = splitTitle(chapter.title, compact);
+      const height = title.includes("\n") ? (compact ? 0.5 : 0.54) : compact ? 0.3 : 0.34;
+      return { chapter, height, title };
+    });
+    const gap = compact ? 0.1 : 0.12;
+    const totalHeight =
+      rows.reduce((total, row) => total + row.height, 0) + gap * Math.max(0, rows.length - 1);
 
-  useFrame((state, delta) => {
-    const scene = sceneRef.current;
-    if (!scene) return;
-    const focusScale = 1.04 + Math.abs(sceneFocusOffset) * 0.04 + inspectionDepth * 0.16;
-    const focusPosition: [number, number, number] = [
-      scenePosition[0] + sceneFocusOffset * 0.06,
-      scenePosition[1] - sceneFocusOffset * 0.22,
-      scenePosition[2] + Math.abs(sceneFocusOffset) * 0.08,
-    ];
-    const focusRotation: [number, number, number] = [
-      sceneRotation[0] + sceneFocusOffset * 0.03,
-      sceneRotation[1] - sceneFocusOffset * 0.025,
-      sceneRotation[2],
-    ];
+    return rows.map((row, index) => {
+      const precedingHeight = rows
+        .slice(0, index)
+        .reduce((total, precedingRow) => total + precedingRow.height, 0);
+      const baseY = totalHeight / 2 - precedingHeight - gap * index - row.height / 2;
+      return { ...row, baseY };
+    });
+  }, [chapters, compact]);
 
-    if (reducedMotion) {
-      scene.position.set(...focusPosition);
-      scene.rotation.set(...focusRotation);
-      scene.scale.setScalar(focusScale);
+  useEffect(() => {
+    if (mode === "arming" && !reducedMotion) armingElapsedRef.current = 0;
+  }, [mode, reducedMotion]);
+
+  useEffect(() => {
+    if (focusKind !== "committed" || reducedMotion || mode === "arming") {
+      beatElapsedRef.current = transitionDuration;
       return;
     }
 
-    const breath = Math.sin(state.clock.elapsedTime * 0.72) * 0.035;
-    const targetX = focusPosition[0] - state.pointer.x * 0.08;
-    const targetY = focusPosition[1] + breath + state.pointer.y * 0.045;
-    const targetZ = focusPosition[2];
-    const targetRotX = focusRotation[0] + state.pointer.y * 0.04;
-    const targetRotY = focusRotation[1] - state.pointer.x * 0.06;
+    beatElapsedRef.current = 0;
+  }, [activeChapterSlug, focusKind, mode, reducedMotion]);
 
-    scene.position.x += (targetX - scene.position.x) * Math.min(1, delta * 4);
-    scene.position.y += (targetY - scene.position.y) * Math.min(1, delta * 4);
-    scene.position.z += (targetZ - scene.position.z) * Math.min(1, delta * 4);
-    scene.rotation.x += (targetRotX - scene.rotation.x) * Math.min(1, delta * 3);
-    scene.rotation.y += (targetRotY - scene.rotation.y) * Math.min(1, delta * 3);
-    scene.rotation.z += (focusRotation[2] - scene.rotation.z) * Math.min(1, delta * 3);
-    scene.scale.setScalar(
-      scene.scale.x + (focusScale - scene.scale.x) * Math.min(1, delta * 4),
-    );
+  useFrame((state, delta) => {
+    if (mode === "arming") {
+      armingElapsedRef.current = Math.min(
+        armingDuration,
+        armingElapsedRef.current + delta,
+      );
+    }
+    beatElapsedRef.current = Math.min(transitionDuration, beatElapsedRef.current + delta);
+
+    const scene = sceneRef.current;
+    if (!scene) return;
+
+    const breathing = reducedMotion ? 0 : Math.sin(state.clock.elapsedTime * 0.58) * 0.018;
+    const pointerX = reducedMotion || mode === "arming" ? 0 : state.pointer.x;
+    const pointerY = reducedMotion || mode === "arming" ? 0 : state.pointer.y;
+    const targetPosition: [number, number, number] = [
+      pointerX * (compact ? 0.012 : 0.025),
+      breathing + pointerY * (compact ? 0.008 : 0.018),
+      0,
+    ];
+
+    if (reducedMotion) {
+      scene.position.set(...targetPosition);
+      return;
+    }
+
+    easing.damp3(scene.position, targetPosition, 0.22, delta);
   });
 
   return (
-    <group ref={sceneRef} position={scenePosition} rotation={sceneRotation}>
-      <FlowEdges hasActiveLayer={activeLayerIds.size > 0} themeMode={themeMode} />
-      <DioramaConnectors hasActiveLayer={activeLayerIds.size > 0} themeMode={themeMode} />
-      {atlasLayers.map((layer, index) => (
-        <GlassLayer
-          activeChapterSlug={activeChapterSlug}
-          activeIndexes={activeIndexes}
-          activeLayerIds={activeLayerIds}
+    <group ref={sceneRef} scale={compact ? 0.86 : 1}>
+      {rowLayout.map(({ baseY, chapter, title }, index) => (
+        <KineticRow
+          activeIndex={activeIndex}
+          armingElapsedRef={armingElapsedRef}
+          baseY={baseY}
+          beatElapsedRef={beatElapsedRef}
+          chapter={chapter}
+          compact={compact}
+          focusKind={focusKind}
           index={index}
-          key={layer.id}
-          layer={layer}
-          primaryLayerIds={primaryLayerIds}
+          key={chapter.slug}
+          mode={mode}
           reducedMotion={reducedMotion}
           themeMode={themeMode}
-          hoveredLayerId={hoveredLayerId}
-          inspectedLayerId={inspectedLayerId}
-          onLayerHoverChange={onLayerHoverChange}
-          y={index * layerGap}
+          title={title}
         />
       ))}
     </group>
   );
 }
 
-export function AtlasCanvas({
+export function KineticIndexCanvas({
   activeChapterSlug,
-  hoveredLayerId = null,
-  inspectedLayerId = null,
-  onLayerHoverChange = () => undefined,
-  onLayerInspectChange = () => undefined,
-}: AtlasCanvasProps) {
-  const activeLayerIds = useMemo(() => getActiveLayerIds(activeChapterSlug), [activeChapterSlug]);
-  const primaryLayerIds = useMemo(() => getPrimaryLayerIds(activeChapterSlug), [activeChapterSlug]);
-  const reducedMotion = usePrefersReducedMotion();
-  const themeMode = useAtlasThemeMode();
-  const shellRef = useRef<HTMLDivElement | null>(null);
-  const [inspectionDepth, setInspectionDepth] = useState(0);
-  const visibleInspectionDepth = inspectedLayerId ? inspectionDepth : 0;
-  const atlasFrameLoop = reducedMotion ? "demand" : "always";
-
-  useEffect(() => {
-    const shell = shellRef.current;
-    if (!shell) return;
-
-    function handleWheel(event: WheelEvent) {
-      if (!hoveredLayerId) return;
-
-      event.preventDefault();
-
-      const baseDepth = inspectedLayerId === hoveredLayerId ? inspectionDepth : 0;
-      const nextDepth = Math.max(0, Math.min(1, baseDepth + (event.deltaY < 0 ? 0.18 : -0.18)));
-
-      setInspectionDepth(nextDepth);
-      onLayerInspectChange(nextDepth > 0.12 ? hoveredLayerId : null);
-    }
-
-    shell.addEventListener("wheel", handleWheel, { passive: false });
-    return () => shell.removeEventListener("wheel", handleWheel);
-  }, [hoveredLayerId, inspectedLayerId, inspectionDepth, onLayerInspectChange]);
+  chapters,
+  focusKind,
+  mode,
+  onRendererReady,
+  reducedMotion,
+}: KineticIndexCanvasProps) {
+  const themeMode = useThemeMode();
+  const frameLoop = reducedMotion ? "demand" : "always";
+  const rendererReadyRef = useRef(false);
+  const signalRendererReady = useCallback(() => {
+    if (rendererReadyRef.current) return;
+    rendererReadyRef.current = true;
+    onRendererReady();
+  }, [onRendererReady]);
 
   return (
-    <div
-      className="atlas-canvas-shell has-html-labels"
-      data-atlas-inspected-layer={inspectedLayerId ?? ""}
-      onPointerLeave={() => {
-        onLayerHoverChange(null);
-        onLayerInspectChange(null);
-      }}
-      ref={shellRef}
-      role="img"
-      aria-label="Seven transparent zkTLS evidence layers connected from source API response to verifier decision."
-    >
+    <div aria-hidden="true" className="kinetic-index-canvas-shell">
       <Canvas
-        camera={{ fov: 36, position: [5, 3.8, 6] }}
+        aria-hidden="true"
+        camera={{ fov: 35, near: 0.1, far: 100, position: [0, 0, 8.6] }}
         dpr={[1, 1.5]}
-        frameloop={atlasFrameLoop}
-        gl={{ alpha: true, antialias: true, preserveDrawingBuffer: true }}
+        frameloop={frameLoop}
+        gl={{
+          alpha: true,
+          antialias: true,
+          powerPreference: "high-performance",
+          preserveDrawingBuffer: true,
+        }}
+        onCreated={signalRendererReady}
       >
-        <ambientLight intensity={1.55} />
-        <directionalLight intensity={1.1} position={[4, 5, 3]} />
         <Suspense fallback={null}>
-          <AtlasScene
+          <KineticIndexScene
             activeChapterSlug={activeChapterSlug}
-            hoveredLayerId={hoveredLayerId}
-            inspectedLayerId={inspectedLayerId}
-            inspectionDepth={visibleInspectionDepth}
-            onLayerHoverChange={onLayerHoverChange}
+            chapters={chapters}
+            focusKind={focusKind}
+            mode={mode}
             reducedMotion={reducedMotion}
             themeMode={themeMode}
           />
         </Suspense>
       </Canvas>
-      <ol className="atlas-layer-overlay" aria-hidden="true">
-        {atlasLayers.map((layer) => {
-          const isActive = activeLayerIds.has(layer.id);
-          const isHovered = hoveredLayerId === layer.id;
-          const isInspected = inspectedLayerId === layer.id;
-          const visualState = getAtlasLayerVisualState({
-            activeLayerIds,
-            hoveredLayerId,
-            inspectedLayerId,
-            layerId: layer.id,
-            primaryLayerIds,
-          });
-          const isPrimary = visualState === "primary";
-          const isSupporting = visualState === "supporting";
-          const isDimmed = visualState === "dimmed";
-
-          return (
-            <li
-              className={[
-                "atlas-layer-label",
-                isActive ? "is-active" : "",
-                isPrimary ? "is-primary" : "",
-                isSupporting ? "is-supporting" : "",
-                isHovered ? "is-hovered" : "",
-                isInspected ? "is-inspected" : "",
-                isDimmed ? "is-dimmed" : "",
-              ]
-                .filter(Boolean)
-                .join(" ")}
-              key={layer.id}
-            >
-              <span>{layer.label}</span>
-              <code>{layer.fragment}</code>
-            </li>
-          );
-        })}
-      </ol>
     </div>
   );
 }

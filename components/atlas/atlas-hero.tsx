@@ -1,26 +1,33 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useState } from "react";
-import { AtlasFallback } from "@/components/atlas/atlas-fallback";
-import { atlasLayers, getActiveMapping } from "@/components/atlas/atlas-data";
-import type { AtlasLayerId } from "@/components/atlas/atlas-data";
-import type { AtlasCanvasProps } from "@/components/atlas/atlas-canvas";
+import { useCallback, useEffect, useState } from "react";
+import { KineticIndexFallback } from "@/components/atlas/atlas-fallback";
+import type {
+  KineticChapter,
+  KineticFocusKind,
+  KineticIndexCanvasProps,
+  KineticIndexMode,
+} from "@/components/atlas/atlas-canvas";
 
-const DynamicAtlasCanvas = dynamic<AtlasCanvasProps>(
-  () => import("@/components/atlas/atlas-canvas").then((module) => module.AtlasCanvas),
+const DynamicKineticIndexCanvas = dynamic<KineticIndexCanvasProps>(
+  () =>
+    import("@/components/atlas/atlas-canvas").then(
+      (module) => module.KineticIndexCanvas,
+    ),
   {
-    loading: () => <AtlasFallback />,
+    loading: () => null,
     ssr: false,
   },
 );
 
-type AtlasHeroProps = {
+type KineticIndexHeroProps = {
   activeChapterSlug: string | null;
-  hoveredLayerId: AtlasLayerId | null;
-  inspectedLayerId: AtlasLayerId | null;
-  onLayerHoverChange: (layerId: AtlasLayerId | null) => void;
-  onLayerInspectChange: (layerId: AtlasLayerId | null) => void;
+  chapters: KineticChapter[];
+  focusKind: KineticFocusKind;
+  mode: KineticIndexMode;
+  onRendererReady: () => void;
+  reducedMotion: boolean;
 };
 
 function supportsWebgl() {
@@ -32,16 +39,21 @@ function supportsWebgl() {
   }
 }
 
-export function AtlasHero({
+export function KineticIndexHero({
   activeChapterSlug,
-  hoveredLayerId,
-  inspectedLayerId,
-  onLayerHoverChange,
-  onLayerInspectChange,
-}: AtlasHeroProps) {
+  chapters,
+  focusKind,
+  mode,
+  onRendererReady,
+  reducedMotion,
+}: KineticIndexHeroProps) {
   const [webglAvailable, setWebglAvailable] = useState<boolean | null>(null);
-  const activeMapping = getActiveMapping(activeChapterSlug);
-  const inspectedLayer = atlasLayers.find((layer) => layer.id === inspectedLayerId) ?? null;
+  const [visualReady, setVisualReady] = useState(false);
+
+  const handleRendererReady = useCallback(() => {
+    setVisualReady(true);
+    onRendererReady();
+  }, [onRendererReady]);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -53,53 +65,46 @@ export function AtlasHero({
 
   return (
     <section
-      className="atlas-hero"
-      aria-labelledby="atlas-title"
-      data-atlas-active={activeChapterSlug ?? ""}
-      data-atlas-inspected={inspectedLayerId ?? ""}
-      data-atlas-renderer={webglAvailable === true ? "webgl" : "fallback"}
+      className="kinetic-index-hero"
+      aria-labelledby="kinetic-index-title"
+      data-kinetic-active={activeChapterSlug ?? ""}
+      data-kinetic-mode={mode}
+      data-kinetic-renderer={
+        webglAvailable === null ? "pending" : webglAvailable ? "webgl" : "fallback"
+      }
     >
-      <div className="atlas-hero-copy">
-        <p className="atlas-kicker">Forensic Isometric Atlas</p>
-        <h1 className="atlas-title" id="atlas-title">
+      <div className="kinetic-index-copy">
+        <p className="kinetic-index-kicker">SPATIAL INDEX / 08 CHAPTERS</p>
+        <h1 className="kinetic-index-title" id="kinetic-index-title">
           zkTLS MASTER GUIDE
         </h1>
-        <p className="atlas-tagline">
+        <p className="kinetic-index-tagline">
           A field manual for proving web data without overexposing trust.
         </p>
       </div>
 
-      <div className="atlas-visual">
-        {webglAvailable === true ? (
-          <DynamicAtlasCanvas
+      <div className="kinetic-index-visual">
+        {webglAvailable !== true || !visualReady ? (
+          <KineticIndexFallback
             activeChapterSlug={activeChapterSlug}
-            hoveredLayerId={hoveredLayerId}
-            inspectedLayerId={inspectedLayerId}
-            onLayerHoverChange={onLayerHoverChange}
-            onLayerInspectChange={onLayerInspectChange}
+            chapters={chapters}
+            focusKind={focusKind}
+            mode={mode}
+            onReady={webglAvailable === false ? handleRendererReady : undefined}
+            reducedMotion={reducedMotion}
           />
-        ) : (
-          <AtlasFallback activeChapterSlug={activeChapterSlug} />
-        )}
-      </div>
+        ) : null}
 
-      <div className="atlas-telemetry-grid" aria-label="Evidence samples">
-        <div className="atlas-telemetry-panel">
-          <small>TRACE</small>
-          <code>16 03 03 / ServerHello</code>
-        </div>
-        <div className="atlas-telemetry-panel">
-          <small>DISCLOSE</small>
-          <code>[REDACTED] -&gt; claim</code>
-        </div>
-        <div className="atlas-telemetry-panel">
-          <small>ACTIVE</small>
-          <code>{activeMapping?.label ?? "Full evidence stack"}</code>
-        </div>
-        <div className="atlas-telemetry-panel">
-          <small>INSPECT</small>
-          <code>{inspectedLayer?.inspectionLabel ?? "Layer focus idle"}</code>
-        </div>
+        {webglAvailable === true ? (
+          <DynamicKineticIndexCanvas
+            activeChapterSlug={activeChapterSlug}
+            chapters={chapters}
+            focusKind={focusKind}
+            mode={mode}
+            onRendererReady={handleRendererReady}
+            reducedMotion={reducedMotion}
+          />
+        ) : null}
       </div>
     </section>
   );
