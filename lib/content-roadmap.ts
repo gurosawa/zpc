@@ -1,8 +1,11 @@
 import roadmapData from "../content/article-roadmap.json";
+import startHereData from "../content/start-here-roadmap.json";
 
 export type ChapterStatus = "planned" | "draft" | "review" | "stable";
 
 export type ArticleDifficulty = "foundation" | "intermediate" | "deep" | "lab";
+
+export type PathRole = "core" | "developer-lab" | "deep-dive" | "reference";
 
 export type VisualArtifactKey =
   | "risk-matrix"
@@ -44,6 +47,11 @@ export type ArticleMeta = {
   zktlsBridge: string;
   verificationChecklist: string[];
   references: string[];
+  pathRole?: PathRole;
+  assumes?: string[];
+  introduces?: string[];
+  checkpoint?: string;
+  readingBudget?: number;
 };
 
 export type ChapterMeta = {
@@ -64,4 +72,10 @@ export type ContentRoadmap = {
   chapters: ChapterMeta[];
 };
 
-export const contentRoadmap = roadmapData as ContentRoadmap;
+const referenceRoadmap = roadmapData as ContentRoadmap;
+
+export const contentRoadmap: ContentRoadmap = {
+  ...referenceRoadmap,
+  version: `${referenceRoadmap.version}+start-here-v1`,
+  chapters: [startHereData as ChapterMeta, ...referenceRoadmap.chapters],
+};

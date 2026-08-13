@@ -1,0 +1,86 @@
+---
+id: c00-a06
+order: 6
+title: Record 인증과 제3자 전이의 간극
+chapter: START HERE
+chapterSlug: start-here
+articleSlug: record-authentication-and-third-party-provenance-gap
+slug: record-authentication-and-third-party-provenance-gap
+pathRole: core
+status: review
+difficulty: intermediate
+wordCountTarget: 3750
+visualKey: c00-a06
+branch: content/c00-a06-record-authentication-and-third-party-provenance-gap
+readerQuestion: AEAD tag가 유효하다면 왜 제3자에게 서버가 이 응답을 보냈다고 바로 증명할 수 없는가?
+zktlsBridge: 다음 글은 TLS 버전과 구현 경로에 따라 이 전제를 확인해야 하는 이유를 설명한다.
+assumes: [tls-record, traffic-key, origin-binding]
+introduces: [aead-record-authentication, directional-traffic-key, symmetric-verification, third-party-provenance]
+checkpoint: 수신 endpoint의 대칭키 record 검증과 독립 제3자의 공개 검증 요구를 구분한다.
+readingBudget: 3750
+references:
+  - https://www.rfc-editor.org/rfc/rfc8446#section-5
+  - https://csrc.nist.gov/pubs/sp/800/38/d/final
+  - https://arxiv.org/abs/1909.00938
+---
+
+# Record 인증과 제3자 전이의 간극
+
+## Reader Question
+
+TLS record의 AEAD tag가 유효하면 “서버가 이 응답을 보냈다”는 사실을 누구나 확인할 수 있을까? 아니다. 수신 endpoint가 하는 대칭키 검증과 독립 제3자가 공개 정보로 하는 검증은 서로 다른 요구다.
+
+## Why It Matters
+
+TLS 1.3 record는 해당 송신 방향의 traffic key로 AEAD 보호된다. 수신 endpoint는 그 키에서 파생한 값으로 record의 무결성을 확인한다. 이 과정은 연결 당사자가 보호된 트래픽을 받아들이는 데 필요하다.
+
+그러나 verifier가 연결에 참여하지 않았다면 이 방향별 키를 갖지 않는다. 키를 건네면 비밀을 공개하는 문제가 생기며, 그 키를 가진 당사자 사이의 대칭키 검증은 공개 검증 가능한 디지털 서명과도 다르다.
+
+<VisualPlaceholder title="방향별 record 검증" purpose="대칭키 검증 주체를 보인다." recommended="방향 화살표 도식" mustShow="sender traffic key, receiver verification, protected record" alt="송신 방향 traffic key로 보호한 record를 수신 endpoint가 검증한다." priority="must" status="planned" />
+
+## Core Model
+
+aead-record-authentication은 암호화와 인증을 결합해 record의 기밀성과 무결성 확인에 쓰는 방식이다.
+
+directional-traffic-key는 클라이언트에서 서버로, 서버에서 클라이언트로 흐르는 방향을 구분한 키 자료라는 뜻이다.
+
+symmetric-verification은 비밀 키 자료를 공유하거나 관련 키를 가진 endpoint가 수행하는 검증이다.
+
+third-party-provenance는 독립 verifier가 출처와 선택 공개, 프로토콜 신뢰 가정을 확인하도록 하는 별도 성질이다. symmetric-verification과 같은 말로 쓰면 key possession과 공개 검증의 차이가 사라진다.
+
+## Protocol or System Artifact
+
+TLS record와 tag는 수신 endpoint의 처리에 필요한 산출물이다. 반면 제3자 provenance를 만들려면 어떤 handshake와 transcript 맥락이 있었는지, 어떤 bytes를 공개하는지, 그 공개 범위가 claim과 어떻게 결합되는지까지 정한 추가 프로토콜이 필요하다.
+
+TLSNotary나 DECO 같은 상위 설계는 이 문제를 다루는 서로 다른 접근을 제공한다. 이 글은 어느 하나가 자동으로 모든 provenance 요구를 충족한다고 주장하지 않는다. 성질은 채택한 프로토콜과 그 신뢰 가정에 달린다.
+
+<VisualPlaceholder title="endpoint 검증과 공개 검증" purpose="두 요구의 차이를 비교한다." recommended="나란한 비교" mustShow="endpoint-only check와 independent third party, 필요한 추가 binding" alt="대칭키 record 검증은 연결 당사자용이며 제3자 provenance에는 추가 프로토콜이 필요하다." priority="must" status="planned" />
+
+## Failure Mode
+
+AEAD tag를 공개 검증용 서명처럼 그리면 제3자가 없는 키로 무엇을 확인하는지 설명할 수 없게 된다.
+
+“endpoint secret”처럼 방향과 키 갱신을 가리는 표현도 피한다.
+
+그렇다고 record 인증이 쓸모없다는 뜻은 아니다. 그것은 endpoint 사이에서 보호된 record를 검증하는 정확한 역할을 한다.
+
+## Minimal Lab or Trace
+
+서버가 membership 응답을 record로 보냈다고 하자. 브라우저는 서버→클라이언트 방향의 키 자료로 record를 확인하고 HTTP body를 읽는다. 브라우저가 body를 복사해 verifier에 보내면 verifier는 tag만으로 같은 확인을 할 수 없다. verifier가 요구하는 origin-bound claim을 만들려면 선택한 bytes와 세션 맥락을 묶는 별도 절차가 필요하다.
+
+## zkTLS Bridge
+
+zkTLS의 핵심 과제 중 하나는 endpoint 전용의 대칭키 보호를 독립 verifier가 검사할 수 있는 claim으로 연결하는 것이다. 이때 정확한 TLS 버전과 구현 지원 범위를 먼저 확인해야 한다.
+
+## Verification Checklist
+
+- TLS 1.3 record를 방향별 traffic key로 설명했는가?
+- AEAD tag를 공개 서명과 구분했는가?
+- 제3자 provenance에 추가 프로토콜과 신뢰 가정이 필요하다고 했는가?
+- 키·transcript·공개 범위·claim의 결합을 별도 요구로 남겼는가?
+
+## References
+
+- https://www.rfc-editor.org/rfc/rfc8446#section-5
+- https://csrc.nist.gov/pubs/sp/800/38/d/final
+- https://arxiv.org/abs/1909.00938

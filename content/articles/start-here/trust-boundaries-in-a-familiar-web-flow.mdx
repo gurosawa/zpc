@@ -1,0 +1,76 @@
+---
+id: c00-a03
+order: 3
+title: 익숙한 웹 흐름에서 그리는 trust boundary
+chapter: START HERE
+chapterSlug: start-here
+articleSlug: trust-boundaries-in-a-familiar-web-flow
+slug: trust-boundaries-in-a-familiar-web-flow
+pathRole: core
+status: review
+difficulty: foundation
+wordCountTarget: 3300
+visualKey: c00-a03
+branch: content/c00-a03-trust-boundaries-in-a-familiar-web-flow
+readerQuestion: 어떤 경계를 넘어갈 때 무엇이 공격자가 바꿀 수 있는 입력이 되는가?
+zktlsBridge: 다음 글은 이 흐름의 TLS 구간에서 handshake와 record가 맡는 보호 역할을 분리한다.
+assumes: [origin, prover, verifier, relying-application]
+introduces: [threat-model-scope, trust-boundary, attack-surface, verification-responsibility]
+checkpoint: 브라우저·API·prover·verifier 사이에서 데이터 소유와 검증 책임이 바뀌는 지점, 조작 가능한 입력을 표시한다.
+readingBudget: 3300
+references:
+  - https://owasp.org/www-community/Threat_Modeling
+  - https://csrc.nist.gov/glossary/term/attack_surface
+---
+
+# 익숙한 웹 흐름에서 그리는 trust boundary
+
+## Reader Question
+
+브라우저가 API를 호출해 받은 값을 prover가 주장으로 만들고 verifier가 검사할 때, 어느 지점부터 입력을 다시 믿지 말아야 할까? 답은 역할과 소유권이 바뀌는 경계를 먼저 표시하는 데서 시작한다.
+
+## Why It Matters
+
+위협 모델에서는 시스템 범위, 가능한 실패, 대응책을 먼저 정한다. 이 글에서는 브라우저, API, prover, verifier 사이에서 누가 어떤 데이터와 검증 책임을 갖는지 경계로 명시한다. 이는 보편적 정의를 인용하는 일이 아니라 이 시스템을 검토하기 위한 설계 산출물이다.
+
+경계는 데이터가 이동하는 화살표만이 아니다. 한쪽이 만든 요청, 응답, claim, policy 입력을 다른 쪽이 검증 없이 받아들이면 그 지점이 attack surface가 된다.
+
+<VisualPlaceholder title="웹 흐름의 경계" purpose="책임과 가시성 변화를 표시한다." recommended="경계도" mustShow="browser·API·prover·verifier, 데이터 흐름과 소유자" alt="브라우저, API, prover, verifier는 서로 다른 데이터 접근과 검증 책임을 가진 경계로 연결된다." priority="must" status="planned" />
+
+## Core Model
+
+예를 들어 브라우저는 API 요청을 만들고 응답을 받는다. Origin인 API는 응답을 제공한다. Prover는 자신이 가진 응답 자료에서 claim을 구성한다. Verifier는 공개 입력과 산출물을 검사한다. relying application은 검증 결과와 별도의 업무 정책을 적용한다.
+
+각 경계에서 네 질문을 적는다. 누가 이 값을 만들었는가? 누가 바꿀 수 있는가? 다음 주체는 무엇을 검증할 수 있는가? 검증 실패 시 누가 거절하는가? 이 네 답이 verification responsibility를 드러낸다.
+
+## Protocol or System Artifact
+
+경계도에는 브라우저→API 요청, API→브라우저 응답, Prover→Verifier claim과 검증 산출물, relying application의 policy 입력을 따로 그린다. 응답 바이트를 Prover가 보유한다는 사실과 Verifier가 그 응답 전체를 본다는 사실은 다르므로 가시성도 표시한다.
+
+attack surface는 공격자가 바꿀 수 있는 입력의 집합으로 기록한다. 예컨대 Prover가 선택한 응답 항목, 외부에서 설정한 정책 입력, 네트워크 경로에서 관찰되는 값은 같은 보호를 받지 않을 수 있다. 각 값을 어느 자료에 연결하고 누가 검사할지도 정해야 한다.
+
+<VisualPlaceholder title="최소 공격자 모델" purpose="조작 지점을 구체화한다." recommended="입력 변조 표" mustShow="요청·응답·claim·policy 입력별 조작자와 방어자" alt="각 입력은 누가 만들고 누가 바꿀 수 있으며 누가 검증해야 하는지 표로 확인한다." priority="must" status="planned" />
+
+## Failure Mode
+
+경계도를 그렸다고 위협이 제거되지는 않는다. 경계 밖에서 온 값을 내부 값처럼 취급하거나, 누가 검증할지 적지 않으면 도식은 장식이 된다. 특히 “API가 준 응답”과 “Verifier가 Origin에 결합해 검증한 claim”을 같은 데이터 상태로 표시하면 provenance 요구가 사라진다.
+
+## Minimal Lab or Trace
+
+합성 membership 응답의 `tier` 필드를 예로 든다. API는 값을 제공하고, Prover는 `tier`가 `gold`인지 주장한다. Verifier가 선택한 응답 항목과 비교 조건을 검사하지 않으면 Prover는 다른 필드를 골라 주장할 수 있다. relying application이 사용자 식별자와 혜택 정책을 확인하지 않으면 같은 claim을 엉뚱한 대상에 적용할 수 있다.
+
+## zkTLS Bridge
+
+경계는 어떤 TLS 자료를 누가 볼 수 있고 어떤 주장을 누가 검사해야 하는지 정리한다. 다음 글에서는 API와 브라우저 사이의 TLS 보호가 handshake와 record로 어떻게 나뉘는지 본다.
+
+## Verification Checklist
+
+- 시스템 범위와 실패 가능성을 먼저 적었는가?
+- 요청·응답·claim·policy의 소유자와 검증자를 구분했는가?
+- 조작 가능한 입력마다 검사 책임을 지정했는가?
+- 경계도가 보안 증거 자체라고 주장하지 않았는가?
+
+## References
+
+- https://owasp.org/www-community/Threat_Modeling
+- https://csrc.nist.gov/glossary/term/attack_surface

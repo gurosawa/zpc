@@ -1,0 +1,78 @@
+---
+id: c00-a12
+order: 12
+title: Commitment와 selective disclosure
+chapter: START HERE
+chapterSlug: start-here
+articleSlug: commitments-and-selective-disclosure
+slug: commitments-and-selective-disclosure
+pathRole: core
+status: review
+difficulty: intermediate
+wordCountTarget: 3750
+visualKey: c00-a12
+branch: content/c00-a12-commitments-and-selective-disclosure
+readerQuestion: 값을 고정하면서 숨기는 것과 필요한 범위만 공개하는 것은 어떻게 다른가?
+zktlsBridge: 다음 글은 commitment와 proof가 검증하더라도 약한 circuit이 의도하지 않은 claim을 수락할 수 있는 이유를 다룬다.
+assumes: [statement, witness, public-input, relation, disclosure-boundary]
+introduces: [commitment, hiding, binding, opening, selective-disclosure-protocol]
+checkpoint: commitment의 hiding·binding, opening의 입력, selective disclosure가 primitive 자체가 아니라 프로토콜 설계 결과임을 설명한다.
+readingBudget: 3750
+references:
+  - https://www.iacr.org/cryptodb/data/paper.php?pubkey=1151
+  - https://arxiv.org/abs/1909.00938
+  - https://github.com/tlsnotary/tlsn/releases/tag/v0.1.0-alpha.15
+---
+
+# Commitment와 selective disclosure
+
+## Reader Question
+
+commitment는 값을 먼저 고정하면서 그 값을 숨길 수 있게 하는 primitive다. 이 단계만으로는 누구에게 무엇을 보여 줄지가 정해지지 않는다.
+
+selective disclosure는 무엇을 열고 무엇을 증명할지 정한 프로토콜 설계에서 나온다. commitment의 자동 성질이 아니다.
+
+## Why It Matters
+
+응답 전체를 공개하지 않고 일부 사실만 보여 주려면, 나중에 값을 바꾸지 못하게 하면서도 먼저 드러내지 않는 장치가 필요하다. hiding은 값을 감추는 성질이다.
+
+binding은 한 commitment를 서로 다른 값으로 열기 어렵게 하는 성질이다. 두 성질은 공개 범위를 결정하는 정책과는 다르다.
+
+## Core Model
+
+값과 보통 난수로 commitment를 만들고, opening 때 값과 decommitment 정보를 제시해 그 commitment에 열리는지 확인한다. opening은 비공개 범위의 진실성이나 애플리케이션 권한까지 단독으로 보장하지 않는다.
+
+## Protocol or System Artifact
+
+<VisualPlaceholder title="commitment과 opening" purpose="숨김·고정·검증의 입력을 표시한다." recommended="3단 도식" mustShow="value+randomness→commitment, value+decommitment→verify" alt="commitment는 값을 숨긴 채 고정하고 opening은 값과 decommitment로 그 고정을 확인한다." priority="must" status="planned" />
+
+선택 공개는 선택한 범위만 opening하거나, 숨긴 데이터에 관한 ZK predicate만 증명하도록 프로토콜을 설계했을 때 얻어진다. 이 두 경로는 공개 범위와 verifier가 얻는 정보를 다르게 만든다.
+
+## Failure Mode
+
+commitment가 있으니 모든 메타데이터가 숨겨진다고 볼 수 없다. 길이, 공개한 필드, 수신자 같은 정보는 다른 경로로 드러날 수 있다.
+
+또한 verifier가 어떤 bytes와 parser 결과를 신뢰할지는 commitment 밖에서 별도로 결합해야 한다. 이 결합이 없으면 opening이나 predicate가 가리키는 application claim의 범위가 남는다.
+
+## Minimal Lab or Trace
+
+한 응답을 전체 원문, 공개할 범위, 숨길 범위, opening 또는 predicate로 나눈다. 각 공개 항목이 왜 필요한지와 verifier가 확인할 binding을 기록한다.
+
+<VisualPlaceholder title="선택 공개의 두 경로" purpose="protocol-level 성질임을 강조한다." recommended="분기 도식" mustShow="selected opening, ZK predicate, 비공개 원문" alt="selective disclosure는 선택 범위를 열거나 숨긴 데이터에 대한 predicate를 증명하도록 프로토콜을 설계해 얻는다." priority="must" status="planned" />
+
+## zkTLS Bridge
+
+zkTLS는 transcript 또는 값의 일부를 commitment로 고정하고, 필요한 범위만 opening하거나 predicate를 증명할 수 있다. 실제 형식과 범위 의미는 채택한 scheme과 구현 버전에 따라 확인해야 한다.
+
+## Verification Checklist
+
+- hiding과 binding을 다른 성질로 설명했는가?
+- opening에 값과 decommitment 정보가 필요함을 적었는가?
+- selective disclosure를 자동 성질로 말하지 않았는가?
+- 공개 범위와 parser·policy binding을 별도로 점검하는가?
+
+## References
+
+- https://www.iacr.org/cryptodb/data/paper.php?pubkey=1151
+- https://arxiv.org/abs/1909.00938
+- https://github.com/tlsnotary/tlsn/releases/tag/v0.1.0-alpha.15

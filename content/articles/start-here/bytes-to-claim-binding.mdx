@@ -1,0 +1,76 @@
+---
+id: c00-a09
+order: 9
+title: Bytes-to-claim binding
+chapter: START HERE
+chapterSlug: start-here
+articleSlug: bytes-to-claim-binding
+slug: bytes-to-claim-binding
+pathRole: core
+status: review
+difficulty: intermediate
+wordCountTarget: 4300
+visualKey: c00-a09
+branch: content/c00-a09-bytes-to-claim-binding
+readerQuestion: 동일한 HTTP/JSON 응답을 서로 다른 claim으로 읽는 일을 어떻게 막는가?
+zktlsBridge: 다음 글은 이렇게 해석된 claim을 만들 때 credential을 외부에 내보내지 않는 경계를 다룬다.
+assumes: [claim-profile, request-scope, field-path, predicate]
+introduces: [parser-binding, json-duplicate-name, deterministic-parser-profile, canonicalization-scope, disclosure-boundary]
+checkpoint: bytes→parser→field path→predicate→public claim의 연결을 명시하고 중복 JSON 이름과 해석 차이를 거절 조건으로 만든다.
+readingBudget: 4300
+references:
+  - https://www.rfc-editor.org/rfc/rfc8259#section-4
+  - https://www.rfc-editor.org/rfc/rfc9110
+---
+
+# Bytes-to-claim binding
+
+## Reader Question
+
+HTTP 응답 bytes가 있다고 해서 claim의 의미가 자동으로 정해지지는 않는다. bytes를 어떤 parser로 읽고 어떤 경로와 조건을 적용하는지가 함께 고정되어야 한다.
+
+## Why It Matters
+
+같은 JSON 텍스트라도 구현의 해석 규칙이 다르면 다른 값에 도달한다. verifier가 proof만 확인하고 parser 규칙을 확인하지 않으면, prover와 verifier는 서로 다른 claim을 가리킨다.
+
+## Core Model
+
+parser binding은 원본 bytes와 parser 규칙을 연결하는 설계다. parser profile은 그 규칙을 한 가지로 고정해, 같은 bytes를 같은 구조로 읽게 한다.
+
+그 결과에서 field path와 predicate를 적용해 공개 claim을 만든다. disclosure boundary는 이 과정에서 외부에 보낼 값과 숨길 값을 가르는 경계다.
+
+RFC 8259는 JSON canonicalization을 정의하지 않는다. 객체 이름은 유일해야 하며, 중복 이름은 구현에 따라 마지막 값 선택, 오류, 모든 쌍 노출처럼 다르게 처리될 수 있다. 따라서 profile은 중복 이름을 거부하고 숫자·문자열·경로 규칙을 명시해야 한다.
+
+## Protocol or System Artifact
+
+<VisualPlaceholder title="bytes에서 public claim까지" purpose="binding 지점을 식별한다." recommended="파이프라인" mustShow="HTTP/JSON bytes→parser→field path→predicate→claim" alt="claim은 원본 bytes에서 parser와 경로, predicate를 거쳐 만들어지며 각 규칙이 고정돼야 한다." priority="must" status="planned" />
+
+canonicalization은 재서명·재해시 또는 여러 구현 간 동일 표현이 필요할 때 profile에서 정한다. 원본 bytes와 단일 결정적 parser를 직접 증명한다면 항상 필요한 단계는 아니다.
+
+## Failure Mode
+
+`role`이라는 이름이 두 번 나왔을 때 prover는 마지막 값을, verifier는 첫 값을 읽는다면 같은 응답에서 상반된 claim이 나온다. 원인은 bytes가 아니라 해석 규칙이 달랐기 때문이다.
+
+field path가 배열 순서나 누락값을 어떻게 다루는지도 고정하지 않으면, verifier가 확인한 relation과 사람이 읽는 claim의 대상이 흔들린다.
+
+## Minimal Lab or Trace
+
+profile에 parser 버전, 중복 이름 거부, 숫자와 문자열의 허용 형식, field path, predicate를 적는다. 이후 같은 bytes를 두 parser에 넣어 결과가 다르면 해당 입력을 수락하지 않는지 확인한다.
+
+<VisualPlaceholder title="중복 이름의 분기" purpose="parser 차이 위험을 보인다." recommended="분기 다이어그램" mustShow="duplicate key, last value, error, all pairs 결과" alt="중복 JSON 이름은 구현마다 다르게 처리될 수 있으므로 claim 프로필은 이를 거부해야 한다." priority="must" status="planned" />
+
+## zkTLS Bridge
+
+proof relation은 bytes 자체가 아니라 명시한 입력과 관계를 확인한다. parser binding이 있어야 그 관계가 사람이 읽는 application claim에 연결된다.
+
+## Verification Checklist
+
+- 원본 bytes와 parser profile을 함께 식별하는가?
+- 중복 JSON 이름을 거부하는가?
+- field path와 predicate의 해석 규칙이 고정됐는가?
+- RFC 8259가 canonicalization을 정의한다고 쓰지 않았는가?
+
+## References
+
+- https://www.rfc-editor.org/rfc/rfc8259#section-4
+- https://www.rfc-editor.org/rfc/rfc9110

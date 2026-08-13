@@ -1,0 +1,76 @@
+---
+id: c00-a13
+order: 13
+title: Completeness, soundness, zero-knowledge와 under-constrained circuit
+chapter: START HERE
+chapterSlug: start-here
+articleSlug: completeness-soundness-zero-knowledge-and-under-constrained-circuits
+slug: completeness-soundness-zero-knowledge-and-under-constrained-circuits
+pathRole: core
+status: review
+difficulty: intermediate
+wordCountTarget: 3750
+visualKey: c00-a13
+branch: content/c00-a13-completeness-soundness-zero-knowledge-and-under-constrained-circuits
+readerQuestion: 유효한 proof가 있는데도 application claim이 잘못될 수 있는 경우는 언제인가?
+zktlsBridge: 다음 글은 proof 관계와 별도로 공동 계산의 보장 범위를 adversary model로 확인하는 방법을 다룬다.
+assumes: [relation, circuit, proof-verification, parser-binding]
+introduces: [completeness, soundness, zero-knowledge, intended-relation, under-constrained-circuit]
+checkpoint: soundness와 zero-knowledge를 분리하고 누락 제약이 proof system의 soundness 붕괴가 아니라 회로/statement 명세 오류일 수 있음을 설명한다.
+readingBudget: 3750
+references:
+  - https://doi.org/10.1145/22145.22178
+  - https://eprint.iacr.org/2016/260
+---
+
+# Completeness, soundness, zero-knowledge와 under-constrained circuit
+
+## Reader Question
+
+유효한 proof도 애플리케이션이 의도한 claim을 보장하지 못하는 경우가 있다. proof가 확인하는 대상은 실제 circuit이 구현한 relation이기 때문이다.
+
+## Why It Matters
+
+completeness는 참인 relation과 올바른 witness가 있으면 정직한 prover의 proof가 수락되는 성질이다. 이는 참인 입력이 통과하는지 묻는다.
+
+soundness는 실제 relation에서 거짓인 public statement를 부정한 prover가 수락시키기 어렵다는 성질이다. zero-knowledge는 witness 정보를 추가로 드러내지 않게 하는 별개의 성질이다.
+
+## Core Model
+
+세 성질은 서로 다른 질문에 답한다. soundness가 있어도 circuit이 `origin`이나 `field path`를 제약하지 않았다면 그 값은 검증하지 않는다. intended relation은 애플리케이션이 원한 관계다.
+
+실제 relation은 회로가 정말 인코딩한 관계다. 두 관계가 다르면 proof가 회로의 관계를 정확히 검증해도 애플리케이션이 원한 답은 보장되지 않는다.
+
+<VisualPlaceholder title="세 보장 성질" purpose="개념 혼동을 막는다." recommended="비교표" mustShow="completeness, soundness, zero-knowledge의 질문과 범위" alt="completeness, soundness, zero-knowledge는 서로 다른 질문에 답하는 별개 성질이다." priority="must" status="planned" />
+
+## Protocol or System Artifact
+
+under-constrained circuit은 의도한 관계에 있어야 할 제약이 빠진 회로다. 예를 들어 값과 특정 경로의 연결을 확인하지 않으면, 회로가 받아들이는 입력 범위가 넓어진다.
+
+## Failure Mode
+
+약한 회로에 대해서도 proof는 sound할 수 있다. 실패 원인은 proof system의 soundness 붕괴가 아니다. statement 또는 회로 명세가 의도보다 약하다.
+
+parser binding이 빠진 경우도 같다. relation이 읽어야 할 bytes와 parser 결과에 연결되지 않으면, claim 의미가 relation의 검증 범위에서 빠진다.
+
+## Minimal Lab or Trace
+
+의도한 claim을 조건 목록으로 쓰고, circuit의 각 constraint가 어느 조건을 담당하는지 대응시킨다. 대응되지 않는 조건은 public input, parser, verifier policy 중 어디에서 검사할지 정한다.
+
+<VisualPlaceholder title="누락 제약의 수용 영역" purpose="intended relation과 실제 회로를 비교한다." recommended="겹침 도식" mustShow="intended set, weaker circuit accepted set, unintended inputs" alt="누락된 제약은 실제 회로가 의도하지 않은 입력까지 수용하게 만들 수 있다." priority="must" status="planned" />
+
+## zkTLS Bridge
+
+zkTLS claim은 TLS provenance, parser, field path, predicate, policy를 필요한 위치에 결합해야 한다. valid proof라는 말만으로 빠진 입력까지 검증됐다고 결론내릴 수 없다.
+
+## Verification Checklist
+
+- completeness, soundness, zero-knowledge를 구분했는가?
+- soundness의 범위를 실제 relation으로 한정했는가?
+- intended relation과 회로 constraint를 대조했는가?
+- 누락 조건의 검사 위치를 정했는가?
+
+## References
+
+- https://doi.org/10.1145/22145.22178
+- https://eprint.iacr.org/2016/260

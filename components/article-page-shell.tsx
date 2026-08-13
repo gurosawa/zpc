@@ -25,6 +25,15 @@ const roadmapSections = [
   { id: "references", order: 7, title: "References" },
 ];
 
+const fullDraftSections = [
+  { id: "reader-question", order: 1, title: "Reader Question" },
+  { id: "why-it-matters", order: 2, title: "Why It Matters" },
+  ...roadmapSections.map((section) => ({
+    ...section,
+    order: section.order + 2,
+  })),
+];
+
 function formatLabel(value: string) {
   return value.replace(/-/g, " ").toUpperCase();
 }
@@ -102,6 +111,8 @@ export function ArticlePageShell({
 }: ArticlePageShellProps) {
   const hasFullDraft = Boolean(draftBody?.trim());
   const fullDraftBody = hasFullDraft ? draftBodyWithoutTitle(draftBody ?? "") : "";
+  const usesVisualPlaceholders =
+    article.pathRole === "core" || article.pathRole === "developer-lab";
 
   return (
     <GuideShell chapters={chapters} activeSlug={article.chapterSlug}>
@@ -115,15 +126,18 @@ export function ArticlePageShell({
           <h1>{article.title}</h1>
           <p className="lead article-reader-question">{article.readerQuestion}</p>
 
-          <div className="article-visual-panel">
-            <ArtifactDiagram
-              visualKey={article.visualKey}
-              label={`${article.title} visual artifact`}
-            />
-            <p className="article-figure-label">
-              Figure / {formatLabel(article.visualKey)} / visualKey: <code>{article.visualKey}</code>
-            </p>
-          </div>
+          {usesVisualPlaceholders ? null : (
+            <div className="article-visual-panel">
+              <ArtifactDiagram
+                visualKey={article.visualKey}
+                label={`${article.title} visual artifact`}
+              />
+              <p className="article-figure-label">
+                Figure / {formatLabel(article.visualKey)} / visualKey:{" "}
+                <code>{article.visualKey}</code>
+              </p>
+            </div>
+          )}
 
           <div className="article-prose-column">
             {hasFullDraft ? (
@@ -149,7 +163,7 @@ export function ArticlePageShell({
         </article>
 
         <MiniToc
-          items={roadmapSections}
+          items={hasFullDraft ? fullDraftSections : roadmapSections}
           label="Article sections"
         />
       </div>

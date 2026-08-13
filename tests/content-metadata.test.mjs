@@ -6,6 +6,7 @@ import matter from "gray-matter";
 
 const contentDir = path.join(process.cwd(), "content");
 const roadmapFile = path.join(contentDir, "article-roadmap.json");
+const startHereRoadmapFile = path.join(contentDir, "start-here-roadmap.json");
 const requiredStringFields = [
   "guiding_question",
   "reader_promise",
@@ -105,4 +106,53 @@ test("article roadmap contains 8 chapters and 48 complete article briefs", () =>
   assert.equal(branches.size, 48);
   assert.equal(articleSlugs.size, 48);
   assert.equal(articleRoutes.size, 48);
+});
+
+test("start-here roadmap contains 18 core articles and 2 developer labs", () => {
+  const chapter = JSON.parse(fs.readFileSync(startHereRoadmapFile, "utf8"));
+  const introduced = new Set();
+  const ids = new Set();
+  const slugs = new Set();
+
+  assert.equal(chapter.id, "c00");
+  assert.equal(chapter.order, 0);
+  assert.equal(chapter.slug, "start-here");
+  assert.equal(chapter.articles.length, 20);
+
+  for (const [index, article] of chapter.articles.entries()) {
+    assert.equal(article.id, `c00-a${String(index + 1).padStart(2, "0")}`);
+    assert.equal(article.order, index + 1);
+    assert.equal(article.chapterId, "c00");
+    assert.equal(article.readingBudget, article.wordCountTarget);
+    assert.ok(["core", "developer-lab"].includes(article.pathRole));
+    assert.ok(Array.isArray(article.assumes));
+    assert.ok(Array.isArray(article.introduces) && article.introduces.length > 0);
+    assert.ok(article.checkpoint.trim());
+    assert.equal(ids.has(article.id), false, `${article.id}: duplicate id`);
+    assert.equal(slugs.has(article.slug), false, `${article.id}: duplicate slug`);
+
+    for (const concept of article.assumes) {
+      assert.ok(introduced.has(concept), `${article.id}: assumes ${concept} too early`);
+    }
+    for (const concept of article.introduces) {
+      introduced.add(concept);
+    }
+
+    ids.add(article.id);
+    slugs.add(article.slug);
+  }
+
+  assert.equal(chapter.articles.filter((article) => article.pathRole === "core").length, 18);
+  assert.equal(
+    chapter.articles.filter((article) => article.pathRole === "developer-lab").length,
+    2,
+  );
+  assert.equal(
+    chapter.articles.slice(0, 18).reduce((sum, article) => sum + article.readingBudget, 0),
+    70000,
+  );
+  assert.equal(
+    chapter.articles.slice(18).reduce((sum, article) => sum + article.readingBudget, 0),
+    12000,
+  );
 });

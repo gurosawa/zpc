@@ -5,6 +5,7 @@ import { CircuitPlayground } from "@/components/circuit-playground";
 import { HashLab } from "@/components/hash-lab";
 import { InteractiveTLS } from "@/components/interactive-tls";
 import { PipelineDiagram } from "@/components/pipeline-diagram";
+import { VisualPlaceholder } from "@/components/visual-placeholder";
 import { WasmDemo } from "@/components/wasm-demo";
 
 function textFromChildren(children: React.ReactNode): string {
@@ -53,6 +54,7 @@ export const mdxComponents = {
   ArtifactDiagram,
   InteractiveTLS,
   PipelineDiagram,
+  VisualPlaceholder,
   HashLab,
   WasmDemo,
   CircuitPlayground,

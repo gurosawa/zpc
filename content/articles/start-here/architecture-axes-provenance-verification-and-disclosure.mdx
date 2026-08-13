@@ -1,0 +1,93 @@
+---
+id: c00-a15
+order: 15
+title: "Architecture 결정 축: provenance 획득·검증 주체·공개 방식"
+chapter: START HERE
+chapterSlug: start-here
+articleSlug: architecture-axes-provenance-verification-and-disclosure
+slug: architecture-axes-provenance-verification-and-disclosure
+pathRole: core
+difficulty: deep
+status: review
+wordCountTarget: 4250
+visualKey: c00-a15
+branch: content/c00-a15-architecture-axes-provenance-verification-and-disclosure
+readerQuestion: "proxy·MPC-TLS·DECO를 한 줄 순위가 아니라 어떤 질문으로 비교해야 하는가?"
+zktlsBridge: "앞 글에서 배운 MPC의 보안 가정을 세 비교 축에 놓고, 다음 글에서 TLSNotary의 MPC-TLS와 proxy mode를 산출물 단위로 추적한다."
+assumes: [third-party-provenance, mpc, selective-disclosure-protocol, verifier, relying-policy]
+introduces: [architecture-analysis-frame, provenance-acquisition, verification-actor, disclosure-method, proxy-mode, mpc-tls, deco-family]
+checkpoint: "provenance binding, 검증 주체, 공개 방식을 별도 비교 축으로 기록하고 이를 표준 taxonomy가 아닌 분석 프레임으로 설명한다."
+readingBudget: 4250
+references:
+  - "https://tlsnotary.org/docs/protocol/mpc-tls/"
+  - "https://tlsnotary.org/docs/protocol/proxy-mode/"
+  - "https://arxiv.org/abs/1909.00938"
+---
+
+# Architecture 결정 축: provenance 획득·검증 주체·공개 방식
+
+## Reader Question
+
+proxy, MPC-TLS, DECO를 한 줄로 순위화하면 신뢰 가정과 공개 범위가 사라진다. 대신 provenance를 TLS 세션에 어떻게 결합하는지, 누가 검증하는지, 무엇을 공개하는지 묻는다. 이 세 축은 표준 taxonomy가 아니라 이 문서의 비교용 분석 프레임이다.
+
+## Why It Matters
+
+zkTLS 설계는 TLS 실행 중 공동 계산을 쓰거나 관찰한 트래픽을 사후 검증하는 등 절차가 다르다. 산출물도 opening, attestation, ZK proof처럼 층위가 다르다. 한 축의 장점을 전체 보장으로 확대하지 않으려면 제품명보다 비교 질문을 먼저 고정한다.
+
+## Core Model
+
+1. **provenance acquisition**: 어느 참여자가 TLS 연산이나 트래픽 전달에 관여하며, session과 application bytes를 무엇으로 결합하는가?
+2. **verification actor**: 세션 산출물, opening·ZK proof, application policy를 각각 누가 언제 검사하는가?
+3. **disclosure method**: 원문, commitment의 opening, 숨긴 데이터에 관한 ZK predicate 중 무엇을 누구에게 보이는가?
+
+TLSNotary 문서의 기본 MPC-TLS에서는 Prover와 Verifier가 TLS 암호 연산을 공동 수행한다. 대안 proxy mode에서는 Verifier가 암호화된 트래픽을 전달한 뒤 ZK 검증을 사용하며 추가 network-path 가정을 둔다. selective disclosure도 이름만으로 생기지 않으며 bytes·parser·공개 규칙의 결합을 확인해야 한다.
+
+<VisualPlaceholder title="architecture 비교 3축" purpose="비교 질문을 분리" recommended="3축 매트릭스" mustShow="provenance acquisition·verification actor·disclosure method" alt="설계 비교는 provenance 결합 방식, 검증 주체, 공개 방식을 별도 축으로 기록한다." priority="must" status="planned" />
+
+## Protocol or System Artifact
+
+architecture별로 다음 기록 카드를 남긴다.
+
+| 기록 항목 | 남길 내용 |
+|---|---|
+| provenance acquisition | 세션과 bytes를 결합하는 절차, 참여자, 네트워크 경로 가정 |
+| verification actor | TLS 실행 중 참여자, 사후 검증자, relying application |
+| disclosure method | 원문, commitment/opening, attestation, ZK proof 가운데 실제 전달물 |
+| adversary model | 공모, 악의적 참여자, abort 범위 |
+| application binding | parser·field path·predicate·policy 검사 |
+| version boundary | 문서와 구현의 명시 버전, 확인하지 못한 항목 |
+
+MPC-TLS는 공동 연산 참여자와 transcript 관련 검사를, proxy mode는 전달 경로·사후 검증·network-path 가정을 적는다. DECO는 provenance와 선택적 ZK 명제를 다룬 논문 사례다. 셋을 동일 표준의 상호 배타적 범주로 만들지 않는다. notary도 독립 protocol 계열이 아니라 역할과 검증 가정으로 기록한다.
+
+<VisualPlaceholder title="trust 가정 기록 카드" purpose="단순 순위화 방지" recommended="사례 카드" mustShow="MPC-TLS·proxy mode·DECO, 각기 다른 가정과 공개 방식" alt="각 계열은 서로 다른 trust 가정과 절차를 가지며 한 줄 순위로 환원되지 않는다." priority="must" status="planned" />
+
+## Failure Mode
+
+- 분석 프레임을 공식 taxonomy처럼 쓰면 mode·논문 계열·역할을 섞게 된다.
+- 공개 범위가 작다는 이유로 provenance나 authorization까지 강하다고 결론내리면 안 된다.
+- session 자료, opening, attestation, ZK proof, policy decision을 모두 “proof”로 부르면 binding 누락이 감춰진다.
+- 문서·구현 버전을 생략하면 pre-release의 현재 형식을 영구 계약으로 오해한다.
+
+## Minimal Lab or Trace
+
+문서와 버전 하나를 고른다. session–bytes 결합 절차, 참여 actor, 외부 산출물, parser·policy 검사, 네트워크·공모·abort 가정을 카드에 적는다. 확인하지 못한 칸은 `미확인`으로 둔다. “더 안전하다”라는 결론을 구체적인 가정과 산출물로 바꾸지 못하면 비교를 끝낼 수 없다. 이 연습은 분석 방법만 시험한다.
+
+## zkTLS Bridge
+
+앞 글의 MPC 가정을 세 축에 나눠 기록했다. 다음 글에서는 TLSNotary의 두 mode를 비교하고 transcript 관련 산출물부터 application decision까지 추적한다.
+
+## Verification Checklist
+
+- 세 축을 저자의 비교용 분석 프레임이라고 명시했는가?
+- proxy mode, MPC-TLS, DECO를 동일 표준 taxonomy의 상호 배타적 범주로 쓰지 않았는가?
+- TLSNotary MPC-TLS와 proxy mode의 절차 및 network-path 가정을 구분했는가?
+- verification actor와 relying application의 정책 결정을 분리했는가?
+- 원문, commitment/opening, attestation, ZK proof, decision을 다른 산출물로 기록했는가?
+- 공개 방식만으로 provenance 강도나 authorization을 결론내리지 않았는가?
+- 문서·구현 버전과 미확인 항목을 남겼는가?
+
+## References
+
+- https://tlsnotary.org/docs/protocol/mpc-tls/
+- https://tlsnotary.org/docs/protocol/proxy-mode/
+- https://arxiv.org/abs/1909.00938

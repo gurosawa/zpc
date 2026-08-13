@@ -1,0 +1,106 @@
+---
+id: c00-a18
+order: 18
+title: "Negative-test capstone"
+chapter: START HERE
+chapterSlug: start-here
+articleSlug: negative-test-capstone
+slug: negative-test-capstone
+pathRole: core
+difficulty: deep
+status: review
+wordCountTarget: 4250
+visualKey: c00-a18
+branch: content/c00-a18-negative-test-capstone
+readerQuestion: "불일치를 거절해야 한다고 요구하기 전에, 그 값이 실제로 무엇에 binding되었는지 어떻게 확인하는가?"
+zktlsBridge: "앞 글의 단계별 gate를 반증하는 negative test로 필수 경로를 마무리하고, 다음 실습에서 실제 비밀 없이 같은 원칙을 fixture에 적용한다."
+assumes: [claim-profile, freshness-policy, parser-binding, disclosure-boundary, artifact-ownership, policy-gate, adversary-model]
+introduces: [negative-test, binding-mismatch, replay-test, privacy-policy-violation, reject-or-detect]
+checkpoint: "origin·request scope·field path·challenge·policy 식별자·공개 범위의 변형이 실제 검증 입력 또는 신뢰된 policy input에 결합됐는지 시험한다."
+readingBudget: 4250
+references:
+  - "https://tlsnotary.org/docs/protocol/proxy-mode/"
+  - "https://www.rfc-editor.org/rfc/rfc9449"
+  - "https://arxiv.org/abs/1909.00938"
+  - "https://owasp.org/www-community/Threat_Modeling"
+---
+
+# Negative-test capstone
+
+## Reader Question
+
+wrong Origin·path·challenge는 검증 대상이나 신뢰된 policy input에 binding되고 실제 검사될 때만 거절된다. negative test로 이를 반증하고 결과를 `reject`, `detect`, `blind spot`으로 나눈다.
+
+## Why It Matters
+
+정상 경로의 성공은 한 입력에서의 동작만 보인다. 불일치를 거절하려면 값이 들어가는 위치와 검사 주체가 필요하다. field path가 public input에도 policy에도 없다면 wrong path를 거절할 정보가 없다. 과다 공개는 암호 실패가 아니라 privacy policy 위반일 수도 있다.
+
+## Core Model
+
+negative test는 다섯 단계다.
+
+1. Origin, request scope, field path, challenge, policy identifier, disclosure 중 같아야 할 값을 선언한다.
+2. 그 값이 committed bytes, attestation, ZK proof public input, trusted policy input 중 어디에 있는지 찾는다. 없거나 확인하지 못하면 `미결합` 또는 `미확인`으로 둔다.
+3. Verifier 또는 relying application이 실제 비교하는 rule을 찾는다.
+4. 기준 입력에서 한 필드만 바꾸고 expected·actual·reason을 기록한다.
+5. 결과를 분류한다.
+
+- `reject`: cryptographic 또는 protocol/claim 검사가 입력을 수락하지 않는다.
+- `detect`: 산출물은 형식상 유효하지만 privacy 또는 application policy가 위반을 찾는다.
+- `blind spot`: 요구한 값이 binding되지 않았거나 검사되지 않아 변형을 구분하지 못한다.
+
+<VisualPlaceholder title="negative-test 결정표" purpose="변형별 기대 결과와 binding 확인" recommended="decision table" mustShow="origin·request·path·challenge·policy·disclosure 변형, reject/detect 이유" alt="각 변형은 해당 값이 검증 대상 또는 신뢰된 정책 입력에 포함될 때에만 기대한 거절을 유발한다." priority="must" status="planned" />
+
+## Protocol or System Artifact
+
+decision table은 binding과 검사 주체를 먼저 적는다.
+
+| 변형 | 기대한 binding 위치 | 검사 주체 | 기대 결과 | 결과를 해석할 조건 |
+|---|---|---|---|---|
+| wrong Origin | session/attestation 또는 trusted input | Verifier | 조건부 reject | identity 검사 |
+| wrong path | committed request 또는 request profile | Verifier | 조건부 reject | scope 검사 |
+| wrong field path | parser·relation·claim profile | Verifier | 조건부 reject | path 검사 |
+| stale/replay | proof 입력과 freshness state | Verifier | 조건부 reject | 시간·재사용 검사 |
+| wrong policy | public 또는 trusted policy input | policy gate | 조건부 reject | 허용 버전 검사 |
+| over-disclosure | manifest와 privacy policy | application | detect | 공개 범위 검사 |
+| parser mismatch | bytes와 parser profile | Verifier | 조건부 reject | parser rule 강제 |
+
+조건부 reject는 binding과 검사가 있을 때의 기대다. freshness는 nonce 발급자·대상·유효 시간·재사용을 함께 검사한다. RFC 9449는 OAuth DPoP 사례이지 범용 zkTLS 표준이 아니다. parser test는 중복 JSON 이름을 거부하고 field path 규칙을 고정하는지 확인한다. 원본 bytes와 단일 parser를 검증한다면 별도 canonicalization이 항상 필요하지는 않다.
+
+<VisualPlaceholder title="replay와 과다 공개" purpose="실패 종류 구분" recommended="두 갈래 흐름" mustShow="freshness/replay rejection, privacy-policy detection" alt="재생은 freshness 정책으로, 과다 공개는 privacy policy로 각각 검출될 수 있다." priority="must" status="planned" />
+
+## Failure Mode
+
+- policy·disclosure처럼 relation 밖의 값을 암호 검증 실패로 기대하지 않는다.
+- 여러 필드를 함께 바꾸면 작동한 binding을 알 수 없다.
+- stale과 replay는 시간 및 재사용 상태가 달라 별도 검사가 필요할 수 있다.
+- over-disclosure를 “proof invalid”로 기록하지 않는다.
+- 한 번의 pass를 production이나 전체 adversary model 보장으로 확대하지 않는다.
+
+## Minimal Lab or Trace
+
+합성 기준 레코드에 `.invalid` Origin, request path, field path, challenge 맥락, policy ID, disclosure 범위를 적는다. 각 줄에 binding 위치와 검사 주체를 붙인다.
+
+Origin·path·field path·유효 시간·재사용 기록·policy ID·공개 범위를 하나씩 바꾸고 `expected`, `actual`, `reason`, `binding evidence`를 남긴다. 변형이 통과하면 계약과 실제 검사를 먼저 확인한다. 계약이 없으면 빠진 요구사항이고, 계약과 구현이 있는데도 통과하면 검사 결함을 조사한다.
+
+## zkTLS Bridge
+
+앞 글의 gate를 하나씩 변형해 실제 검사를 확인했다. 다음 실습은 실제 계정·토큰·개인정보 없이 fixture와 disclosure manifest로 이를 재현한다.
+
+## Verification Checklist
+
+- 각 mismatch가 어느 artifact 또는 trusted input에 binding되는지 적었는가?
+- 해당 값을 실제로 검사하는 actor와 rule을 확인했는가?
+- 한 테스트에서 입력 하나만 바꿨는가?
+- `reject`, `detect`, `blind spot`을 구분했는가?
+- nonce 외에 발급자·대상·유효 시간·재사용 추적을 확인했는가?
+- over-disclosure를 자동으로 ZK proof 실패라고 쓰지 않았는가?
+- parser mismatch와 canonicalization의 적용 범위를 구분했는가?
+- 정상·음성 테스트 결과를 전체 production 보장으로 일반화하지 않았는가?
+
+## References
+
+- https://tlsnotary.org/docs/protocol/proxy-mode/
+- https://www.rfc-editor.org/rfc/rfc9449
+- https://arxiv.org/abs/1909.00938
+- https://owasp.org/www-community/Threat_Modeling

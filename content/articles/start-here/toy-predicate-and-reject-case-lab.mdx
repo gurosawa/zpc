@@ -1,0 +1,148 @@
+---
+id: c00-a20
+order: 20
+title: "toy predicate·reject-case 실습"
+chapter: START HERE
+chapterSlug: start-here
+articleSlug: toy-predicate-and-reject-case-lab
+slug: toy-predicate-and-reject-case-lab
+pathRole: developer-lab
+difficulty: lab
+status: review
+wordCountTarget: 6000
+visualKey: c00-a20
+branch: content/c00-a20-toy-predicate-and-reject-case-lab
+readerQuestion: "reject case를 회로나 policy에 넣지 않았는데 verifier가 거절할 것이라고 기대하면 왜 안 되는가?"
+zktlsBridge: "앞 실습의 fixture 입력을 제한된 relation과 policy gate로 옮겨, 학습 경로 전체의 binding 원칙을 수락·거절 사례로 확인한다."
+assumes: [statement, witness, public-input, relation, circuit, policy-gate, negative-test, lab-scope]
+introduces: [toy-predicate, reject-case, production-limitation]
+checkpoint: "toy predicate에서 public input·witness·constraint·verifier policy를 실제 연결하고 wrong path·stale·policy mismatch를 모델링한 경우에만 거절됨을 보인다."
+readingBudget: 6000
+references:
+  - "https://doi.org/10.1145/22145.22178"
+  - "https://eprint.iacr.org/2016/260"
+---
+
+# toy predicate·reject-case 실습
+
+## Reader Question
+
+wrong path, stale value, policy mismatch를 입력하면 toy Verifier가 자동으로 거절할까? 아니다. 해당 값이 relation의 public input·constraint 또는 별도 policy gate에 실제로 들어가야 한다. 이 실습은 그 연결을 작은 의사 모델로 확인한다.
+
+toy predicate는 학습 도구다. 실제 proving system, parser, 키 관리, TLS provenance를 구현하지 않으며 production circuit의 안전성을 보장하지 않는다.
+
+## Why It Matters
+
+ZK proof의 soundness는 실제로 정의한 relation에 적용된다. 의도한 검사가 constraint에 없다면, 약한 relation에 대한 proof는 유효하면서 application claim은 틀릴 수 있다.
+
+Verifier policy도 같은 원칙을 따른다. policy identifier를 입력으로 받기만 하고 허용 목록과 비교하지 않으면 mismatch를 거절할 이유가 없다. reject case는 기대 문장이 아니라 실행되는 검사로 만들어야 한다.
+
+## Core Model
+
+public input `x`는 Verifier가 보는 값, witness `w`는 공개하지 않는 입력이다. toy relation `R(x,w)`는 다음 네 조건을 모두 만족할 때만 `true`다.
+
+```txt
+pathMatches      := w.observedPath == x.expectedPath
+freshEnough      := w.issuedAt <= x.evaluationTime
+                 && x.evaluationTime <= w.validUntil
+predicateMatches := w.eligible == true
+relationAccepts  := pathMatches && freshEnough && predicateMatches
+```
+
+policy identifier는 별도 gate에서 검사한다.
+
+```txt
+policyAccepts := x.policyId == verifier.acceptedPolicyId
+finalAccepts  := relationAccepts && policyAccepts
+```
+
+이 분리는 회로 검증과 relying policy가 같은 판정이 아님을 보여 준다. 실제 구현에서는 어떤 값을 relation에 넣고 어떤 값을 신뢰된 policy input으로 둘지 명시해야 한다.
+
+<VisualPlaceholder title="toy predicate 관계" purpose="학습용 relation의 연결 표시" recommended="verifier gate 도식" mustShow="public input·witness·constraint·policy gate" alt="toy predicate는 공개 입력과 witness, constraint, verifier policy가 연결된 제한된 학습 모델이다." priority="must" status="planned" />
+
+## Protocol or System Artifact
+
+기준 입력은 합성 값만 사용한다.
+
+```json
+{
+  "publicInput": {
+    "expectedPath": "/fixture/status",
+    "evaluationTime": 120,
+    "policyId": "lab-policy-v1"
+  },
+  "witness": {
+    "observedPath": "/fixture/status",
+    "issuedAt": 100,
+    "validUntil": 140,
+    "eligible": true
+  },
+  "verifierPolicy": {
+    "acceptedPolicyId": "lab-policy-v1"
+  }
+}
+```
+
+산출물은 실제 ZK proof가 아니라 다음 학습용 trace다.
+
+```txt
+pathMatches=true
+freshEnough=true
+predicateMatches=true
+relationAccepts=true
+policyAccepts=true
+finalAccepts=true
+```
+
+각 중간값을 남겨야 거절 원인을 relation과 policy gate 중 하나로 분류할 수 있다.
+
+<VisualPlaceholder title="valid와 reject 입력" purpose="reject 조건의 실제 모델링 표시" recommended="입력-결과 표" mustShow="valid, wrong path, stale value, policy identifier와 각 결과" alt="wrong path·stale·policy mismatch는 검증 입력 또는 policy gate에 포함될 때에만 거절 사례가 된다." priority="must" status="planned" />
+
+## Failure Mode
+
+- path equality constraint가 없으면 wrong path도 relation을 통과할 수 있다.
+- 시간 범위 constraint가 없으면 stale witness를 구분할 수 없다.
+- accepted policy와 비교하지 않으면 policy mismatch가 통과할 수 있다.
+- `relationAccepts`만 보고 relying allow를 결정하면 policy gate가 사라진다.
+- toy trace 통과를 proof system soundness, parser binding, key management 또는 end-to-end 보장으로 확대하면 안 된다.
+
+## Minimal Lab or Trace
+
+기준 입력을 평가한 뒤 한 항목씩 바꾼다.
+
+| 사례 | 변경 | relation | policy | 최종 |
+|---|---|---:|---:|---:|
+| valid | 없음 | accept | accept | accept |
+| wrong path | `observedPath=/fixture/other` | reject | accept | reject |
+| stale | `validUntil=110` | reject | accept | reject |
+| policy mismatch | `policyId=lab-policy-v0` | accept | reject | reject |
+
+이제 검사를 하나씩 제거한다.
+
+1. `pathMatches`를 `relationAccepts`에서 빼면 wrong path가 통과하는지 본다.
+2. `freshEnough`를 빼면 stale 입력이 통과하는지 본다.
+3. `policyAccepts`를 `finalAccepts`에서 빼면 policy mismatch가 통과하는지 본다.
+
+이 변형은 proof system 공격이 아니라 의도한 relation과 실제 검사 사이의 차이를 보여 준다. 거절 사례가 통과하면 누락된 constraint나 policy gate를 복원해 다시 평가한다.
+
+실제 계정·token·쿠키·개인정보는 사용하지 않는다. 실제 cryptographic proof도 생성하지 않는다. 값은 교육용이며 실행 결과를 production에 적용하지 않는다.
+
+## zkTLS Bridge
+
+앞 실습은 fixture의 Origin·request·disclosure를 명시적 gate와 연결했다. 이 실습은 같은 원칙을 relation과 policy로 옮겼다. Start here 경로의 결론은 간단하다. TLS provenance, parser, ZK relation, freshness, relying policy는 각각 명시적으로 binding되고 검사될 때에만 하나의 application decision을 뒷받침한다.
+
+## Verification Checklist
+
+- public input, witness, constraint, policy gate를 구분했는가?
+- wrong path equality를 실제 constraint에 넣었는가?
+- stale 판정을 evaluation time과 유효 범위로 모델링했는가?
+- policy identifier를 accepted policy와 실제 비교했는가?
+- relation 수락과 최종 reliance 수락을 분리했는가?
+- 누락 constraint를 proof system의 soundness 붕괴로 잘못 부르지 않았는가?
+- 실제 credential·개인정보·서비스를 사용하지 않았는가?
+- production circuit 또는 end-to-end 보장을 주장하지 않았는가?
+
+## References
+
+- https://doi.org/10.1145/22145.22178
+- https://eprint.iacr.org/2016/260

@@ -1,0 +1,97 @@
+---
+id: c00-a17
+order: 17
+title: "통합 trace: Specify/Challenge에서 Verify/Rely까지"
+chapter: START HERE
+chapterSlug: start-here
+articleSlug: integrated-trace-from-specify-challenge-to-verify-rely
+slug: integrated-trace-from-specify-challenge-to-verify-rely
+pathRole: core
+difficulty: deep
+status: review
+wordCountTarget: 4250
+visualKey: c00-a17
+branch: content/c00-a17-integrated-trace-from-specify-challenge-to-verify-rely
+readerQuestion: "proof 검증 성공 뒤 relying application이 추가로 판단해야 하는 것은 무엇인가?"
+zktlsBridge: "앞 글에서 분리한 세션·공개·claim 산출물을 단계별 소유권으로 연결하고, 다음 글에서 각 binding을 변형하는 negative test를 설계한다."
+assumes: [claim-profile, freshness-policy, parser-binding, proof-verification, application-claim-binding, authorization-check]
+introduces: [trace-notation, artifact-ownership, verification-decision, reliance-decision, policy-gate]
+checkpoint: "이 문서의 설계·감사 표기법으로 claim 명세부터 정책 결정까지 입력·출력·소유권·실패 조건을 추적하고 verify와 rely를 분리한다."
+readingBudget: 4250
+references:
+  - "https://tlsnotary.org/docs/intro/"
+  - "https://tlsnotary.org/docs/faq/"
+  - "https://www.rfc-editor.org/rfc/rfc9449#section-3"
+---
+
+# 통합 trace: Specify/Challenge에서 Verify/Rely까지
+
+## Reader Question
+
+ZK proof나 attestation 검증 성공 뒤에도 relying application은 Origin 신뢰, audience, freshness, authorization을 판단해야 한다. 이를 `Specify → Challenge → Fetch → Bind/Prove → Verify → Rely`로 추적한다. 이 순서는 보편 프로토콜이 아니라 이 문서의 설계·감사 표기법이다.
+
+## Why It Matters
+
+Fetch 뒤에 정책을 정하면 가져온 데이터에 맞춰 수락 조건이 흔들릴 수 있다. owner를 생략하면 challenge 재사용, credential 보유, parser 실행의 책임도 보이지 않는다. 특히 `Verify = Rely`로 줄이면 유효한 암호 산출물과 업무 허용을 혼동한다.
+
+## Core Model
+
+1. **Specify**: Origin, request scope, field path, predicate, audience, freshness rule을 Fetch 전에 고정한다.
+2. **Challenge**: 필요하면 Verifier nonce를 발급한다. 발급자·대상·유효 시간·재사용 추적이 없으면 nonce만으로 replay를 막지 못한다. RFC 9449는 OAuth DPoP 사례이지 범용 zkTLS 규격이 아니다.
+3. **Fetch**: Prover가 허용 범위의 bytes를 얻되 access token·인증 쿠키는 경계 밖에 공개하지 않는다.
+4. **Bind/Prove**: bytes를 parser·field path·predicate에 연결한다. 산출물은 mode에 따라 opening, attestation, ZK proof 등으로 다를 수 있다.
+5. **Verify**: Verifier가 protocol artifact와 claim profile을 검사해 verification decision을 만든다.
+6. **Rely**: relying application이 Origin 신뢰·audience·freshness·authorization을 적용해 별도의 reliance decision을 만든다.
+
+Origin·path·challenge·policy identifier가 검증 대상이나 신뢰된 policy input에 없으면 해당 mismatch는 자동으로 거절되지 않는다.
+
+<VisualPlaceholder title="end-to-end trace" purpose="actor·artifact ownership 추적" recommended="swimlane" mustShow="Specify, Challenge, Fetch, Bind/Prove, Verify, Rely와 actor별 산출물" alt="설계 표기법의 각 단계에서 누가 어떤 입력과 산출물을 소유하고 전달하는지 추적한다." priority="must" status="planned" />
+
+## Protocol or System Artifact
+
+최소 ledger는 다음과 같다.
+
+| 단계 | 주요 소유자 | 입력 | 출력 artifact | 실패를 판정할 조건 |
+|---|---|---|---|---|
+| Specify | policy owner | 업무 요구 | claim profile | scope 누락 |
+| Challenge | Verifier | freshness rule | nonce 맥락 | 시간·재사용 검사 누락 |
+| Fetch | Prover | request, private credential | bytes·provenance 입력 | 허용 범위 위반 |
+| Bind/Prove | protocol 참여자 | bytes·parser·relation | opening/attestation/ZK proof | binding 누락 |
+| Verify | Verifier | artifact·profile | verification decision | 검증 실패 |
+| Rely | application | decision·policy | reliance decision | 정책 실패 |
+
+각 artifact에 owner와 consumer를 적는다. verification decision에는 검증한 opening·attestation·ZK proof를 남기고, reliance decision에는 적용한 audience·freshness·authorization을 구체적으로 남긴다.
+
+<VisualPlaceholder title="verify와 rely의 두 gate" purpose="암호 검증과 업무 수락 분리" recommended="연속 게이트" mustShow="protocol/claim validation gate, issuer·audience·freshness·authorization gate" alt="proof 또는 attestation 검증 성공은 수락 정책의 입력일 뿐 최종 허용 결정이 아니다." priority="must" status="planned" />
+
+## Failure Mode
+
+- trace 이름을 보편 프로토콜로 제시하지 않는다.
+- nonce를 binding하지 않거나 시간·재사용을 검사하지 않으면 freshness를 주장하지 않는다.
+- Verify 성공을 allow로 복사하지 않는다. 정책 거부를 “proof invalid”로 기록해서도 안 된다.
+- private credential과 relying policy의 owner를 바꾸지 않는다.
+- mismatch는 값이 artifact 또는 신뢰 입력에 포함되고 실제 검사될 때만 거절된다.
+
+## Minimal Lab or Trace
+
+여섯 단계마다 owner, input, output, check를 한 줄씩 적는다. audience만 바꿔 보자. Rely 정책이 이를 비교하면 거부하고, 입력도 검사도 없다면 거절을 기대할 수 없다. challenge 재사용도 Verifier가 상태를 추적할 때만 거절된다. 이 trace는 암호 실행이 아니라 검사 누락을 찾는 감사 연습이다.
+
+## zkTLS Bridge
+
+앞 글의 산출물에 owner를 붙이고 Verify와 Rely를 분리했다. 다음 글은 Origin·path·challenge·policy·disclosure를 바꿔 실제 binding을 반증한다.
+
+## Verification Checklist
+
+- `Specify → Challenge → Fetch → Bind/Prove → Verify → Rely`를 이 문서의 설계·감사 표기법이라고 밝혔는가?
+- RFC 9449를 일반 zkTLS challenge 표준으로 제시하지 않았는가?
+- nonce의 발급자·대상·유효 시간·재사용 정책을 함께 기록했는가?
+- private credential의 owner와 공개 금지 경계를 표시했는가?
+- opening, attestation, ZK proof 가운데 실제 artifact를 구체적으로 불렀는가?
+- verification decision과 reliance decision을 분리했는가?
+- mismatch는 값이 binding되고 실제 검사될 때만 거절된다고 썼는가?
+
+## References
+
+- https://tlsnotary.org/docs/intro/
+- https://tlsnotary.org/docs/faq/
+- https://www.rfc-editor.org/rfc/rfc9449#section-3

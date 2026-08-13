@@ -4,9 +4,12 @@ import path from "node:path";
 import test from "node:test";
 
 const roadmap = JSON.parse(fs.readFileSync("content/article-roadmap.json", "utf8"));
+const startHereRoadmap = JSON.parse(fs.readFileSync("content/start-here-roadmap.json", "utf8"));
 const packageJson = JSON.parse(fs.readFileSync("package.json", "utf8"));
 const contentSource = fs.readFileSync("lib/content.ts", "utf8");
+const contentRoadmapSource = fs.readFileSync("lib/content-roadmap.ts", "utf8");
 const contentFilesSource = fs.readFileSync("lib/content-files.ts", "utf8");
+const articlePageShellSource = fs.readFileSync("components/article-page-shell.tsx", "utf8");
 const homeSource = fs.readFileSync("app/page.tsx", "utf8");
 const notFoundSource = fs.readFileSync("app/not-found.tsx", "utf8");
 const homeKineticSource = fs.readFileSync(
@@ -41,6 +44,23 @@ test("roadmap article routes are unique article-level paths", () => {
   assert.ok(paths.includes("/guide/web-trust-and-tls/tls-record-layer"));
   assert.ok(paths.includes("/guide/zktls-architectures-and-labs/mpc-tls-tlsnotary"));
   assert.equal(paths.some((routePath) => routePath.includes("#")), false);
+});
+
+test("start-here routes form a separate ordered 20-article learning path", () => {
+  const paths = startHereRoadmap.articles.map(
+    (article) => `/guide/${startHereRoadmap.slug}/${article.slug}`,
+  );
+
+  assert.equal(startHereRoadmap.id, "c00");
+  assert.equal(startHereRoadmap.order, 0);
+  assert.equal(paths.length, 20);
+  assert.equal(new Set(paths).size, 20);
+  assert.equal(paths[0], "/guide/start-here/copies-screenshots-and-tokens-are-not-evidence");
+  assert.equal(paths.at(-1), "/guide/start-here/toy-predicate-and-reject-case-lab");
+  assert.match(contentRoadmapSource, /start-here-roadmap\.json/);
+  assert.match(articlePageShellSource, /article\.pathRole === "core"/);
+  assert.match(articlePageShellSource, /article\.pathRole === "developer-lab"/);
+  assert.match(articlePageShellSource, /usesVisualPlaceholders \? null/);
 });
 
 test("content helpers expose article lookup and adjacency contracts", () => {

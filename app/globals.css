@@ -1110,6 +1110,97 @@ textarea:focus-visible {
   text-transform: uppercase;
 }
 
+.visual-placeholder {
+  border: 1px solid var(--border);
+  margin: 2.8rem 0;
+  padding: 0.8rem;
+}
+
+.visual-placeholder-stage {
+  align-items: center;
+  background:
+    linear-gradient(90deg, transparent 49.5%, var(--border-light) 50%, transparent 50.5%),
+    linear-gradient(transparent 49.5%, var(--border-light) 50%, transparent 50.5%);
+  background-size: 3.2rem 3.2rem;
+  border: 1px dashed var(--border);
+  display: flex;
+  min-height: 17rem;
+  flex-direction: column;
+  justify-content: center;
+  padding: 2rem;
+  text-align: center;
+}
+
+.visual-placeholder-stage span,
+.visual-placeholder-stage small,
+.visual-placeholder-heading {
+  color: var(--text-secondary);
+  font-family: var(--font-technical);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.visual-placeholder-stage strong {
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 3vw, 2.5rem);
+  font-weight: 500;
+  margin: 0.7rem 0;
+}
+
+.visual-placeholder-stage small {
+  font-size: 0.9rem;
+}
+
+.visual-placeholder-brief {
+  margin-top: 0.8rem;
+}
+
+.visual-placeholder-heading {
+  border-bottom: 1px solid var(--border-light);
+  display: flex;
+  font-size: 0.9rem;
+  justify-content: space-between;
+  padding: 0.25rem 0 0.75rem;
+}
+
+.visual-placeholder-brief dl {
+  margin: 0;
+}
+
+.visual-placeholder-brief dl > div {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(9rem, 0.32fr) 1fr;
+  padding: 0.75rem 0;
+}
+
+.visual-placeholder-brief dl > div + div {
+  border-top: 1px dotted var(--border-light);
+}
+
+.visual-placeholder-brief dt {
+  color: var(--text-secondary);
+  font-family: var(--font-meta);
+  font-size: 0.95rem;
+}
+
+.visual-placeholder-brief dd {
+  margin: 0;
+}
+
+@media (max-width: 680px) {
+  .visual-placeholder-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .visual-placeholder-brief dl > div {
+    gap: 0.25rem;
+    grid-template-columns: 1fr;
+  }
+}
+
 .article-list {
   display: grid;
   gap: calc(var(--toc-row-pitch) - var(--toc-row-line-height));

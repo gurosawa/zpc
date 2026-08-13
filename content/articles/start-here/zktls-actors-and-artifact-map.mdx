@@ -1,0 +1,82 @@
+---
+id: c00-a02
+order: 2
+title: zkTLS 참여자와 증거물 지도
+chapter: START HERE
+chapterSlug: start-here
+articleSlug: zktls-actors-and-artifact-map
+slug: zktls-actors-and-artifact-map
+pathRole: core
+status: review
+difficulty: foundation
+wordCountTarget: 3300
+visualKey: c00-a02
+branch: content/c00-a02-zktls-actors-and-artifact-map
+readerQuestion: 누가 무엇을 만들고, 누가 무엇을 검증하며, notary는 왜 항상 필요하지 않은가?
+zktlsBridge: 역할을 알면 다음 글에서 각 역할 사이의 신뢰 경계와 공격 표면을 그릴 수 있다.
+assumes: [provenance-gap, relying-policy]
+introduces: [origin, prover, verifier, relying-application, notary-optional, artifact-layers]
+checkpoint: Origin, Prover, Verifier, relying application의 책임과 session 자료·receipt·opening·ZK proof·결정의 층위를 혼동 없이 구분한다.
+readingBudget: 3300
+references:
+  - https://tlsnotary.org/docs/intro/
+  - https://arxiv.org/abs/1909.00938
+---
+
+# zkTLS 참여자와 증거물 지도
+
+## Reader Question
+
+zkTLS 흐름에서는 누가 TLS 데이터를 제공하고, 누가 주장을 만들며, 누가 검증 결과를 업무 결정에 쓰는가? 역할을 섞으면 검증 산출물 하나가 모든 판단을 대신한다는 오해가 생긴다.
+
+## Why It Matters
+
+TLSNotary 문서에서 Server라 부르는 대상은 이 글에서 Origin이다. Origin은 TLS 서비스를 제공한다. Prover는 자신이 받은 세션 자료에서 검증할 주장에 필요한 산출물을 만든다. Verifier는 산출물이 프로토콜과 claim 규칙에 맞는지 확인한다.
+
+relying application은 검증 결과를 받아 실제 기능을 허용하거나 거절하는 애플리케이션이다. Verifier와 같은 프로그램일 수는 있지만 책임은 다르다. 전자는 검증, 후자는 자신의 정책에 따른 수락을 맡는다.
+
+<VisualPlaceholder title="참여자와 책임" purpose="역할별 생성·검증 책임을 표시한다." recommended="actor-flow" mustShow="Origin→Prover→Verifier/Relying application, optional notary" alt="Origin은 TLS 데이터를 제공하고 Prover는 산출물을 만들며 Verifier와 relying application은 각각 검증과 수락 정책을 맡는다." priority="must" status="planned" />
+
+## Core Model
+
+Prover는 증명자다. 비공개로 보유한 자료를 이용해 검증하려는 주장에 필요한 산출물을 만든다.
+
+Verifier는 그 산출물과 공개된 정보를 검사하는 검증자다. 두 역할 이름은 특정 제품의 API 이름이 아니라 책임을 나누기 위한 모델이다.
+
+notary는 일부 설계에서 세션 획득이나 검증에 관여하는 추가 참여자다. TLSNotary의 설계 선택에서 보이지만, 모든 zkTLS 계열에 필수인 구성원으로 일반화할 수 없다.
+
+## Protocol or System Artifact
+
+session 자료는 TLS 연결과 관련된 입력이다. receipt 또는 attestation은 누군가가 특정 절차를 수행했다는 산출물일 수 있다.
+
+commitment는 값을 숨긴 채 고정하기 위한 참조다. opening은 그 고정에 맞는 값과 보조 정보를 제시해 확인하는 절차다.
+
+ZK proof는 정해진 조건이 성립하는지 검증하게 하는 별도 산출물이다. 애플리케이션의 decision은 암호 산출물이 아니라 relying application이 정책을 적용한 결과다.
+
+이 산출물들은 모두 같은 뜻의 “증거”가 아니다. 문서와 구현에서 각 층을 따로 이름 붙여야 책임 경계를 검토할 수 있다.
+
+<VisualPlaceholder title="증거물의 층위" purpose="proof라는 말로 서로 다른 산출물을 뭉개지 않는다." recommended="적층 도식" mustShow="session 자료·receipt/attestation·opening·ZK proof·decision" alt="TLS session 자료, 공개용 산출물, ZK proof, 애플리케이션 결정은 같은 종류의 증거가 아니다." priority="must" status="planned" />
+
+## Failure Mode
+
+notary가 있다고 해서 verifier가 필요 없어지는 것은 아니다. ZK proof가 유효하다고 해서 relying application이 대상 객체에 대한 권한까지 확인한 것도 아니다. 산출물의 이름과 책임을 섞으면 어느 단계가 origin, 공개 범위, 정책을 검사해야 하는지 빠진다.
+
+## Minimal Lab or Trace
+
+합성 membership 사례를 생각해 보자. Origin은 멤버십 API를 제공한다. Prover는 응답에서 필요한 속성만 주장으로 만들고, Verifier는 그 주장의 결합 규칙을 확인한다. relying application은 해당 사용자가 실제로 혜택을 받을 정책 대상인지 별도로 확인한다. notary의 참여 여부는 채택한 프로토콜이 정한다.
+
+## zkTLS Bridge
+
+이 지도는 어떤 artifact가 어느 주체를 떠나는지 표시하는 출발점이다. 다음 글에서는 그 이동이 일어나는 지점을 trust boundary와 attack surface로 기록한다.
+
+## Verification Checklist
+
+- Origin을 TLSNotary의 Server와 대응시켰는가?
+- Prover·Verifier·relying application의 책임을 분리했는가?
+- notary를 선택적 설계 요소로만 설명했는가?
+- session 자료, proof, decision을 같은 산출물로 취급하지 않았는가?
+
+## References
+
+- https://tlsnotary.org/docs/intro/
+- https://arxiv.org/abs/1909.00938

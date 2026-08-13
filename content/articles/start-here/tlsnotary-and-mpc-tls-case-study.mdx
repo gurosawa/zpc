@@ -1,0 +1,105 @@
+---
+id: c00-a16
+order: 16
+title: "TLSNotary/MPC-TLS 사례 연구"
+chapter: START HERE
+chapterSlug: start-here
+articleSlug: tlsnotary-and-mpc-tls-case-study
+slug: tlsnotary-and-mpc-tls-case-study
+pathRole: core
+difficulty: deep
+status: review
+wordCountTarget: 4250
+visualKey: c00-a16
+branch: content/c00-a16-tlsnotary-and-mpc-tls-case-study
+readerQuestion: "TLSNotary 산출물 중 무엇이 세션 맥락이고, 무엇이 application claim이며, 누가 그 연결을 검사하는가?"
+zktlsBridge: "앞 글의 세 비교 축을 TLSNotary 사례에 적용하고, 다음 글에서 분리한 산출물과 소유권을 end-to-end trace로 연결한다."
+assumes: [mpc, mpc-tls, proxy-mode, commitment, opening, parser-binding, architecture-analysis-frame]
+introduces: [tlsnotary-artifact-separation, transcript-provenance, attestation, session-artifact, application-claim-binding]
+checkpoint: "기본 MPC-TLS와 대안 proxy mode를 구분하고 transcript commitment/opening·attestation·parser 결과·claim·정책 결정을 다른 산출물로 추적한다."
+readingBudget: 4250
+references:
+  - "https://tlsnotary.org/docs/intro/"
+  - "https://tlsnotary.org/docs/protocol/mpc-tls/handshake/"
+  - "https://tlsnotary.org/docs/protocol/proxy-mode/"
+  - "https://github.com/tlsnotary/tlsn/releases/tag/v0.1.0-alpha.15"
+---
+
+# TLSNotary/MPC-TLS 사례 연구
+
+## Reader Question
+
+TLSNotary 산출물 중 무엇이 세션 맥락이고 무엇이 application claim일까? 기본 MPC-TLS와 대안 proxy mode의 가정을 분리하고, transcript 관련 산출물에서 policy decision까지 연결을 추적한다.
+
+## Why It Matters
+
+transcript provenance가 유효해도 JSON field path가 자동으로 확정되지는 않는다. parser 결과도 committed bytes와 연결해 검사해야 claim을 뒷받침한다. 이 글은 공식 문서와 `tlsn` v0.1.0-alpha.15를 기준으로 하며, pre-release 형식이 영구히 안정적이라고 주장하지 않는다.
+
+## Core Model
+
+TLSNotary 문서의 Server는 이 경로의 Origin 역할에 대응한다. 기본 MPC-TLS에서는 Prover와 Verifier가 TLS 암호 연산을 공동 수행해 transcript provenance를 구성한다. 그렇다고 공모·abort가 자동 해결되는 것은 아니며 명시된 adversary model을 확인해야 한다.
+
+proxy mode에서는 Verifier가 암호화된 TLS 트래픽을 전달하고 사후 ZK 검증을 사용한다. 공식 문서는 추가 network-path 가정을 둔다. 공동 연산 경로와 관찰·사후 검증 경로를 같은 trust model로 쓰지 않는다.
+
+<VisualPlaceholder title="MPC-TLS와 proxy mode" purpose="두 경로의 가정과 단계 분리" recommended="병렬 단계도" mustShow="joint TLS computation vs observed traffic+ZK verification, network-path assumption" alt="TLSNotary의 MPC-TLS와 proxy mode는 provenance를 다루는 절차와 신뢰 가정이 다르다." priority="must" status="planned" />
+
+artifact는 다섯 층으로 읽는다.
+
+1. session/transcript 산출물: TLS 실행과 bytes의 맥락
+2. commitment/opening 또는 attestation: 선택 범위나 세션 정보를 전달하는 산출물
+3. parser 결과: bytes의 application 구조 해석
+4. application claim: field path와 predicate의 결과
+5. policy decision: Verifier 또는 relying application의 수락 결과
+
+정확한 형식은 mode와 버전에 따라 달라질 수 있다. 층 사이 화살표마다 검사 주체를 적는다.
+
+## Protocol or System Artifact
+
+다음은 고정 데이터 모델이 아니라 검토 ledger다.
+
+| 층 | 확인할 산출물 | 확인할 binding | 단독으로 보장하지 않는 것 |
+|---|---|---|---|
+| TLS 실행 | transcript/session 맥락 | Server identity와 bytes | application field 의미 |
+| 암호 산출물 | opening, attestation 또는 ZK proof | 선택 범위와 mode·버전 | parser 해석 |
+| parser 결과 | field와 구조 | committed bytes와 parser profile | policy 허용 |
+| application claim | field path와 predicate의 결과 | parser 결과, audience, 정책 식별자 | 최종 authorization |
+| decision | allow 또는 deny와 이유 | issuer/origin trust, freshness, authorization | 앞선 암호 검증 자체 |
+
+opening만으로 bytes의 의미가 정해지지 않으며 attestation도 자연어 claim 전체와 같지 않다. Verifier가 parser profile·field path와 대상 bytes의 연결을 명시적으로 검사해야 application claim binding을 말할 수 있다.
+
+<VisualPlaceholder title="TLSNotary 산출물 연결" purpose="artifact와 claim 혼동 방지" recommended="artifact graph" mustShow="transcript, commitment/opening or attestation, parser result, claim, policy decision" alt="transcript 관련 산출물, parser 결과, application claim, 정책 결정은 별개이며 verifier가 연결을 검사한다." priority="must" status="planned" />
+
+## Failure Mode
+
+- 모든 층을 “TLSNotary proof”로 부르면 opening·attestation·ZK proof와 decision이 섞인다.
+- mode를 생략하면 MPC-TLS 공동 연산과 proxy mode의 network-path 가정을 혼동한다.
+- disclosure rule이 claim 의미를 자동 확정한다고 보면 parser binding이 빠진다.
+- 버전 없는 형식 단정은 pre-release의 현재 API를 영구 계약으로 만든다.
+- 검증 성공을 allow로 바꾸면 audience·freshness·authorization 검사가 사라진다.
+
+## Minimal Lab or Trace
+
+`S=session`, `O=opening/attestation`, `P=parser 결과`, `K=claim`, `D=decision`으로 두 trace를 그린다. MPC-TLS trace에는 공동 연산 참여자를, proxy trace에는 전달자·사후 ZK 검증·network-path 가정을 적는다.
+
+`S→O→P→K→D`의 각 화살표에 검사 주체를 쓴다. `O→P`가 없으면 parser 결과가 어떤 bytes에서 나왔는지 비고, `K→D`가 없으면 claim이 곧바로 allow로 바뀐다. 근거를 찾지 못한 화살표는 연결하지 않는다.
+
+## zkTLS Bridge
+
+앞 글의 세 축을 TLSNotary 두 mode와 artifact 층에 적용했다. 다음 글은 이 산출물의 소유권을 `Specify/Challenge`에서 `Verify/Rely`까지 잇는다.
+
+## Verification Checklist
+
+- TLSNotary의 기본 MPC-TLS와 대안 proxy mode를 구분했는가?
+- proxy mode의 사후 ZK 검증과 추가 network-path 가정을 적었는가?
+- artifact 설명에 확인한 문서·릴리스 버전을 남겼는가?
+- transcript 관련 산출물, commitment/opening, attestation, parser 결과를 분리했는가?
+- parser 결과가 어떤 bytes와 rule에 binding되는지 Verifier의 검사로 설명했는가?
+- application claim과 policy decision을 같은 “proof”로 부르지 않았는가?
+- 검증 성공과 relying application의 허용을 분리했는가?
+
+## References
+
+- https://tlsnotary.org/docs/intro/
+- https://tlsnotary.org/docs/protocol/mpc-tls/handshake/
+- https://tlsnotary.org/docs/protocol/proxy-mode/
+- https://github.com/tlsnotary/tlsn/releases/tag/v0.1.0-alpha.15
